@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
-import { computed, ref } from 'vue';
+import { refDebounced, useDebounceFn } from '@vueuse/core';
+import { computed, ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ListPagination from '@/components/ListPagination.vue';
@@ -118,8 +119,149 @@ const genderSelectValue = computed({
     get: () => filters.gender || 'all',
     set: (value: string | number) => {
         filters.gender = value === 'all' ? '' : String(value);
+        filters.page = 1;
     },
 });
+
+const registrationWindowValue = computed({
+    get: () => filters.registrationWindow || 'all',
+    set: (value: string | number) => {
+        filters.registrationWindow = value === 'all' ? '' : (String(value) as typeof filters.registrationWindow);
+        filters.page = 1;
+    },
+});
+
+const ageGroupValue = computed({
+    get: () => filters.ageGroup || 'all',
+    set: (value: string | number) => {
+        filters.ageGroup = value === 'all' ? '' : (String(value) as typeof filters.ageGroup);
+        filters.page = 1;
+    },
+});
+
+const insuranceTypeValue = computed({
+    get: () => filters.insuranceType || 'all',
+    set: (value: string | number) => {
+        filters.insuranceType = value === 'all' ? '' : (String(value) as typeof filters.insuranceType);
+        filters.page = 1;
+    },
+});
+
+/**
+ * Search input is deliberately decoupled from filters.q: binding the Input
+ * directly to filters.q would fire a new TanStack Query request (and a URL
+ * sync) on every keystroke, since usePatientList's queryKey watches the
+ * whole filters object. searchInputRaw debounces (~250ms, matching
+ * GlobalPatientSearch.vue's convention) before committing into filters.q.
+ * Enter bypasses the debounce for an immediate search.
+ */
+const searchInputRaw = ref(filters.q);
+const searchInputDebounced = refDebounced(searchInputRaw, 250);
+
+watch(searchInputDebounced, (value) => {
+    if (filters.q === value) return;
+    filters.q = value;
+    filters.page = 1;
+});
+
+function submitSearchNow(): void {
+    if (filters.q === searchInputRaw.value) return;
+    filters.q = searchInputRaw.value;
+    filters.page = 1;
+}
+
+const hasActiveFilters = computed(
+    () =>
+        filters.q.trim() !== '' ||
+        filters.gender !== '' ||
+        filters.region.trim() !== '' ||
+        filters.district.trim() !== '' ||
+        filters.registrationWindow !== '' ||
+        filters.ageGroup !== '' ||
+        filters.insuranceType !== '' ||
+        filters.status !== 'active',
+);
+
+function clearFilters(): void {
+    searchInputRaw.value = '';
+    filters.q = '';
+    filters.gender = '';
+    filters.region = '';
+    filters.district = '';
+    filters.registrationWindow = '';
+    filters.ageGroup = '';
+    filters.insuranceType = '';
+    filters.status = 'active';
+    filters.page = 1;
+}
+
+/**
+ * Keeps the URL in sync with filters so a refresh, a copied link, or
+ * GlobalPatientSearch.vue's "View all matching patients" handoff all land
+ * on the same filtered view (usePatientListFilters.ts reads these same
+ * params back on next load). Uses history.replaceState — not an Inertia
+ * visit — so the component never remounts and the TanStack Query cache
+ * survives filter changes. Debounced so rapid filter changes (e.g. the
+ * search-input's own debounce already settling) don't thrash history.
+ */
+const syncUrl = useDebounceFn(() => {
+    const params = new URLSearchParams();
+    if (filters.q.trim() !== '') params.set('q', filters.q.trim());
+    // 'active' is the default and stays out of the URL; '' (the "All" tab)
+    // must still be written explicitly (as 'all') or a refresh can't tell it
+    // apart from "no status filter present" and silently reverts to Active.
+    if (filters.status === '') params.set('status', 'all');
+    else if (filters.status !== 'active') params.set('status', filters.status);
+    if (filters.gender !== '') params.set('gender', filters.gender);
+    if (filters.region.trim() !== '') params.set('region', filters.region.trim());
+    if (filters.district.trim() !== '') params.set('district', filters.district.trim());
+    if (filters.registrationWindow !== '') params.set('registrationWindow', filters.registrationWindow);
+    if (filters.ageGroup !== '') params.set('ageGroup', filters.ageGroup);
+    if (filters.insuranceType !== '') params.set('insuranceType', filters.insuranceType);
+    if (filters.sortBy !== 'createdAt') params.set('sortBy', filters.sortBy);
+    if (filters.sortDir !== 'desc') params.set('sortDir', filters.sortDir);
+    if (filters.page !== 1) params.set('page', String(filters.page));
+
+    const query = params.toString();
+    const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+    window.history.replaceState(window.history.state, '', newUrl);
+}, 300);
+
+watch(filters, () => void syncUrl(), { deep: true });
+
+function patientAge(patient: PatientListItem): number | null {
+    if (!patient.dateOfBirth) return null;
+    const birthDate = new Date(patient.dateOfBirth);
+    if (Number.isNaN(birthDate.getTime())) return null;
+
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDelta = today.getMonth() - birthDate.getMonth();
+    if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birthDate.getDate())) {
+        age -= 1;
+    }
+
+    return age >= 0 && age < 130 ? age : null;
+}
+
+function ageSexLabel(patient: PatientListItem): string {
+    const age = patientAge(patient);
+    const sex = patient.gender ? patient.gender.charAt(0).toUpperCase() : null;
+    if (age === null && !sex) return '—';
+    return [age !== null ? `${age}y` : null, sex].filter(Boolean).join(' / ');
+}
+
+const careStatusLabels: Record<NonNullable<PatientListItem['careStatus']>, string> = {
+    inpatient: 'Inpatient',
+    emergency: 'Emergency',
+    outpatient: 'Active visit',
+};
+
+function careStatusVariant(careStatus: PatientListItem['careStatus']): 'default' | 'secondary' | 'destructive' {
+    if (careStatus === 'emergency') return 'destructive';
+    if (careStatus === 'inpatient') return 'default';
+    return 'secondary';
+}
 
 function statusTabCount(value: string): number | null {
     const counts = statusCounts.data.value;
@@ -131,10 +273,6 @@ function statusTabCount(value: string): number | null {
 
 function setStatus(value: string | number): void {
     filters.status = value === 'all' ? '' : String(value);
-    filters.page = 1;
-}
-
-function submitSearch(): void {
     filters.page = 1;
 }
 
@@ -320,14 +458,14 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <div class="relative min-w-0 flex-1">
                             <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                v-model="filters.q"
+                                v-model="searchInputRaw"
                                 placeholder="Search name, MRN, phone, email, or ID…"
                                 class="h-9 pl-9"
-                                @keyup.enter="submitSearch"
+                                @keyup.enter="submitSearchNow"
                             />
                         </div>
                         <Select v-model="genderSelectValue">
-                            <SelectTrigger class="h-9 w-40 bg-background">
+                            <SelectTrigger class="h-9 w-36 bg-background">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -338,8 +476,40 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 <SelectItem value="unknown">Unknown</SelectItem>
                             </SelectContent>
                         </Select>
+                        <Select v-model="registrationWindowValue">
+                            <SelectTrigger class="h-9 w-36 bg-background">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Any registration date</SelectItem>
+                                <SelectItem value="today">Registered today</SelectItem>
+                                <SelectItem value="this_week">This week</SelectItem>
+                                <SelectItem value="this_month">This month</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select v-model="ageGroupValue">
+                            <SelectTrigger class="h-9 w-32 bg-background">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Any age</SelectItem>
+                                <SelectItem value="child">Child (&lt;18)</SelectItem>
+                                <SelectItem value="adult">Adult (18–59)</SelectItem>
+                                <SelectItem value="elderly">Elderly (60+)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select v-model="insuranceTypeValue">
+                            <SelectTrigger class="h-9 w-32 bg-background">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Cash & insurance</SelectItem>
+                                <SelectItem value="insurance">Insurance</SelectItem>
+                                <SelectItem value="cash">Cash</SelectItem>
+                            </SelectContent>
+                        </Select>
                         <Select v-model="filters.sortBy">
-                            <SelectTrigger class="h-9 w-44 bg-background">
+                            <SelectTrigger class="h-9 w-40 bg-background">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -350,9 +520,15 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 <SelectItem value="patientNumber">MRN</SelectItem>
                             </SelectContent>
                         </Select>
+                        <Button v-if="hasActiveFilters" size="sm" variant="ghost" class="h-9 gap-1.5 text-xs" @click="clearFilters">
+                            <AppIcon name="x" class="size-3.5" />
+                            Clear filters
+                        </Button>
                     </div>
 
                     <div v-if="list.isPending.value" class="space-y-2">
+                        <Skeleton class="h-14 w-full" />
+                        <Skeleton class="h-14 w-full" />
                         <Skeleton class="h-14 w-full" />
                         <Skeleton class="h-14 w-full" />
                         <Skeleton class="h-14 w-full" />
@@ -364,8 +540,20 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </Alert>
 
                     <div v-else-if="patients.length === 0" class="rounded-lg border border-dashed bg-card px-5 py-5">
-                        <p class="text-sm font-medium text-foreground">No patients found</p>
-                        <p class="mt-1 text-xs text-muted-foreground">Try adjusting the search query or status filter.</p>
+                        <p class="text-sm font-medium text-foreground">
+                            {{ hasActiveFilters ? 'No patients match your search and filters' : 'No patients found' }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            {{
+                                hasActiveFilters
+                                    ? 'Try broadening the search term or clearing a filter.'
+                                    : 'Register a patient to get started.'
+                            }}
+                        </p>
+                        <Button v-if="hasActiveFilters" size="sm" variant="outline" class="mt-3 h-8 gap-1.5 text-xs" @click="clearFilters">
+                            <AppIcon name="x" class="size-3.5" />
+                            Clear filters
+                        </Button>
                     </div>
 
                     <div v-else class="overflow-hidden rounded-lg border bg-card">
@@ -375,10 +563,10 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 <tr>
                                     <th class="px-3 py-2 text-left">Patient</th>
                                     <th class="px-3 py-2 text-left">Status</th>
-                                    <th class="px-3 py-2 text-left">Gender</th>
-                                    <th class="px-3 py-2 text-left">Date of birth</th>
+                                    <th class="px-3 py-2 text-left">Age / Sex</th>
                                     <th class="px-3 py-2 text-left">Phone</th>
-                                    <th class="px-3 py-2 text-left">Region / District</th>
+                                    <th class="px-3 py-2 text-left">Last visit</th>
+                                    <th class="px-3 py-2 text-left">Care status</th>
                                     <th class="px-3 py-2 text-left">Registered</th>
                                     <th v-if="canShowRowActions" class="px-3 py-2 text-right">Actions</th>
                                 </tr>
@@ -406,16 +594,28 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                 </PatientSummaryPopover>
                                                 <p class="truncate text-xs text-muted-foreground">{{ patient.patientNumber || 'No MRN assigned' }}</p>
                                             </div>
+                                            <Link
+                                                :href="`/patients/${patient.id}/chart`"
+                                                class="ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                title="Open chart"
+                                            >
+                                                <AppIcon name="stethoscope" class="size-3.5" />
+                                            </Link>
                                         </div>
                                     </td>
                                     <td class="px-3 py-2">
                                         <Badge :variant="statusVariant(patient.status)">{{ patient.status || 'unknown' }}</Badge>
                                     </td>
-                                    <td class="px-3 py-2 text-muted-foreground">{{ patient.gender || '—' }}</td>
-                                    <td class="px-3 py-2 text-muted-foreground">{{ formatDate(patient.dateOfBirth) }}</td>
+                                    <td class="px-3 py-2 text-muted-foreground">{{ ageSexLabel(patient) }}</td>
                                     <td class="px-3 py-2 text-muted-foreground">{{ patient.phone || '—' }}</td>
                                     <td class="px-3 py-2 text-muted-foreground">
-                                        {{ [patient.region, patient.district].filter(Boolean).join(' / ') || '—' }}
+                                        {{ patient.lastVisitAt ? formatDate(patient.lastVisitAt) : 'No visits yet' }}
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <Badge v-if="patient.careStatus" :variant="careStatusVariant(patient.careStatus)">
+                                            {{ careStatusLabels[patient.careStatus] }}
+                                        </Badge>
+                                        <span v-else class="text-muted-foreground">—</span>
                                     </td>
                                     <td class="px-3 py-2 text-muted-foreground">{{ formatDate(patient.createdAt) }}</td>
                                     <td v-if="canShowRowActions" class="px-3 py-2">

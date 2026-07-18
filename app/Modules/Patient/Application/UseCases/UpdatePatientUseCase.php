@@ -5,6 +5,7 @@ namespace App\Modules\Patient\Application\UseCases;
 use App\Modules\Patient\Application\Services\PatientDuplicateDetectionService;
 use App\Modules\Patient\Domain\Repositories\PatientAuditLogRepositoryInterface;
 use App\Modules\Patient\Domain\Repositories\PatientRepositoryInterface;
+use App\Modules\Patient\Domain\ValueObjects\PatientPhoneNumber;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 
 class UpdatePatientUseCase
@@ -27,6 +28,10 @@ class UpdatePatientUseCase
 
         $candidate = array_merge($before, $payload);
         $warnings = $this->duplicateDetectionService->evaluate($candidate, $id);
+
+        if (array_key_exists('phone', $payload)) {
+            $payload['phone_normalized'] = PatientPhoneNumber::normalize($payload['phone']) ?: null;
+        }
 
         $updated = $this->patientRepository->update($id, $payload);
         if (! $updated) {

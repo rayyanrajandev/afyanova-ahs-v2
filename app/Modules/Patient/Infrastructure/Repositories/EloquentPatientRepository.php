@@ -3,11 +3,14 @@
 namespace App\Modules\Patient\Infrastructure\Repositories;
 
 use App\Modules\Patient\Domain\Repositories\PatientRepositoryInterface;
+use App\Modules\Patient\Domain\ValueObjects\PatientPhoneNumber;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Carbon;
 
 class EloquentPatientRepository implements PatientRepositoryInterface
 {
@@ -79,13 +82,18 @@ class EloquentPatientRepository implements PatientRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?string $registrationWindow = null,
+        ?string $ageGroup = null,
+        ?string $insuranceType = null,
     ): array {
         $sortBy = in_array($sortBy, ['created_at', 'updated_at', 'first_name', 'last_name', 'patient_number'], true)
             ? $sortBy
             : 'created_at';
 
         $queryBuilder = PatientModel::query()
+            ->with('openEncounter')
+            ->withMax('encounters as last_visit_at', 'opened_at')
             ->when(
                 $this->isPlatformScopingEnabled(),
                 fn (Builder $builder) => $this->platformScopeQueryApplier->apply(
@@ -94,23 +102,7 @@ class EloquentPatientRepository implements PatientRepositoryInterface
                     facilityColumn: null,
                 ),
             )
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $normalizedSearchTerm = mb_strtolower(trim($searchTerm));
-                $like = '%'.$normalizedSearchTerm.'%';
-
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->whereRaw('LOWER(patient_number) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(first_name) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(last_name) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(COALESCE(middle_name, \'\')) LIKE ?', [$like])
-                        ->orWhereRaw("LOWER(concat(first_name, ' ', last_name)) LIKE ?", [$like])
-                        ->orWhereRaw("LOWER(concat(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name)) LIKE ?", [$like])
-                        ->orWhereRaw('LOWER(COALESCE(phone, \'\')) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(COALESCE(email, \'\')) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(COALESCE(national_id, \'\')) LIKE ?', [$like]);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applySearchPredicate($builder, $searchTerm))
             ->when($status, fn (Builder $builder, string $requestedStatus) => $builder->where('status', $requestedStatus))
             ->when($gender, fn (Builder $builder, string $requestedGender) => $builder->where('gender', $requestedGender))
             ->when($region, function (Builder $builder, string $requestedRegion): void {
@@ -119,6 +111,9 @@ class EloquentPatientRepository implements PatientRepositoryInterface
             ->when($district, function (Builder $builder, string $requestedDistrict): void {
                 $builder->whereRaw('LOWER(COALESCE(district, \'\')) LIKE ?', ['%'.mb_strtolower($requestedDistrict).'%']);
             })
+            ->when($registrationWindow, fn (Builder $builder, string $window) => $this->applyRegistrationWindow($builder, $window))
+            ->when($ageGroup, fn (Builder $builder, string $group) => $this->applyAgeGroup($builder, $group))
+            ->when($insuranceType, fn (Builder $builder, string $type) => $this->applyInsuranceType($builder, $type))
             ->orderBy($sortBy, $sortDirection);
 
         $paginator = $queryBuilder->paginate(
@@ -142,23 +137,7 @@ class EloquentPatientRepository implements PatientRepositoryInterface
                     facilityColumn: null,
                 ),
             )
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $normalizedSearchTerm = mb_strtolower(trim($searchTerm));
-                $like = '%'.$normalizedSearchTerm.'%';
-
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->whereRaw('LOWER(patient_number) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(first_name) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(last_name) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(COALESCE(middle_name, \'\')) LIKE ?', [$like])
-                        ->orWhereRaw("LOWER(concat(first_name, ' ', last_name)) LIKE ?", [$like])
-                        ->orWhereRaw("LOWER(concat(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name)) LIKE ?", [$like])
-                        ->orWhereRaw('LOWER(COALESCE(phone, \'\')) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(COALESCE(email, \'\')) LIKE ?', [$like])
-                        ->orWhereRaw('LOWER(COALESCE(national_id, \'\')) LIKE ?', [$like]);
-                });
-            });
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applySearchPredicate($builder, $searchTerm));
 
         $rows = $queryBuilder
             ->selectRaw('status, COUNT(*) as aggregate')
@@ -188,12 +167,99 @@ class EloquentPatientRepository implements PatientRepositoryInterface
         return $counts;
     }
 
+    /**
+     * Shared by search() and statusCounts() — was duplicated verbatim
+     * between the two before. Matches name/patient-number/email/national-id
+     * via the existing broad `%term%` LIKE, but phone matching now goes
+     * through the indexed `phone_normalized` column (prefix match) instead
+     * of a raw, unindexable `LIKE` on the stored `phone` string — the raw
+     * `phone` LIKE stays too, as a safety net for any row whose
+     * `phone_normalized` backfill hasn't run yet.
+     */
+    private function applySearchPredicate(Builder $builder, string $searchTerm): void
+    {
+        $normalizedSearchTerm = mb_strtolower(trim($searchTerm));
+        $like = '%'.$normalizedSearchTerm.'%';
+        $normalizedPhoneTerm = PatientPhoneNumber::normalize($searchTerm);
+
+        $builder->where(function (Builder $nestedQuery) use ($like, $normalizedPhoneTerm): void {
+            $nestedQuery
+                ->whereRaw('LOWER(patient_number) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(first_name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(last_name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(COALESCE(middle_name, \'\')) LIKE ?', [$like])
+                ->orWhereRaw("LOWER(concat(first_name, ' ', last_name)) LIKE ?", [$like])
+                ->orWhereRaw("LOWER(concat(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name)) LIKE ?", [$like])
+                ->orWhereRaw('LOWER(COALESCE(phone, \'\')) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(COALESCE(email, \'\')) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(COALESCE(national_id, \'\')) LIKE ?', [$like]);
+
+            if ($normalizedPhoneTerm !== '') {
+                $nestedQuery->orWhere('phone_normalized', 'LIKE', $normalizedPhoneTerm.'%');
+            }
+        });
+    }
+
+    private function applyRegistrationWindow(Builder $builder, string $window): void
+    {
+        $now = Carbon::now();
+
+        $from = match ($window) {
+            'today' => $now->copy()->startOfDay(),
+            'this_week' => $now->copy()->startOfWeek(),
+            'this_month' => $now->copy()->startOfMonth(),
+            default => null,
+        };
+
+        if ($from !== null) {
+            $builder->where('created_at', '>=', $from);
+        }
+    }
+
+    private function applyAgeGroup(Builder $builder, string $group): void
+    {
+        $today = Carbon::now()->toDateString();
+
+        match ($group) {
+            'child' => $builder->whereDate('date_of_birth', '>', Carbon::parse($today)->subYears(18)->toDateString()),
+            'adult' => $builder
+                ->whereDate('date_of_birth', '<=', Carbon::parse($today)->subYears(18)->toDateString())
+                ->whereDate('date_of_birth', '>', Carbon::parse($today)->subYears(60)->toDateString()),
+            'elderly' => $builder->whereDate('date_of_birth', '<=', Carbon::parse($today)->subYears(60)->toDateString()),
+            default => null,
+        };
+    }
+
+    /**
+     * `patient_insurance_records` (insurance_type: private/nhif/other/none,
+     * status: active/inactive/expired/cancelled) already indexes
+     * (insurance_type, status) — "insurance" is at least one active,
+     * non-`none` record; "cash" is its exact complement.
+     */
+    private function applyInsuranceType(Builder $builder, string $type): void
+    {
+        $hasActiveInsurance = function (QueryBuilder $exists): void {
+            $exists->from('patient_insurance_records')
+                ->whereColumn('patient_insurance_records.patient_id', 'patients.id')
+                ->where('patient_insurance_records.status', 'active')
+                ->where('patient_insurance_records.insurance_type', '!=', 'none');
+        };
+
+        if ($type === 'insurance') {
+            $builder->whereExists($hasActiveInsurance);
+        } elseif ($type === 'cash') {
+            $builder->whereNotExists($hasActiveInsurance);
+        }
+    }
+
     private function toSearchResult(LengthAwarePaginator $paginator): array
     {
-        $data = array_map(
-            static fn (PatientModel $patient): array => $patient->toArray(),
-            $paginator->items(),
-        );
+        $data = array_map(static function (PatientModel $patient): array {
+            $array = $patient->toArray();
+            $array['care_status'] = $patient->openEncounter?->type;
+
+            return $array;
+        }, $paginator->items());
 
         return [
             'data' => $data,
@@ -250,7 +316,7 @@ class EloquentPatientRepository implements PatientRepositoryInterface
         ?string $excludePatientId = null
     ): array {
         $matches = [];
-        $normalizedPhone = $this->normalizePhone($phone);
+        $normalizedPhone = PatientPhoneNumber::normalize($phone);
 
         if ($normalizedPhone !== '') {
             $phoneCandidates = $this->phoneSearchCandidates($normalizedPhone);
@@ -262,7 +328,7 @@ class EloquentPatientRepository implements PatientRepositoryInterface
                 );
 
             foreach ($query->limit(5)->get() as $patient) {
-                if ($this->normalizePhone($patient->phone) === $normalizedPhone) {
+                if (PatientPhoneNumber::normalize($patient->phone) === $normalizedPhone) {
                     $matches[$patient->id] = $patient->toArray();
                 }
             }
@@ -359,25 +425,6 @@ class EloquentPatientRepository implements PatientRepositoryInterface
     private function normalizeText(mixed $value): string
     {
         return preg_replace('/\s+/', ' ', mb_strtolower(trim((string) $value))) ?? '';
-    }
-
-    private function normalizePhone(mixed $value): string
-    {
-        $digits = preg_replace('/\D+/', '', (string) $value) ?? '';
-
-        if (strlen($digits) === 12 && str_starts_with($digits, '255')) {
-            return $digits;
-        }
-
-        if (strlen($digits) === 10 && str_starts_with($digits, '0')) {
-            return '255'.substr($digits, 1);
-        }
-
-        if (strlen($digits) === 9) {
-            return '255'.$digits;
-        }
-
-        return $digits;
     }
 
     /**

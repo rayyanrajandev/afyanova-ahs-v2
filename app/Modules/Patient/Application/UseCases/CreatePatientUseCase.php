@@ -5,6 +5,7 @@ namespace App\Modules\Patient\Application\UseCases;
 use App\Modules\Patient\Application\Services\PatientDuplicateDetectionService;
 use App\Modules\Patient\Domain\Repositories\PatientAuditLogRepositoryInterface;
 use App\Modules\Patient\Domain\Repositories\PatientRepositoryInterface;
+use App\Modules\Patient\Domain\ValueObjects\PatientPhoneNumber;
 use App\Modules\Patient\Domain\ValueObjects\PatientStatus;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
@@ -31,6 +32,7 @@ class CreatePatientUseCase
         $payload['status'] = PatientStatus::ACTIVE->value;
         $payload['patient_number'] = $this->generatePatientNumber();
         $payload['tenant_id'] = $this->platformScopeContext->tenantId();
+        $payload['phone_normalized'] = PatientPhoneNumber::normalize($payload['phone'] ?? null) ?: null;
 
         $createdPatient = $this->patientRepository->create($payload);
 

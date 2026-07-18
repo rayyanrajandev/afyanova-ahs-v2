@@ -4,6 +4,7 @@ namespace App\Modules\Patient\Application\Services;
 
 use App\Modules\Patient\Application\Exceptions\DuplicatePatientException;
 use App\Modules\Patient\Domain\Repositories\PatientRepositoryInterface;
+use App\Modules\Patient\Domain\ValueObjects\PatientPhoneNumber;
 
 class PatientDuplicateDetectionService
 {
@@ -212,21 +213,7 @@ class PatientDuplicateDetectionService
 
     private function normalizePhone(mixed $value): string
     {
-        $digits = preg_replace('/\D+/', '', (string) $value) ?? '';
-
-        if (strlen($digits) === 12 && str_starts_with($digits, '255')) {
-            return $digits;
-        }
-
-        if (strlen($digits) === 10 && str_starts_with($digits, '0')) {
-            return '255'.substr($digits, 1);
-        }
-
-        if (strlen($digits) === 9) {
-            return '255'.$digits;
-        }
-
-        return $digits;
+        return PatientPhoneNumber::normalize($value);
     }
 
     private function nullableString(mixed $value): ?string

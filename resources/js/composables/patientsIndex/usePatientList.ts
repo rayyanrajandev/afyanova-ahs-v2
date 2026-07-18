@@ -33,6 +33,8 @@ export type PatientListItem = {
     statusReason: string | null;
     createdAt: string | null;
     updatedAt: string | null;
+    lastVisitAt: string | null;
+    careStatus: 'outpatient' | 'emergency' | 'inpatient' | null;
 };
 
 type PatientListResponse = {
@@ -61,6 +63,9 @@ function filterQuery(filters: PatientListFilters) {
         gender: filters.gender || null,
         region: filters.region.trim() || null,
         district: filters.district.trim() || null,
+        registrationWindow: filters.registrationWindow || null,
+        ageGroup: filters.ageGroup || null,
+        insuranceType: filters.insuranceType || null,
     };
 }
 

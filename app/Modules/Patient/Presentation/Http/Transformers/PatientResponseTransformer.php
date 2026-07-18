@@ -27,6 +27,8 @@ class PatientResponseTransformer
             'statusReason' => $patient['status_reason'] ?? null,
             'createdAt' => $patient['created_at'] ?? null,
             'updatedAt' => $patient['updated_at'] ?? null,
+            'lastVisitAt' => $patient['last_visit_at'] ?? null,
+            'careStatus' => $patient['care_status'] ?? null,
         ];
     }
 }

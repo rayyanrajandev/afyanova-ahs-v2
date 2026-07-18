@@ -47,6 +47,21 @@ class ListPatientsUseCase
         $query = isset($filters['q']) ? trim((string) $filters['q']) : null;
         $query = $query === '' ? null : $query;
 
+        $registrationWindow = $filters['registrationWindow'] ?? null;
+        if (! in_array($registrationWindow, ['today', 'this_week', 'this_month'], true)) {
+            $registrationWindow = null;
+        }
+
+        $ageGroup = $filters['ageGroup'] ?? null;
+        if (! in_array($ageGroup, ['child', 'adult', 'elderly'], true)) {
+            $ageGroup = null;
+        }
+
+        $insuranceType = $filters['insuranceType'] ?? null;
+        if (! in_array($insuranceType, ['cash', 'insurance'], true)) {
+            $insuranceType = null;
+        }
+
         return $this->patientRepository->search(
             query: $query,
             status: $status,
@@ -57,6 +72,9 @@ class ListPatientsUseCase
             perPage: $perPage,
             sortBy: $sortBy,
             sortDirection: $sortDirection,
+            registrationWindow: $registrationWindow,
+            ageGroup: $ageGroup,
+            insuranceType: $insuranceType,
         );
     }
 }

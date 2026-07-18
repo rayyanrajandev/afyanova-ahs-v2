@@ -21,7 +21,10 @@ interface PatientRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?string $registrationWindow = null,
+        ?string $ageGroup = null,
+        ?string $insuranceType = null,
     ): array;
 
     public function statusCounts(?string $query): array;
