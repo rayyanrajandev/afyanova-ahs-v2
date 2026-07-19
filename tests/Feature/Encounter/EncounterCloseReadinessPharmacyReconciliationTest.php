@@ -14,7 +14,7 @@ uses(RefreshDatabase::class);
  * (reports/clinical-note-audit/15-critical-system-integrity-review.md):
  * a pharmacy order in `reconciliation_exception` — an unresolved-problem
  * state, not a safe end-state — used to be grouped with dispensed/cancelled
- * in GetEncounterCloseReadinessUseCase::PHARMACY_TERMINAL_STATUSES, so it
+ * in GetEncounterCloseReadinessUseCase::pharmacyTerminalStatuses(), so it
  * silently stopped contributing to the "pending clinical orders"
  * close-readiness item the moment it was raised. It must now count as
  * pending until resolved.

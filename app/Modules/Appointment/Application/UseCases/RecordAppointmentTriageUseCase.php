@@ -10,6 +10,14 @@ use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * OPD (outpatient) triage — a separate, structurally unrelated system from
+ * Emergency Department triage despite the shared word "triage". ED triage is
+ * its own module, App\Modules\EmergencyTriage (EmergencyTriageCaseModel, its
+ * own status enum, own DB table); this use case and
+ * resources/js/pages/triage/Queue.vue are the OPD-side equivalent and share
+ * no code with it. Do not assume the two are interchangeable.
+ */
 class RecordAppointmentTriageUseCase
 {
     public function __construct(

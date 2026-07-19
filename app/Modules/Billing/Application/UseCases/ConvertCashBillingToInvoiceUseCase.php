@@ -79,6 +79,7 @@ class ConvertCashBillingToInvoiceUseCase
 
             $invoicePayload = [
                 'patient_id' => $account['patient_id'],
+                'source_cash_billing_account_id' => $account['id'],
                 'currency_code' => $account['currency_code'] ?? 'TZS',
                 'subtotal_amount' => $totalCharged,
                 'discount_amount' => 0,

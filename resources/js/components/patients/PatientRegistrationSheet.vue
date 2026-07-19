@@ -203,6 +203,7 @@ const canSubmit = computed(
     () =>
         form.firstName.trim() !== '' &&
         form.lastName.trim() !== '' &&
+        form.gender !== '' &&
         form.dateOfBirth !== '' &&
         form.phone.trim() !== '' &&
         form.region.trim() !== '' &&
@@ -265,7 +266,7 @@ function resetForm(): void {
     form.firstName = '';
     form.middleName = '';
     form.lastName = '';
-    form.gender = 'female';
+    form.gender = '';
     form.dateOfBirth = '';
     form.ageYears = '';
     form.ageMonths = '';
@@ -318,7 +319,7 @@ function resetForm(): void {
                         <Label for="reg-gender">Gender</Label>
                         <Select v-model="form.gender">
                             <SelectTrigger id="reg-gender" class="h-9 w-full bg-background">
-                                <SelectValue />
+                                <SelectValue placeholder="Select gender" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="female">Female</SelectItem>

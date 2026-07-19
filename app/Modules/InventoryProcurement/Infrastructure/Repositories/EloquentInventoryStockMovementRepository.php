@@ -29,12 +29,12 @@ class EloquentInventoryStockMovementRepository implements InventoryStockMovement
 
     public function findById(string $id): ?array
     {
-        $movement = InventoryStockMovementModel::query()
+        $query = InventoryStockMovementModel::query()
             ->with('item')
-            ->whereKey($id)
-            ->first();
+            ->whereKey($id);
+        $this->applyPlatformScopeIfEnabled($query);
 
-        return $movement?->toArray();
+        return $query->first()?->toArray();
     }
 
     public function search(

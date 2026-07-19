@@ -344,6 +344,20 @@ class EloquentPlatformUserAdminRepository implements PlatformUserAdminRepository
             return null;
         }
 
+        // Deliberately tenant-only, not facility-scoped like applyUserScopeIfEnabled()
+        // (used for read/list operations). This method's whole purpose is granting
+        // a user access to a facility they may not have yet — restricting the
+        // lookup to users who already have a facility_user row in the caller's
+        // facility (as applyUserScopeIfEnabled() does) would make first-time
+        // onboarding to that facility impossible. The two remaining ways this could
+        // be misused are already closed elsewhere: SyncPlatformUserFacilitiesUseCase
+        // validates every submitted facility id against the caller's own scope via
+        // resolveExistingFacilityIdsInScope() before this method ever runs, and the
+        // detach step below (via listScopedFacilityIdsForUser()) only ever touches
+        // facility_user rows already within the caller's own scope. A facility scope
+        // always carries a matching tenant (see ResolvePlatformAccessScopeUseCase),
+        // so this single tenant check covers both the tenant-scoped and
+        // facility-scoped caller cases.
         $scopeTenantId = $this->platformScopeContext->tenantId();
         if ($scopeTenantId !== null) {
             $existingTenantId = is_string($user->tenant_id) && $user->tenant_id !== '' ? $user->tenant_id : null;

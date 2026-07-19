@@ -64,7 +64,13 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
             $catalogQuery->whereIn('id', $catalogItemIds);
         }
 
-        if ($this->featureFlagResolver->isEnabled('multi_facility_isolation')) {
+        // 'multi_facility_isolation' isn't a registered flag key (the real
+        // ones are 'platform.multi_facility_scoping'/'platform.multi_tenant_isolation')
+        // — RequestScopedFeatureFlagResolver::isEnabled() silently returns
+        // false for any unrecognized key, so this scoping call never fired
+        // regardless of the real flags' state.
+        if ($this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
+            || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation')) {
             $this->platformScopeQueryApplier->apply($catalogQuery);
         }
 

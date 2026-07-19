@@ -4,7 +4,6 @@ namespace App\Modules\Platform\Infrastructure\Repositories;
 
 use App\Modules\Platform\Domain\Repositories\ClinicalCatalogItemRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
-use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Support\CatalogGovernance\FacilityTierSupport;
@@ -16,7 +15,6 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
 {
     public function __construct(
         private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
-        private readonly FeatureFlagResolverInterface $featureFlagResolver,
     ) {}
 
     public function create(array $attributes): array
@@ -31,7 +29,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
     public function findById(string $id): ?array
     {
         $query = ClinicalCatalogItemModel::query();
-        $this->applyPlatformScopeIfEnabled($query);
+        $this->applyPlatformScope($query);
         $item = $query->find($id);
 
         return $item?->toArray();
@@ -40,7 +38,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
     public function update(string $id, array $attributes): ?array
     {
         $query = ClinicalCatalogItemModel::query();
-        $this->applyPlatformScopeIfEnabled($query);
+        $this->applyPlatformScope($query);
         $item = $query->find($id);
         if (! $item) {
             return null;
@@ -128,7 +126,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
 
         $queryBuilder = ClinicalCatalogItemModel::query()
             ->where('catalog_type', $catalogType);
-        $this->applyPlatformScopeIfEnabled($queryBuilder);
+        $this->applyPlatformScope($queryBuilder);
         app(FacilityTierSupport::class)->applyAvailabilityFilter(
             $queryBuilder,
             'platform_clinical_catalog_items',
@@ -159,7 +157,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         $queryBuilder = ClinicalCatalogItemModel::query()
             ->whereIn('catalog_type', $catalogTypes)
             ->where('status', 'active');
-        $this->applyPlatformScopeIfEnabled($queryBuilder);
+        $this->applyPlatformScope($queryBuilder);
         app(FacilityTierSupport::class)->applyAvailabilityFilter(
             $queryBuilder,
             'platform_clinical_catalog_items',
@@ -178,7 +176,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
     ): array {
         $queryBuilder = ClinicalCatalogItemModel::query()
             ->where('catalog_type', $catalogType);
-        $this->applyPlatformScopeIfEnabled($queryBuilder);
+        $this->applyPlatformScope($queryBuilder);
         app(FacilityTierSupport::class)->applyAvailabilityFilter(
             $queryBuilder,
             'platform_clinical_catalog_items',
@@ -227,7 +225,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         ?string $dosageForm = null,
     ): array {
         $queryBuilder = ClinicalCatalogItemModel::query();
-        $this->applyPlatformScopeIfEnabled($queryBuilder);
+        $this->applyPlatformScope($queryBuilder);
         app(FacilityTierSupport::class)->applyAvailabilityFilter(
             $queryBuilder,
             'platform_clinical_catalog_items',
@@ -267,12 +265,21 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         return $counts;
     }
 
-    private function applyPlatformScopeIfEnabled(Builder $query): void
+    /**
+     * Scope a catalog query to the current facility/tenant unconditionally —
+     * not gated behind platform.multi_facility_scoping /
+     * platform.multi_tenant_isolation like most other repositories. Catalog
+     * rows carry facility-specific pricing and consumption recipes, so a
+     * cross-tenant row is never a valid choice regardless of where those
+     * flags are in their rollout; without this, a facility with no scope
+     * resolved (or before those flags exist) would see every other
+     * tenant's catalog data. PlatformScopeQueryApplier::apply() is a no-op
+     * when neither facility nor tenant scope resolves, so this stays safe
+     * for contexts with no scope at all (e.g. an unscoped platform-admin
+     * request).
+     */
+    private function applyPlatformScope(Builder $query): void
     {
-        if (! $this->isPlatformScopingEnabled()) {
-            return;
-        }
-
         $this->platformScopeQueryApplier->apply($query);
     }
 
@@ -310,12 +317,6 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         }
 
         return $attributes;
-    }
-
-    private function isPlatformScopingEnabled(): bool
-    {
-        return $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
-            || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
     }
 
     private function toSearchResult(LengthAwarePaginator $paginator): array

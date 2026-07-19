@@ -263,16 +263,21 @@ class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
             $user->roles()->detach($scopedAssignedRoleIds);
         }
 
-        if ($roleIds !== []) {
-            $user->roles()->syncWithoutDetaching($roleIds);
+        // Scope the roles being attached the same way every read in this
+        // class already scopes roles being listed — otherwise, once scoping
+        // is enabled, a caller could attach an out-of-scope role id (a
+        // different tenant's custom role, a role they can't otherwise see)
+        // by passing it directly in $roleIds with no validation.
+        $rolesQuery = RoleModel::query()->whereIn('id', $roleIds);
+        $this->applyRoleScopeIfEnabled($rolesQuery);
+        $roles = $rolesQuery->orderBy('name')->get();
+        $scopedRoleIds = $roles->pluck('id')->all();
+
+        if ($scopedRoleIds !== []) {
+            $user->roles()->syncWithoutDetaching($scopedRoleIds);
         }
 
         $user->unsetRelation('roles');
-
-        $roles = RoleModel::query()
-            ->whereIn('id', $roleIds)
-            ->orderBy('name')
-            ->get();
 
         return [
             'user_id' => $userId,

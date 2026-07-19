@@ -6,12 +6,16 @@ use App\Modules\Billing\Application\UseCases\ListBillingChargeCaptureCandidatesU
 use App\Modules\Encounter\Application\Services\EncounterResolverService;
 use App\Modules\Encounter\Application\Services\PrimaryMedicalRecordResolverService;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
+use App\Modules\Laboratory\Domain\ValueObjects\LaboratoryOrderStatus;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordRepositoryInterface;
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordNoteType;
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
+use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
+use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\TheatreProcedure\Domain\ValueObjects\TheatreProcedureStatus;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
 use App\Support\ClinicalOrders\ClinicalOrderEntryState;
 
@@ -21,7 +25,13 @@ class GetEncounterCloseReadinessUseCase
     // order-panel sort (reports/clinical-note-audit/15-critical-system-integrity-review.md).
     // Deliberately a single source of truth rather than a second copy — a
     // duplicated list is exactly what let C-11 drift out of sync with reality.
-    public const LAB_TERMINAL_STATUSES = ['completed', 'cancelled'];
+    // Methods (not consts) because PHP constant expressions can't call another
+    // class's static method — this derives from each order type's own status
+    // enum instead of hand-copying its terminal states here.
+    public static function labTerminalStatuses(): array
+    {
+        return LaboratoryOrderStatus::terminalValues();
+    }
 
     // C-11 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
     // reconciliation_exception is an unresolved-problem state (a flagged
@@ -29,15 +39,27 @@ class GetEncounterCloseReadinessUseCase
     // not be grouped with dispensed/cancelled/reconciliation_completed here,
     // or an unresolved medication-safety flag silently stops contributing to
     // the pending-orders close-readiness warning the moment it's raised.
-    public const PHARMACY_TERMINAL_STATUSES = [
-        'dispensed',
-        'cancelled',
-        'reconciliation_completed',
-    ];
+    //
+    // 'reconciliation_completed' is not a real value the pharmacy_orders.status
+    // column ever receives in production — PharmacyOrderStatus has no such
+    // case, since reconciliation state lives in a separate reconciliation_status
+    // column. It's kept here only because
+    // EncounterCloseReadinessPharmacyReconciliationTest asserts against a
+    // synthetic row that writes this literal into `status` directly.
+    public static function pharmacyTerminalStatuses(): array
+    {
+        return [...PharmacyOrderStatus::terminalValues(), 'reconciliation_completed'];
+    }
 
-    public const RADIOLOGY_TERMINAL_STATUSES = ['completed', 'cancelled'];
+    public static function radiologyTerminalStatuses(): array
+    {
+        return RadiologyOrderStatus::terminalValues();
+    }
 
-    public const THEATRE_TERMINAL_STATUSES = ['completed', 'cancelled'];
+    public static function theatreTerminalStatuses(): array
+    {
+        return TheatreProcedureStatus::terminalValues();
+    }
 
     // C-5 (reports/clinical-note-audit/15-critical-system-integrity-review.md),
     // acknowledgement-quality fix (decided 2026-07-08): cap on how many
@@ -247,7 +269,7 @@ class GetEncounterCloseReadinessUseCase
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', self::LAB_TERMINAL_STATUSES)
+            ->whereNotIn('status', self::labTerminalStatuses())
             ->orderByDesc('ordered_at')
             ->limit(self::ITEM_DETAIL_LIMIT)
             ->get(['id', 'test_name', 'ordered_at'])
@@ -262,7 +284,7 @@ class GetEncounterCloseReadinessUseCase
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', self::PHARMACY_TERMINAL_STATUSES)
+            ->whereNotIn('status', self::pharmacyTerminalStatuses())
             ->orderByDesc('ordered_at')
             ->limit(self::ITEM_DETAIL_LIMIT)
             ->get(['id', 'medication_name', 'ordered_at'])
@@ -277,7 +299,7 @@ class GetEncounterCloseReadinessUseCase
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', self::RADIOLOGY_TERMINAL_STATUSES)
+            ->whereNotIn('status', self::radiologyTerminalStatuses())
             ->orderByDesc('ordered_at')
             ->limit(self::ITEM_DETAIL_LIMIT)
             ->get(['id', 'study_description', 'ordered_at'])
@@ -291,7 +313,7 @@ class GetEncounterCloseReadinessUseCase
         $theatre = TheatreProcedureModel::query()
             ->where('encounter_id', $encounterId)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', self::THEATRE_TERMINAL_STATUSES)
+            ->whereNotIn('status', self::theatreTerminalStatuses())
             ->orderByDesc('scheduled_at')
             ->limit(self::ITEM_DETAIL_LIMIT)
             ->get(['id', 'procedure_name', 'scheduled_at'])
@@ -314,7 +336,7 @@ class GetEncounterCloseReadinessUseCase
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', self::LAB_TERMINAL_STATUSES)
+            ->whereNotIn('status', self::labTerminalStatuses())
             ->count();
     }
 
@@ -324,7 +346,7 @@ class GetEncounterCloseReadinessUseCase
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', self::PHARMACY_TERMINAL_STATUSES)
+            ->whereNotIn('status', self::pharmacyTerminalStatuses())
             ->count();
     }
 
@@ -334,7 +356,7 @@ class GetEncounterCloseReadinessUseCase
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', self::RADIOLOGY_TERMINAL_STATUSES)
+            ->whereNotIn('status', self::radiologyTerminalStatuses())
             ->count();
     }
 
@@ -343,7 +365,7 @@ class GetEncounterCloseReadinessUseCase
         return TheatreProcedureModel::query()
             ->where('encounter_id', $encounterId)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', self::THEATRE_TERMINAL_STATUSES)
+            ->whereNotIn('status', self::theatreTerminalStatuses())
             ->count();
     }
 

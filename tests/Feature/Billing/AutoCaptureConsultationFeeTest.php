@@ -212,27 +212,29 @@ it('does not auto-capture when appointment transitions to non-in_consultation st
     expect($invoices)->toHaveCount(0);
 });
 
-it('auto-captures even when no catalog pricing exists using fallback service code', function (): void {
+it('does not auto-capture at TZS 0 when no catalog pricing resolves for tier or department', function (): void {
     $user = makeAutoCaptureClinician();
     $patient = makeAutoCapturePatient();
     $appointment = makeAutoCaptureAppointment($patient->id, $user->id);
 
-    executeStatusTransition($appointment->id, 'in_consultation', $user->id);
+    $result = executeStatusTransition($appointment->id, 'in_consultation', $user->id);
+
+    expect($result['autoCapture']['captured'] ?? null)->toBeFalse();
+    expect($result['autoCapture']['reason'] ?? null)->toBe('no_catalog_price');
 
     $invoices = BillingInvoiceModel::query()
         ->where('patient_id', $patient->id)
         ->where('appointment_id', $appointment->id)
         ->get();
 
-    expect($invoices)->toHaveCount(1);
-
-    $invoice = $invoices->first();
-    expect($invoice->status)->toBe('draft');
-    expect((float) $invoice->total_amount)->toBe(0.0);
-    expect((float) $invoice->balance_amount)->toBe(0.0);
+    // No catalog price could be resolved for this visit — leaving it
+    // uncaptured (rather than invoicing at TZS 0) means it still surfaces
+    // as a pending, correctly-priced-as-"missing" candidate via
+    // ListBillingChargeCaptureCandidatesUseCase instead of looking resolved.
+    expect($invoices)->toHaveCount(0);
 });
 
-it('auto-capture does not break when clinician has no staff profile', function (): void {
+it('auto-capture does not break, and does not invoice at TZS 0, when clinician has no staff profile', function (): void {
     $patient = makeAutoCapturePatient();
     $tariff = makeAutoCaptureConsultationTariff();
 
@@ -250,12 +252,18 @@ it('auto-capture does not break when clinician has no staff profile', function (
         'reason' => 'General checkup',
     ]);
 
-    executeStatusTransition($appointment->id, 'in_consultation', $noProfileUser->id);
+    $result = executeStatusTransition($appointment->id, 'in_consultation', $noProfileUser->id);
+
+    // The seeded tariff is tier-specific (CONSULT-MD-OUTPATIENT); a clinician
+    // with no staff profile resolves no tier, so no code this visit tries
+    // matches it. Confirms the use case still completes cleanly (no
+    // exception) rather than crashing — it just leaves the visit uncaptured.
+    expect($result['autoCapture']['captured'] ?? null)->toBeFalse();
 
     $invoices = BillingInvoiceModel::query()
         ->where('patient_id', $patient->id)
         ->where('appointment_id', $appointment->id)
         ->get();
 
-    expect($invoices)->toHaveCount(1);
+    expect($invoices)->toHaveCount(0);
 });

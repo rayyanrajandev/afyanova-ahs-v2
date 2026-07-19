@@ -133,8 +133,13 @@ class EloquentInventoryWarehouseTransferRepository implements InventoryWarehouse
 
     private function isPlatformScopingEnabled(): bool
     {
+        // 'inventory_procurement_platform_scoping' isn't a registered flag
+        // key (the real ones are 'platform.multi_facility_scoping'/
+        // 'platform.multi_tenant_isolation') — this silently returned false
+        // regardless of the real flags' state.
         try {
-            return $this->featureFlagResolver->isEnabled('inventory_procurement_platform_scoping');
+            return $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
+                || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
         } catch (\Throwable) {
             return false;
         }

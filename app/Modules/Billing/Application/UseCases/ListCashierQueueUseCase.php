@@ -8,9 +8,12 @@ use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
+use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -19,6 +22,7 @@ class ListCashierQueueUseCase
     public function __construct(
         private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
+        private readonly FeatureFlagResolverInterface $featureFlagResolver,
     ) {}
 
     /**
@@ -32,172 +36,200 @@ class ListCashierQueueUseCase
         $perPage = max(min((int) ($filters['perPage'] ?? 20), 100), 1);
         $query = $this->normalizeNullableString($filters['q'] ?? null);
 
-        // Determine which patient IDs to include based on status filter
-        if ($status === 'in_consultation') {
-            $allPatientIds = $this->findPatientsInConsultation();
-        } elseif ($status === 'unpaid') {
-            $allPatientIds = $this->findPatientsWithUnpaidInvoices('unpaid');
-        } elseif ($status === 'paid') {
-            $allPatientIds = $this->findPatientsWithAllInvoicesPaid();
-        } else {
-            // 'all' — merge all sources
-            $unpaidPatientIds = $this->findPatientsWithUnpaidInvoices(null);
-            $unbilledPatientIds = $this->findPatientsWithUnbilledServices();
-            $inConsultationPatientIds = $this->findPatientsInConsultation();
-            $allPatientIds = array_unique(array_merge($unpaidPatientIds, $unbilledPatientIds, $inConsultationPatientIds));
+        // Candidate patients are resolved entirely at the SQL level below
+        // (correlated EXISTS subqueries + a real ->paginate() call) instead
+        // of pulling every matching patient ID into PHP first and slicing —
+        // that in-memory approach loaded the whole matching population on
+        // every request regardless of page size.
+        $patientsQuery = PatientModel::query();
+
+        if ($this->isPlatformScopingEnabled()) {
+            // facilityColumn: null — patients carry tenant_id but no
+            // facility_id column (they're tenant-wide, not facility-scoped),
+            // matching EloquentPatientRepository's own scoping call.
+            $this->platformScopeQueryApplier->apply(
+                $patientsQuery,
+                tenantColumn: 'tenant_id',
+                facilityColumn: null,
+            );
         }
 
-        if (empty($allPatientIds)) {
-            return [
-                'data' => [],
-                'meta' => [
-                    'currentPage' => $page,
-                    'perPage' => $perPage,
-                    'total' => 0,
-                    'lastPage' => 0,
-                ],
-            ];
-        }
+        $this->applyStatusFilter($patientsQuery, $status);
 
-        // Fetch patients with counts
-        $patients = $this->buildQueueEntries($allPatientIds, $status, $query);
-
-        // Paginate
-        $total = $patients->count();
-        $lastPage = (int) ceil($total / $perPage);
-        $paginated = $patients->slice(($page - 1) * $perPage, $perPage)->values();
-
-        return [
-            'data' => $paginated->toArray(),
-            'meta' => [
-                'currentPage' => $page,
-                'perPage' => $perPage,
-                'total' => $total,
-                'lastPage' => $lastPage,
-            ],
-        ];
-    }
-
-    /**
-     * @return string[]
-     */
-    private function findPatientsWithUnpaidInvoices(?string $status): array
-    {
-        $query = BillingInvoiceModel::query()
-            ->select('patient_id')
-            ->whereNotIn('status', ['cancelled', 'voided']);
-
-        if ($status === 'unpaid') {
-            $query->where('balance_amount', '>', 0);
-        } elseif ($status === 'paid') {
-            $query->where('balance_amount', '<=', 0);
-        }
-
-        return $query->pluck('patient_id')
-            ->filter(fn ($id) => ! empty($id))
-            ->unique()
-            ->values()
-            ->toArray();
-    }
-
-    /**
-     * @return string[]
-     */
-    private function findPatientsWithUnbilledServices(): array
-    {
-        $labPatients = LaboratoryOrderModel::query()
-            ->select('patient_id')
-            ->where(function ($q) {
-                $q->where('status', 'completed')
-                    ->orWhereNotNull('resulted_at');
-            })
-            ->whereNull('entered_in_error_at')
-            ->pluck('patient_id');
-
-        $pharmacyPatients = PharmacyOrderModel::query()
-            ->select('patient_id')
-            ->where(function ($q) {
-                $q->where('status', 'dispensed')
-                    ->orWhere('status', 'partially_dispensed')
-                    ->orWhere('quantity_dispensed', '>', 0);
-            })
-            ->whereNull('entered_in_error_at')
-            ->pluck('patient_id');
-
-        $radiologyPatients = RadiologyOrderModel::query()
-            ->select('patient_id')
-            ->where(function ($q) {
-                $q->where('status', 'completed')
-                    ->orWhereNotNull('completed_at');
-            })
-            ->whereNull('entered_in_error_at')
-            ->pluck('patient_id');
-
-        $theatrePatients = TheatreProcedureModel::query()
-            ->select('patient_id')
-            ->where(function ($q) {
-                $q->where('status', 'completed')
-                    ->orWhereNotNull('completed_at');
-            })
-            ->pluck('patient_id');
-
-        return $labPatients->concat($pharmacyPatients)
-            ->concat($radiologyPatients)
-            ->concat($theatrePatients)
-            ->filter(fn ($id) => ! empty($id))
-            ->unique()
-            ->values()
-            ->toArray();
-    }
-
-    /**
-     * @return string[]
-     */
-    private function findPatientsInConsultation(): array
-    {
-        return AppointmentModel::query()
-            ->select('patient_id')
-            ->where('status', 'in_consultation')
-            ->pluck('patient_id')
-            ->filter(fn ($id) => ! empty($id))
-            ->unique()
-            ->values()
-            ->toArray();
-    }
-
-    /**
-     * @return string[]
-     */
-    private function findPatientsWithAllInvoicesPaid(): array
-    {
-        return BillingInvoiceModel::query()
-            ->select('patient_id')
-            ->whereNotIn('status', ['cancelled', 'voided'])
-            ->groupBy('patient_id')
-            ->havingRaw('MAX(balance_amount) <= 0')
-            ->pluck('patient_id')
-            ->filter(fn ($id) => ! empty($id))
-            ->values()
-            ->toArray();
-    }
-
-    /**
-     * @param  string[]  $patientIds
-     * @return Collection<int, array<string, mixed>>
-     */
-    private function buildQueueEntries(array $patientIds, ?string $status, ?string $query): Collection
-    {
-        $patients = PatientModel::query()
-            ->whereIn('id', $patientIds)
-            ->when($query, fn ($q) => $q->where(function ($w) use ($query) {
+        if ($query !== null) {
+            $patientsQuery->where(function (EloquentBuilder $w) use ($query) {
                 $w->where('first_name', 'ilike', "%{$query}%")
                     ->orWhere('last_name', 'ilike', "%{$query}%")
                     ->orWhere('patient_number', 'ilike', "%{$query}%")
                     ->orWhere('phone', 'ilike', "%{$query}%");
-            }))
-            ->get();
+            });
+        }
 
+        // The original PHP-side slice had no stable order either, but a real
+        // SQL OFFSET/LIMIT needs one explicitly or rows can shift between
+        // pages as concurrent writes happen — order by id for a cheap,
+        // fully deterministic tiebreaker.
+        $paginator = $patientsQuery->orderBy('id')->paginate(
+            perPage: $perPage,
+            columns: ['*'],
+            pageName: 'page',
+            page: $page,
+        );
+
+        $entries = $this->buildQueueEntries($paginator->getCollection(), $status);
+
+        return [
+            'data' => $entries->toArray(),
+            'meta' => [
+                'currentPage' => $paginator->currentPage(),
+                'perPage' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                // Laravel's paginator floors lastPage at 1 even with zero
+                // results; keep the previous "0 when nothing matches" shape
+                // so existing consumers see no behavior change.
+                'lastPage' => $paginator->total() > 0 ? $paginator->lastPage() : 0,
+            ],
+        ];
+    }
+
+    private function isPlatformScopingEnabled(): bool
+    {
+        return $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
+            || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
+    }
+
+    /**
+     * Restricts $query to patients matching the requested cashier-queue
+     * status, entirely via correlated EXISTS subqueries against `patients` —
+     * the SQL-level equivalent of the four candidate-ID scans this use case
+     * used to run into PHP arrays before merging/deduplicating them there.
+     */
+    private function applyStatusFilter(EloquentBuilder $query, ?string $status): void
+    {
+        if ($status === 'in_consultation') {
+            $query->whereExists(fn (QueryBuilder $q) => $this->inConsultationExists($q));
+
+            return;
+        }
+
+        if ($status === 'unpaid') {
+            $query->whereExists(fn (QueryBuilder $q) => $this->unpaidInvoiceExists($q));
+
+            return;
+        }
+
+        if ($status === 'paid') {
+            // Matches the original findPatientsWithAllInvoicesPaid(): at
+            // least one non-cancelled/voided invoice, and none of them have
+            // an outstanding balance.
+            $query->whereExists(fn (QueryBuilder $q) => $this->anyActiveInvoiceExists($q))
+                ->whereNotExists(fn (QueryBuilder $q) => $this->unpaidInvoiceExists($q));
+
+            return;
+        }
+
+        // 'all' (or unrecognized status): any patient with an active
+        // invoice, an unbilled completed service, or an active consultation —
+        // the same three-source union the original code merged in PHP.
+        $query->where(function (EloquentBuilder $outer) {
+            $outer->orWhereExists(fn (QueryBuilder $q) => $this->anyActiveInvoiceExists($q));
+            $outer->orWhereExists(fn (QueryBuilder $q) => $this->labUnbilledExists($q));
+            $outer->orWhereExists(fn (QueryBuilder $q) => $this->pharmacyUnbilledExists($q));
+            $outer->orWhereExists(fn (QueryBuilder $q) => $this->radiologyUnbilledExists($q));
+            $outer->orWhereExists(fn (QueryBuilder $q) => $this->theatreUnbilledExists($q));
+            $outer->orWhereExists(fn (QueryBuilder $q) => $this->inConsultationExists($q));
+        });
+    }
+
+    private function inConsultationExists(QueryBuilder $query): void
+    {
+        $query->select(\DB::raw(1))
+            ->from('appointments')
+            ->whereColumn('appointments.patient_id', 'patients.id')
+            ->where('appointments.status', 'in_consultation');
+    }
+
+    private function unpaidInvoiceExists(QueryBuilder $query): void
+    {
+        $query->select(\DB::raw(1))
+            ->from('billing_invoices')
+            ->whereColumn('billing_invoices.patient_id', 'patients.id')
+            ->whereNotIn('billing_invoices.status', ['cancelled', 'voided'])
+            ->where('billing_invoices.balance_amount', '>', 0);
+    }
+
+    /**
+     * Any invoice that isn't cancelled/voided, regardless of balance —
+     * matches the original findPatientsWithUnpaidInvoices(null) call used
+     * only when merging the 'all' bucket (a slight misnomer: with a null
+     * $status, that method applied no balance filter at all).
+     */
+    private function anyActiveInvoiceExists(QueryBuilder $query): void
+    {
+        $query->select(\DB::raw(1))
+            ->from('billing_invoices')
+            ->whereColumn('billing_invoices.patient_id', 'patients.id')
+            ->whereNotIn('billing_invoices.status', ['cancelled', 'voided']);
+    }
+
+    private function labUnbilledExists(QueryBuilder $query): void
+    {
+        $query->select(\DB::raw(1))
+            ->from('laboratory_orders')
+            ->whereColumn('laboratory_orders.patient_id', 'patients.id')
+            ->where(function (QueryBuilder $q) {
+                $q->where('status', 'completed')->orWhereNotNull('resulted_at');
+            })
+            ->whereNull('entered_in_error_at');
+    }
+
+    private function pharmacyUnbilledExists(QueryBuilder $query): void
+    {
+        $query->select(\DB::raw(1))
+            ->from('pharmacy_orders')
+            ->whereColumn('pharmacy_orders.patient_id', 'patients.id')
+            ->where(function (QueryBuilder $q) {
+                $q->where('status', 'dispensed')
+                    ->orWhere('status', 'partially_dispensed')
+                    ->orWhere('quantity_dispensed', '>', 0);
+            })
+            ->whereNull('entered_in_error_at');
+    }
+
+    private function radiologyUnbilledExists(QueryBuilder $query): void
+    {
+        $query->select(\DB::raw(1))
+            ->from('radiology_orders')
+            ->whereColumn('radiology_orders.patient_id', 'patients.id')
+            ->where(function (QueryBuilder $q) {
+                $q->where('status', 'completed')->orWhereNotNull('completed_at');
+            })
+            ->whereNull('entered_in_error_at');
+    }
+
+    private function theatreUnbilledExists(QueryBuilder $query): void
+    {
+        $query->select(\DB::raw(1))
+            ->from('theatre_procedures')
+            ->whereColumn('theatre_procedures.patient_id', 'patients.id')
+            ->where(function (QueryBuilder $q) {
+                $q->where('status', 'completed')->orWhereNotNull('completed_at');
+            });
+    }
+
+    /**
+     * @param  Collection<int, PatientModel>  $patients  Already the current
+     *   page only (typically ~20 rows) — every sub-query below is bounded to
+     *   this page's patient IDs, not the full matching population.
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function buildQueueEntries(Collection $patients, ?string $status): Collection
+    {
         $patientIds = $patients->pluck('id')->toArray();
+
+        if ($patientIds === []) {
+            return collect();
+        }
 
         // Batch fetch unpaid invoices per patient
         $invoicesByPatient = BillingInvoiceModel::query()

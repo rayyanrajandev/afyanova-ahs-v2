@@ -33,6 +33,14 @@ enum PharmacyOrderStatus: string
     /**
      * @return array<int, string>
      */
+    public static function terminalValues(): array
+    {
+        return [self::DISPENSED->value, self::CANCELLED->value];
+    }
+
+    /**
+     * @return array<int, string>
+     */
     public static function allowedWorkflowTransitions(string $currentStatus): array
     {
         return match ($currentStatus) {

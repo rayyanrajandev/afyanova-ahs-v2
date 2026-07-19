@@ -129,6 +129,8 @@ const patientInvoices = ref<Invoice[]>([]);
 const patientInvoicesLoading = ref(false);
 const chargeCaptureCandidates = ref<any[]>([]);
 const chargeCandidatesLoading = ref(false);
+const capturingCandidateIds = ref<Set<string>>(new Set());
+const issuingInvoiceIds = ref<Set<string>>(new Set());
 
 const showPaymentDialog = ref(false);
 const paymentInvoice = ref<Invoice | null>(null);
@@ -602,7 +604,7 @@ async function recordPayment() {
             {
                 body: {
                     amount,
-                    payerType: 'patient',
+                    payerType: 'self_pay',
                     paymentMethod: method,
                     paymentReference: reference || null,
                 },
@@ -681,7 +683,7 @@ async function recordBulkPayment() {
             await apiRequest('POST', `/billing-invoices/${inv.id}/payments`, {
                 body: {
                     amount: perInvoiceAmount,
-                    payerType: 'patient',
+                    payerType: 'self_pay',
                     paymentMethod: method,
                     paymentReference: reference || null,
                 },
@@ -693,6 +695,88 @@ async function recordBulkPayment() {
         notifyError(error instanceof Error ? error.message : 'Unable to record bulk payment.');
         if (patient) await selectPatient(patient);
         await loadQueue();
+    }
+}
+
+/**
+ * Captures a priced, not-yet-invoiced charge (lab/pharmacy/radiology/theatre
+ * order or consultation) onto the patient's invoice. Appends to their
+ * existing draft invoice in the same currency if one exists — draft line
+ * items are still editable server-side (see UpdateBillingInvoiceUseCase) —
+ * otherwise opens a new invoice with this as its first line item.
+ */
+async function addCandidateToInvoice(candidate: any) {
+    const patient = selectedPatient.value;
+    if (!patient || capturingCandidateIds.value.has(candidate.id)) return;
+
+    capturingCandidateIds.value = new Set(capturingCandidateIds.value).add(candidate.id);
+
+    const lineItem = candidate.suggestedLineItem;
+    const draftInvoice = patientInvoices.value.find(
+        (inv) => inv.status === 'draft' && (inv as any).currencyCode === candidate.currencyCode,
+    );
+
+    try {
+        if (draftInvoice) {
+            await apiRequest('PATCH', `/billing-invoices/${draftInvoice.id}`, {
+                body: {
+                    lineItems: [...draftInvoice.lineItems, lineItem],
+                },
+            });
+        } else {
+            await apiRequest('POST', '/billing-invoices', {
+                body: {
+                    patientId: patient.patientId,
+                    invoiceDate: new Date().toISOString().slice(0, 10),
+                    currencyCode: candidate.currencyCode || 'TZS',
+                    subtotalAmount: lineItem.lineTotal ?? 0,
+                    appointmentId: candidate.appointmentId ?? null,
+                    admissionId: candidate.admissionId ?? null,
+                    lineItems: [lineItem],
+                },
+            });
+        }
+
+        notifySuccess(`${candidate.serviceName || candidate.sourceWorkflowLabel} added to invoice.`);
+        await selectPatient(patient);
+        await loadQueue();
+    } catch (error) {
+        notifyError(error instanceof Error ? error.message : 'Unable to add charge to invoice.');
+    } finally {
+        const next = new Set(capturingCandidateIds.value);
+        next.delete(candidate.id);
+        capturingCandidateIds.value = next;
+    }
+}
+
+/**
+ * Draft invoices (created here or by consultation auto-capture) can't take a
+ * payment yet — RecordBillingInvoicePaymentUseCase rejects any invoice whose
+ * status isn't 'issued'. There was no UI action anywhere in this page to
+ * make that transition, even though the backend already supports it via
+ * PATCH /billing-invoices/{id}/status — so every draft invoice was
+ * permanently stuck unpayable. This finalizes the draft so Record Payment
+ * (and bulk payment) can proceed.
+ */
+async function issueInvoice(invoice: Invoice) {
+    const patient = selectedPatient.value;
+    if (!patient || issuingInvoiceIds.value.has(invoice.id)) return;
+
+    issuingInvoiceIds.value = new Set(issuingInvoiceIds.value).add(invoice.id);
+
+    try {
+        await apiRequest('PATCH', `/billing-invoices/${invoice.id}/status`, {
+            body: { status: 'issued' },
+        });
+        notifySuccess(`${invoice.invoiceNumber || 'Invoice'} issued.`);
+        await selectPatient(patient);
+        await loadQueue();
+    } catch (error) {
+        notifyError(error instanceof Error ? error.message : 'Unable to issue invoice.');
+    } finally {
+        const next = new Set(issuingInvoiceIds.value);
+        next.delete(invoice.id);
+        issuingInvoiceIds.value = next;
     }
 }
 
@@ -1295,7 +1379,7 @@ watch(showPaymentDialog, (open) => {
                                             <div class="flex items-start justify-between gap-2">
                                                 <div class="flex items-start gap-2">
                                                     <Checkbox
-                                                        v-if="invoice.balanceAmount > 0 && invoice.status !== 'cancelled' && invoice.status !== 'voided'"
+                                                        v-if="invoice.balanceAmount > 0 && invoice.status !== 'draft' && invoice.status !== 'cancelled' && invoice.status !== 'voided'"
                                                         :checked="selectedInvoiceIds.has(invoice.id)"
                                                         class="mt-0.5"
                                                         @update:checked="toggleInvoiceSelection(invoice.id)"
@@ -1339,7 +1423,16 @@ watch(showPaymentDialog, (open) => {
 
                                             <div class="mt-2 flex gap-2">
                                                 <Button
-                                                    v-if="invoice.balanceAmount > 0 && invoice.status !== 'cancelled' && invoice.status !== 'voided'"
+                                                    v-if="invoice.status === 'draft'"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    :disabled="issuingInvoiceIds.has(invoice.id)"
+                                                    @click="issueInvoice(invoice)"
+                                                >
+                                                    {{ issuingInvoiceIds.has(invoice.id) ? 'Issuing…' : 'Issue Invoice' }}
+                                                </Button>
+                                                <Button
+                                                    v-else-if="invoice.balanceAmount > 0 && invoice.status !== 'cancelled' && invoice.status !== 'voided'"
                                                     size="sm"
                                                     @click="openPaymentDialog(invoice)"
                                                 >
@@ -1393,6 +1486,15 @@ watch(showPaymentDialog, (open) => {
                                                         </div>
                                                     </div>
                                                     <p class="text-sm font-semibold tabular-nums">{{ formatMoney(candidate.lineTotal || candidate.unitPrice || 0) }}</p>
+                                                </div>
+                                                <div class="mt-2 flex justify-end">
+                                                    <Button
+                                                        size="sm"
+                                                        :disabled="capturingCandidateIds.has(candidate.id)"
+                                                        @click="addCandidateToInvoice(candidate)"
+                                                    >
+                                                        {{ capturingCandidateIds.has(candidate.id) ? 'Adding…' : 'Add to invoice' }}
+                                                    </Button>
                                                 </div>
                                             </div>
                                         </div>

@@ -347,6 +347,19 @@ function onPatientStatusChanged(patient: PatientListItem): void {
 }
 
 /**
+ * PatientVisitActionsMenu emits `checkedIn` after a successful OPD/emergency
+ * walk-in start, but nothing here was listening for it — the row's Care
+ * status badge (driven by `careStatus`, which comes from this same
+ * patients-index query) only ever caught up on the next unrelated refetch
+ * (e.g. changing a filter), not immediately after check-in. Status counts
+ * aren't invalidated here — check-in doesn't touch `status`/`statusReason`,
+ * only creates a new encounter.
+ */
+function onPatientCheckedIn(): void {
+    void queryClient.invalidateQueries({ queryKey: ['patients-index'] });
+}
+
+/**
  * Surfaces PatientRegistrationSheet.vue's offline-queue outbox at the page
  * level: pendingCount/syncing are shared module-singleton state (see
  * useOfflinePatientQueue.ts), so a patient saved offline from
@@ -589,7 +602,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                         <Link :href="`/patients/${patient.id}/chart`" class="text-xs font-medium text-primary hover:underline">
                                                             View chart
                                                         </Link>
-                                                        <PatientVisitActionsMenu :patient="patient" />
+                                                        <PatientVisitActionsMenu :patient="patient" @checked-in="onPatientCheckedIn" />
                                                     </template>
                                                 </PatientSummaryPopover>
                                                 <p class="truncate text-xs text-muted-foreground">{{ patient.patientNumber || 'No MRN assigned' }}</p>
@@ -620,7 +633,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     <td class="px-3 py-2 text-muted-foreground">{{ formatDate(patient.createdAt) }}</td>
                                     <td v-if="canShowRowActions" class="px-3 py-2">
                                         <div class="flex items-center justify-end gap-1">
-                                            <PatientVisitActionsMenu :patient="patient" />
+                                            <PatientVisitActionsMenu :patient="patient" @checked-in="onPatientCheckedIn" />
                                             <Button v-if="canUpdatePatients" size="sm" variant="ghost" class="h-7 gap-1 px-2 text-xs" @click="openEditSheet(patient)">
                                                 <AppIcon name="pencil" class="size-3.5" />Edit
                                             </Button>

@@ -33,6 +33,14 @@ enum LaboratoryOrderStatus: string
     /**
      * @return array<int, string>
      */
+    public static function terminalValues(): array
+    {
+        return [self::COMPLETED->value, self::CANCELLED->value];
+    }
+
+    /**
+     * @return array<int, string>
+     */
     public static function allowedForwardTransitions(string $currentStatus): array
     {
         return match ($currentStatus) {

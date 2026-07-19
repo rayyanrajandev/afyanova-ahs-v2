@@ -1,4 +1,11 @@
 <script setup lang="ts">
+// OPD (outpatient) triage — a separate, structurally unrelated system from
+// Emergency Department triage despite the shared word "triage". ED triage is
+// its own module (App\Modules\EmergencyTriage, EmergencyTriageCaseModel, its
+// own status enum, own DB table); this page and
+// App\Modules\Appointment\Application\UseCases\RecordAppointmentTriageUseCase
+// are the OPD-side equivalent and share no code with it. Do not assume the
+// two are interchangeable.
 import { Head, usePage } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, watch } from 'vue';

@@ -88,6 +88,22 @@ class UpdateBillingInvoiceUseCase
                 lineItems: is_array($payload['line_items'] ?? null) ? $payload['line_items'] : null,
                 currentInvoiceId: $id,
             );
+
+            // Mirrors CreateBillingInvoiceUseCase::calculateManualLineItemSubtotal():
+            // in manual pricing mode nothing else recomputes subtotal_amount from
+            // line_items, so appending/removing a line item silently left
+            // subtotal/total/balance stale unless the caller also happened to pass
+            // subtotal_amount explicitly.
+            $explicitAutoPricingToggle = $payload['auto_price_line_items'] ?? null;
+            $willAutoPrice = is_bool($explicitAutoPricingToggle)
+                ? $explicitAutoPricingToggle
+                : (($existing['pricing_mode'] ?? null) === 'service_catalog');
+
+            if (! $willAutoPrice && ! array_key_exists('subtotal_amount', $payload)) {
+                $payload['subtotal_amount'] = $this->calculateManualLineItemSubtotal(
+                    is_array($payload['line_items'] ?? null) ? $payload['line_items'] : null,
+                );
+            }
         }
 
         $refreshReviewPricing = $this->requiresReviewPricingRefresh($payload);
@@ -309,6 +325,29 @@ class UpdateBillingInvoiceUseCase
     /**
      * @param  array<int, array<string, mixed>>|null  $lineItems
      */
+    private function calculateManualLineItemSubtotal(?array $lineItems): float
+    {
+        if ($lineItems === null) {
+            return 0.0;
+        }
+
+        $subtotal = 0.0;
+        foreach ($lineItems as $lineItem) {
+            $quantity = max((float) ($lineItem['quantity'] ?? 0), 0);
+            $unitPrice = max((float) ($lineItem['unitPrice'] ?? 0), 0);
+            $lineTotal = isset($lineItem['lineTotal'])
+                ? max((float) $lineItem['lineTotal'], 0)
+                : round($quantity * $unitPrice, 2);
+
+            $subtotal += $lineTotal;
+        }
+
+        return round($subtotal, 2);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $lineItems
+     */
     private function assertUniqueSourceLineItems(?array $lineItems): void
     {
         $seen = [];
@@ -497,7 +536,7 @@ class UpdateBillingInvoiceUseCase
             $admission,
         );
 
-        $payload['pricing_context'] = $this->payerSummaryResolver->resolve(
+        $payload['pricing_context'] = $this->payerSummaryResolver->resolveFromLegacyInvoice(
             billingPayerContractId: $effectiveContractId,
             currencyCode: $effectiveCurrencyCode,
             totalAmount: $effectiveTotalAmount,

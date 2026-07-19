@@ -226,8 +226,14 @@ class InventoryAnalyticsController extends Controller
 
     private function applyPlatformScopeIfEnabled(Builder $query): void
     {
+        // 'inventory_procurement_platform_scoping' isn't a registered flag
+        // key (the real ones are 'platform.multi_facility_scoping'/
+        // 'platform.multi_tenant_isolation') — this silently returned false
+        // regardless of the real flags' state, so scoping never fired for
+        // any of this controller's 4 analytics endpoints.
         try {
-            if ($this->featureFlagResolver->isEnabled('inventory_procurement_platform_scoping')) {
+            if ($this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
+                || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation')) {
                 $this->platformScopeQueryApplier->apply($query);
             }
         } catch (\Throwable) {

@@ -146,7 +146,12 @@ function setStatus(value: string | number): void {
 async function invalidatePharmacyQueries(): Promise<void> {
     await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['pharmacy-orders-index'] }),
-        queryClient.invalidateQueries({ queryKey: ['pharmacy-orders-status-counts'] }),
+        // Must match usePharmacyOrderStatusCounts' own queryKey exactly —
+        // this was 'pharmacy-orders-status-counts' (a key nothing
+        // registers under), so the tile row only ever caught up on its
+        // next 30s refetchInterval poll instead of right after a status
+        // change.
+        queryClient.invalidateQueries({ queryKey: ['sidebar-pharmacy-order-status-counts'] }),
     ]);
 }
 

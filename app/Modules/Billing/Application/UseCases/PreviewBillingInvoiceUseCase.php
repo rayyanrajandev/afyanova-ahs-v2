@@ -70,7 +70,7 @@ class PreviewBillingInvoiceUseCase
         $payload = $this->consultationReviewDiscountApplier->apply($payload);
         $payload = array_merge($payload, $this->normalizeAmounts($payload));
         $payload['currency_code'] = $this->resolveCurrencyCode($payload['currency_code'] ?? null);
-        $payload['pricing_context'] = $this->payerSummaryResolver->resolve(
+        $payload['pricing_context'] = $this->payerSummaryResolver->resolveFromLegacyInvoice(
             billingPayerContractId: isset($payload['billing_payer_contract_id']) ? (string) $payload['billing_payer_contract_id'] : null,
             currencyCode: $payload['currency_code'],
             totalAmount: (float) ($payload['total_amount'] ?? 0),

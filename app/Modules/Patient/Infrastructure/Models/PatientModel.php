@@ -44,6 +44,15 @@ class PatientModel extends Model
     ];
 
     /**
+     * search_text is a DB-generated column (see the trigram search index
+     * migration) backing fast substring search — internal only, never meant
+     * to reach an API response.
+     *
+     * @var array<int, string>
+     */
+    protected $hidden = ['search_text'];
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

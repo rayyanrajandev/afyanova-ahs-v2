@@ -5,6 +5,13 @@ namespace App\Modules\EmergencyTriage\Infrastructure\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * Emergency Department triage only — a separate, structurally unrelated
+ * system from OPD triage despite the shared word "triage". OPD triage is
+ * recorded via App\Modules\Appointment\Application\UseCases\RecordAppointmentTriageUseCase
+ * and rendered at resources/js/pages/triage/Queue.vue; it has no code-level
+ * relationship to this module. Do not assume the two are interchangeable.
+ */
 class EmergencyTriageCaseModel extends Model
 {
     use HasUuids;

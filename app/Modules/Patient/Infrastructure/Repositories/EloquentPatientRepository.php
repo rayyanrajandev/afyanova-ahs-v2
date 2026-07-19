@@ -176,6 +176,14 @@ class EloquentPatientRepository implements PatientRepositoryInterface
      * `phone` LIKE stays too, as a safety net for any row whose
      * `phone_normalized` backfill hasn't run yet.
      */
+    /**
+     * search_text (a DB-generated, trigram-indexed column — see
+     * database/migrations/2026_07_19_000001_add_trigram_search_index_to_patients_table.php)
+     * already lowercases and concatenates exactly the same 9 fields/expressions
+     * this method used to OR together as separate leading-wildcard
+     * LOWER(x) LIKE conditions — none of which could use a plain B-tree
+     * index. One indexed substring match against that column replaces all 9.
+     */
     private function applySearchPredicate(Builder $builder, string $searchTerm): void
     {
         $normalizedSearchTerm = mb_strtolower(trim($searchTerm));
@@ -183,16 +191,7 @@ class EloquentPatientRepository implements PatientRepositoryInterface
         $normalizedPhoneTerm = PatientPhoneNumber::normalize($searchTerm);
 
         $builder->where(function (Builder $nestedQuery) use ($like, $normalizedPhoneTerm): void {
-            $nestedQuery
-                ->whereRaw('LOWER(patient_number) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(first_name) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(last_name) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(COALESCE(middle_name, \'\')) LIKE ?', [$like])
-                ->orWhereRaw("LOWER(concat(first_name, ' ', last_name)) LIKE ?", [$like])
-                ->orWhereRaw("LOWER(concat(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name)) LIKE ?", [$like])
-                ->orWhereRaw('LOWER(COALESCE(phone, \'\')) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(COALESCE(email, \'\')) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(COALESCE(national_id, \'\')) LIKE ?', [$like]);
+            $nestedQuery->whereRaw('search_text LIKE ?', [$like]);
 
             if ($normalizedPhoneTerm !== '') {
                 $nestedQuery->orWhere('phone_normalized', 'LIKE', $normalizedPhoneTerm.'%');

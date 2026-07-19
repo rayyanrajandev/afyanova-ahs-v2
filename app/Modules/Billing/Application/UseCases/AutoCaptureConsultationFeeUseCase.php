@@ -7,6 +7,7 @@ use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
+use App\Modules\Encounter\Application\Services\EncounterResolverService;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use DateTimeInterface;
@@ -20,6 +21,7 @@ class AutoCaptureConsultationFeeUseCase
         private readonly CreateBillingInvoiceUseCase $createBillingInvoiceUseCase,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
         private readonly BillingPayerContractRepositoryInterface $payerContractRepository,
+        private readonly EncounterResolverService $encounterResolverService,
     ) {}
 
     public function execute(string $appointmentId, ?int $actorId = null): array
@@ -72,14 +74,19 @@ class AutoCaptureConsultationFeeUseCase
             $catalogItem = $this->findActivePricingByServiceCodes($serviceCodes, $currencyCode);
         }
 
+        // No resolvable price for this clinician tier/department: leave the
+        // visit uncaptured rather than invoicing at TZS 0. It still surfaces
+        // as a pending candidate via ListBillingChargeCaptureCandidatesUseCase
+        // (pricingStatus: missing_catalog_price) for manual pricing/capture,
+        // instead of a phantom $0 invoice that looks resolved when it isn't.
+        if ($catalogItem === null) {
+            return ['captured' => false, 'reason' => 'no_catalog_price', 'invoice' => null];
+        }
+
         $serviceName = $this->consultationServiceName($department, $clinicianContext);
 
-        $unitPrice = $catalogItem !== null
-            ? round(max((float) ($catalogItem['base_price'] ?? 0), 0), 2)
-            : 0;
-        $normalizedServiceCode = $catalogItem !== null
-            ? strtoupper(trim((string) ($catalogItem['service_code'] ?? '')))
-            : 'CONSULTATION'; // Default fallback if no pricing at all
+        $unitPrice = round(max((float) ($catalogItem['base_price'] ?? 0), 0), 2);
+        $normalizedServiceCode = strtoupper(trim((string) ($catalogItem['service_code'] ?? '')));
 
         $resolvedUnit = trim((string) ($catalogItem['unit'] ?? 'visit'));
         $resolvedDescription = trim((string) ($catalogItem['service_name'] ?? $serviceName));
@@ -128,6 +135,17 @@ class AutoCaptureConsultationFeeUseCase
             'billing_decision' => $billingDecision,
             'pricing_context' => null,
         ];
+
+        // Set encounter_id when one already exists for this appointment, so
+        // close-readiness and other consumers can rely on the real FK instead
+        // of reconstructing the link from appointment_id inside line-item
+        // metadata. Nullable/non-cascading on the invoice side — omitted
+        // entirely (not persisted as null) when no encounter has been opened
+        // yet, matching how the field behaves for every other consumer.
+        $encounter = $this->encounterResolverService->findByAppointmentId($appointmentId);
+        if ($encounter !== null) {
+            $payload['encounter_id'] = (string) $encounter->id;
+        }
 
         if ($billingDecision['mode'] === 'INSURANCE_ACTIVE') {
             $payload['billing_payer_contract_id'] = $billingDecision['contractId'];

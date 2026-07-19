@@ -117,10 +117,13 @@ class DepartmentRequisitionScopeResolver
             return;
         }
 
-        $isAllowed = \App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel::query()
+        $itemQuery = \App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel::query()
             ->where('id', $itemId)
-            ->whereIn('category', $allowedCategories)
-            ->exists();
+            ->whereIn('category', $allowedCategories);
+        // Without this, a requisition could validate against another
+        // tenant/facility's catalog item id once scoping is enabled.
+        $this->applyDepartmentScopeIfEnabled($itemQuery);
+        $isAllowed = $itemQuery->exists();
 
         if (! $isAllowed) {
             throw ValidationException::withMessages([

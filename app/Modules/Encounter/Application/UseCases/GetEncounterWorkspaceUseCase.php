@@ -95,7 +95,7 @@ class GetEncounterWorkspaceUseCase
         $query = LaboratoryOrderModel::query()
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value);
-        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::LAB_TERMINAL_STATUSES);
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::labTerminalStatuses());
 
         return $query
             ->orderByDesc('ordered_at')
@@ -111,7 +111,7 @@ class GetEncounterWorkspaceUseCase
         return LaboratoryOrderModel::query()
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
-            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::LAB_TERMINAL_STATUSES)
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::labTerminalStatuses())
             ->count();
     }
 
@@ -123,7 +123,7 @@ class GetEncounterWorkspaceUseCase
         $query = PharmacyOrderModel::query()
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value);
-        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::PHARMACY_TERMINAL_STATUSES);
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::pharmacyTerminalStatuses());
 
         return $query
             ->orderByDesc('ordered_at')
@@ -139,7 +139,7 @@ class GetEncounterWorkspaceUseCase
         return PharmacyOrderModel::query()
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
-            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::PHARMACY_TERMINAL_STATUSES)
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::pharmacyTerminalStatuses())
             ->count();
     }
 
@@ -151,7 +151,7 @@ class GetEncounterWorkspaceUseCase
         $query = RadiologyOrderModel::query()
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value);
-        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::RADIOLOGY_TERMINAL_STATUSES);
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::radiologyTerminalStatuses());
 
         return $query
             ->orderByDesc('ordered_at')
@@ -167,7 +167,7 @@ class GetEncounterWorkspaceUseCase
         return RadiologyOrderModel::query()
             ->where('encounter_id', $encounterId)
             ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
-            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::RADIOLOGY_TERMINAL_STATUSES)
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::radiologyTerminalStatuses())
             ->count();
     }
 
@@ -179,7 +179,7 @@ class GetEncounterWorkspaceUseCase
         $query = TheatreProcedureModel::query()
             ->where('encounter_id', $encounterId)
             ->whereNull('entered_in_error_at');
-        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::THEATRE_TERMINAL_STATUSES);
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::theatreTerminalStatuses());
 
         return $query
             ->orderByDesc('scheduled_at')
@@ -195,7 +195,7 @@ class GetEncounterWorkspaceUseCase
         return TheatreProcedureModel::query()
             ->where('encounter_id', $encounterId)
             ->whereNull('entered_in_error_at')
-            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::THEATRE_TERMINAL_STATUSES)
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::theatreTerminalStatuses())
             ->count();
     }
 

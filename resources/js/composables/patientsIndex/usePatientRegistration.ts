@@ -19,7 +19,7 @@ export function usePatientRegistrationForm() {
         firstName: '',
         middleName: '',
         lastName: '',
-        gender: 'female' as 'male' | 'female' | 'other' | 'unknown',
+        gender: '' as '' | 'male' | 'female' | 'other' | 'unknown',
         dateOfBirth: '',
         /** UI-local scratch state — derived into dateOfBirth, never sent to the server on its own (StorePatientRequest has no ageYears/ageMonths field). */
         ageYears: '',

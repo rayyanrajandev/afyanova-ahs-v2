@@ -1207,8 +1207,11 @@ class InventoryExtendedController extends Controller
 
     // ─── Barcode Lookup ──────────────────────────────────────
 
-    public function lookupByBarcode(Request $request): JsonResponse
-    {
+    public function lookupByBarcode(
+        Request $request,
+        PlatformScopeQueryApplier $platformScopeQueryApplier,
+        FeatureFlagResolverInterface $featureFlagResolver,
+    ): JsonResponse {
         $barcode = $request->validate([
             'barcode' => 'required|string|max:100',
         ])['barcode'];
@@ -1216,6 +1219,10 @@ class InventoryExtendedController extends Controller
         $query = \App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel::query()
             ->where('barcode', $barcode)
             ->where('status', 'active');
+
+        if ($this->isPlatformScopingEnabled($featureFlagResolver)) {
+            $platformScopeQueryApplier->apply($query);
+        }
 
         $item = $query->first();
         if (! $item) {
