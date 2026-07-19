@@ -121,6 +121,36 @@ class BrandedCsvExportManager
         }
     }
 
+    /**
+     * @param  array<int, string>  $columns
+     * @param  iterable<array<int, string>>  $rows  pre-built rows, in column order
+     */
+    public function writeFlatCsvFile(string $filePath, array $columns, iterable $rows): int
+    {
+        $absolutePath = Storage::disk('local')->path($filePath);
+        File::ensureDirectoryExists(dirname($absolutePath));
+
+        $stream = fopen($absolutePath, 'wb');
+        if ($stream === false) {
+            throw new RuntimeException('Unable to open export file stream.');
+        }
+
+        try {
+            fwrite($stream, self::UTF8_BOM);
+            fputcsv($stream, $columns);
+
+            $rowCount = 0;
+            foreach ($rows as $row) {
+                fputcsv($stream, $row);
+                $rowCount++;
+            }
+
+            return $rowCount;
+        } finally {
+            fclose($stream);
+        }
+    }
+
     public function downloadStoredCsv(
         string $filePath,
         string $downloadName,

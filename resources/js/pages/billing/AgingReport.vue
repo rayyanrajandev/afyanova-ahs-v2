@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,12 +20,82 @@ import {
 } from '@/components/ui/collapsible';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import { notifyError } from '@/lib/notify';
 
 const report = ref<any>(null);
 const loading = ref(false);
 const asOfDate = ref(new Date().toISOString().split('T')[0]);
 const currencyCode = ref('TZS');
 const departmentFilter = ref('');
+
+/**
+ * GetBillingAgingReportUseCase pulls every open invoice unbounded and
+ * buckets it in PHP — fine for the on-screen summary above, but a full CSV
+ * export of it runs as a queued job instead of in-request (see
+ * GenerateBillingReportExportJob). This polls the job to completion, then
+ * opens its download URL.
+ */
+const exporting = ref(false);
+const exportError = ref<string | null>(null);
+let exportPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopExportPoll(): void {
+    if (exportPollTimer !== null) {
+        clearInterval(exportPollTimer);
+        exportPollTimer = null;
+    }
+}
+
+async function exportReportAsCsv(): Promise<void> {
+    if (exporting.value) return;
+
+    exporting.value = true;
+    exportError.value = null;
+
+    try {
+        const created = await apiRequestJson<{ data: { id: string; status: string } }>(
+            'POST',
+            '/aging-report/export-jobs',
+            {
+                body: {
+                    asOfDate: asOfDate.value || null,
+                    currencyCode: currencyCode.value || null,
+                    departmentFilter: departmentFilter.value || null,
+                },
+            },
+        );
+
+        const jobId = created.data.id;
+
+        exportPollTimer = setInterval(async () => {
+            try {
+                const polled = await apiRequestJson<{
+                    data: { status: string; downloadUrl: string | null; errorMessage: string | null };
+                }>('GET', `/aging-report/export-jobs/${jobId}`);
+
+                if (polled.data.status === 'completed' && polled.data.downloadUrl) {
+                    stopExportPoll();
+                    exporting.value = false;
+                    window.location.href = polled.data.downloadUrl;
+                } else if (polled.data.status === 'failed') {
+                    stopExportPoll();
+                    exporting.value = false;
+                    exportError.value = polled.data.errorMessage || 'Unable to generate the report export.';
+                    notifyError(exportError.value);
+                }
+            } catch (error) {
+                stopExportPoll();
+                exporting.value = false;
+                notifyError(error instanceof Error ? error.message : 'Unable to check export status.');
+            }
+        }, 2000);
+    } catch (error) {
+        exporting.value = false;
+        notifyError(error instanceof Error ? error.message : 'Unable to start the report export.');
+    }
+}
+
+onUnmounted(stopExportPoll);
 
 const bucketColors: Record<string, string> = {
     current: 'bg-green-50 border-green-200',
@@ -86,7 +156,11 @@ onMounted(fetchReport);
                     <Input v-model="departmentFilter" placeholder="Filter by department" class="w-48" />
                 </div>
                 <Button @click="fetchReport" :disabled="loading">{{ loading ? 'Loading...' : 'Run Report' }}</Button>
+                <Button variant="outline" :disabled="exporting" @click="exportReportAsCsv">
+                    {{ exporting ? 'Preparing export…' : 'Export as CSV' }}
+                </Button>
             </div>
+            <p v-if="exportError" class="text-sm text-destructive">{{ exportError }}</p>
 
             <div v-if="loading" class="text-muted-foreground py-8 text-center">Loading report...</div>
 

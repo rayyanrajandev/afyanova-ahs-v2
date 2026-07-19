@@ -2,20 +2,29 @@
 
 namespace App\Modules\Billing\Presentation\Http\Controllers;
 
-use App\Modules\Billing\Infrastructure\Integrations\NHIF\NhifRemittanceProcessor;
+use App\Jobs\ProcessNhifRemittanceFileJob;
 use App\Modules\Billing\Infrastructure\Models\BillingNhifRemittanceModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class BillingNhifRemittanceController extends Controller
 {
     public function __construct(
-        private readonly NhifRemittanceProcessor $remittanceProcessor,
         private readonly CurrentPlatformScopeContextInterface $scopeContext,
     ) {}
 
+    /**
+     * Parsing + reconciling a remittance file (potentially hundreds of
+     * claims, one DB write per claim inside a single transaction) used to
+     * run synchronously here. It now only stores the file and creates a
+     * 'pending' row, then hands the actual work to
+     * ProcessNhifRemittanceFileJob — history()/show() already expose
+     * status, so no new polling endpoint is needed.
+     */
     public function upload(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -25,32 +34,35 @@ class BillingNhifRemittanceController extends Controller
 
         $file = $request->file('file');
         $format = $validated['format'] ?? $file->getClientOriginalExtension();
+        $normalizedFormat = $format === 'json' ? 'json' : 'csv';
 
-        $result = $this->remittanceProcessor->processFile(
-            filePath: $file->getPathname(),
-            tenantId: $this->scopeContext->tenantId(),
-            facilityId: $this->scopeContext->facilityId(),
-            format: $format === 'json' ? 'json' : 'csv',
-            originalFilename: $file->getClientOriginalName(),
-            userId: $request->user()?->id,
+        $storedPath = $file->store('nhif-remittance-uploads', 'local');
+
+        $remittance = BillingNhifRemittanceModel::query()->create([
+            'tenant_id' => $this->scopeContext->tenantId(),
+            'facility_id' => $this->scopeContext->facilityId(),
+            'remittance_reference' => sprintf('PENDING-%s', (string) Str::uuid()),
+            'remittance_date' => now()->toDateString(),
+            'source' => 'upload',
+            'original_filename' => $file->getClientOriginalName(),
+            'status' => 'pending',
+            'uploaded_by_user_id' => $request->user()?->id,
+        ]);
+
+        ProcessNhifRemittanceFileJob::dispatch(
+            (string) $remittance->id,
+            $storedPath,
+            $normalizedFormat,
         );
 
-        $isDuplicate = $result->message === 'Remittance already processed';
-        $statusCode = $result->success ? 200 : ($isDuplicate ? 409 : 422);
-
         return response()->json([
-            'success' => $result->success,
-            'message' => $result->message,
+            'success' => true,
+            'message' => 'Remittance file received and queued for processing.',
             'data' => [
-                'remittance_reference' => $result->remittanceReference,
-                'total_claims' => $result->totalClaims,
-                'matched_claims' => $result->matchedClaims,
-                'total_amount' => $result->totalAmount,
-                'matched_amount' => $result->matchedAmount,
-                'unmatched_amount' => $result->unmatchedAmount,
-                'errors' => $result->errors,
+                'id' => $remittance->id,
+                'status' => $remittance->status,
             ],
-        ], $statusCode);
+        ], 202);
     }
 
     public function history(Request $request): JsonResponse

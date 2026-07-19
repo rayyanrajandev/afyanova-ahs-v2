@@ -152,6 +152,145 @@ class NhifRemittanceProcessor implements NhifRemittanceInterface
         );
     }
 
+    /**
+     * Async counterpart to processFile(): operates on a remittance row that
+     * already exists (created as 'pending' by the upload controller before
+     * this runs in a queued job), instead of creating one only on success.
+     * Always persists a terminal status + error_message onto that row so
+     * BillingNhifRemittanceController::history()/show() can serve as the
+     * polling UI with no new tracking model or endpoints.
+     */
+    public function reconcileStoredFile(
+        BillingNhifRemittanceModel $remittance,
+        string $filePath,
+        string $format = 'csv',
+    ): NhifRemittanceResult {
+        $records = $this->parseFile($filePath, $format);
+
+        if (empty($records)) {
+            $remittance->fill([
+                'status' => 'failed',
+                'error_message' => 'No records found in file',
+                'processed_at' => now(),
+            ])->save();
+
+            return new NhifRemittanceResult(
+                success: false,
+                remittanceReference: (string) $remittance->remittance_reference,
+                message: 'No records found in file',
+            );
+        }
+
+        $tenantId = (string) $remittance->tenant_id;
+        $facilityId = (string) $remittance->facility_id;
+
+        $remittanceRef = $records[0]['raw']['remittance_reference']
+            ?? $records[0]['raw']['remittanceReference']
+            ?? basename($filePath);
+
+        $duplicate = BillingNhifRemittanceModel::query()
+            ->where('tenant_id', $tenantId)
+            ->where('facility_id', $facilityId)
+            ->where('remittance_reference', $remittanceRef)
+            ->whereKeyNot($remittance->getKey())
+            ->first();
+
+        if ($duplicate) {
+            $remittance->fill([
+                'status' => 'failed',
+                'error_message' => 'Remittance already processed',
+                'processed_at' => now(),
+            ])->save();
+
+            return new NhifRemittanceResult(
+                success: false,
+                remittanceReference: $remittanceRef,
+                message: 'Remittance already processed',
+                rawData: $duplicate->toArray(),
+            );
+        }
+
+        DB::beginTransaction();
+        try {
+            $reconcileResult = $this->reconcile($records, $tenantId, $facilityId);
+
+            $remittance->fill([
+                'remittance_reference' => $remittanceRef,
+                'payer_name' => $records[0]['raw']['payer_name'] ?? 'NHIF',
+                'total_amount' => $reconcileResult->totalAmount,
+                'total_claims' => $reconcileResult->totalClaims,
+                'matched_claims' => $reconcileResult->matchedClaims,
+                'matched_amount' => $reconcileResult->matchedAmount,
+                'unmatched_amount' => $reconcileResult->unmatchedAmount,
+                'raw_data' => $records,
+                'status' => $reconcileResult->matchedClaims > 0 ? 'completed' : 'partial',
+                'error_message' => null,
+                'processed_at' => now(),
+            ])->save();
+
+            foreach ($records as $record) {
+                $submission = BillingNhifClaimSubmissionModel::query()
+                    ->where('tenant_id', $tenantId)
+                    ->where('facility_id', $facilityId)
+                    ->where('nhif_claim_reference', $record['claim_reference'])
+                    ->first();
+
+                BillingNhifRemittanceItemModel::create([
+                    'billing_nhif_remittance_id' => $remittance->id,
+                    'tenant_id' => $tenantId,
+                    'facility_id' => $facilityId,
+                    'claim_reference' => $record['claim_reference'],
+                    'member_number' => $record['member_number'] ?? null,
+                    'patient_name' => $record['patient_name'] ?? null,
+                    'claimed_amount' => $record['claimed_amount'],
+                    'approved_amount' => $record['approved_amount'],
+                    'rejected_amount' => $record['rejected_amount'],
+                    'settled_amount' => $record['settled_amount'],
+                    'decision' => $record['decision'],
+                    'decision_reason' => $record['decision_reason'],
+                    'raw_data' => $record['raw'],
+                    'reconciliation_status' => $submission ? 'matched' : 'unmatched',
+                    'matched_claim_submission_id' => $submission?->id,
+                    'matched_claims_insurance_case_id' => $submission?->claims_insurance_case_id,
+                ]);
+            }
+
+            DB::commit();
+
+            return new NhifRemittanceResult(
+                success: true,
+                remittanceReference: $remittanceRef,
+                totalClaims: $reconcileResult->totalClaims,
+                matchedClaims: $reconcileResult->matchedClaims,
+                totalAmount: $reconcileResult->totalAmount,
+                matchedAmount: $reconcileResult->matchedAmount,
+                unmatchedAmount: $reconcileResult->unmatchedAmount,
+                message: $reconcileResult->message,
+                rawData: $remittance->toArray(),
+                errors: $reconcileResult->errors,
+            );
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Failed to process NHIF remittance', [
+                'remittanceId' => $remittance->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $remittance->fill([
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+                'processed_at' => now(),
+            ])->save();
+
+            return new NhifRemittanceResult(
+                success: false,
+                remittanceReference: $remittanceRef,
+                message: $e->getMessage(),
+                errors: [$e->getMessage()],
+            );
+        }
+    }
+
     public function processFile(
         string $filePath,
         string $tenantId,

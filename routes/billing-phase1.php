@@ -122,6 +122,17 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:billing.financial-controls.read')
         ->name('aging-report.show');
 
+    // AR Aging Report — async CSV export (large report, don't run in-request)
+    Route::post('aging-report/export-jobs', [BillingInvoiceController::class, 'agingReportExportJobs'])
+        ->middleware('can:billing.financial-controls.read')
+        ->name('aging-report.export-jobs.create');
+    Route::get('aging-report/export-jobs/{jobId}', [BillingInvoiceController::class, 'agingReportExportJob'])
+        ->middleware('can:billing.financial-controls.read')
+        ->name('aging-report.export-jobs.show');
+    Route::get('aging-report/export-jobs/{jobId}/download', [BillingInvoiceController::class, 'downloadAgingReportExportJob'])
+        ->middleware('can:billing.financial-controls.read')
+        ->name('aging-report.export-jobs.download');
+
     // Daily Revenue Close
     Route::prefix('daily-closes')->group(function () {
         Route::get('/', [BillingDailyCloseController::class, 'index'])

@@ -44,6 +44,16 @@ const props = defineProps<{
     /** Whether an external theatre-inline form is currently open — hides this button grid the same way inlineOrderType does for lab/pharmacy/radiology. */
     theatreInlineOpen?: boolean;
     /**
+     * Opt-in, additive-only: when true, the Billing button triggers an
+     * inline charge-capture flow (like lab/pharmacy/radiology/theatre)
+     * instead of linking out to /billing-invoices. Defaults to
+     * undefined/falsy so the existing encounters/{id} Workspace.vue page
+     * (which doesn't pass this) keeps its current Link-only behavior.
+     */
+    canOpenBillingInline?: boolean;
+    /** Whether an external billing-inline panel is currently open — hides this button grid the same way theatreInlineOpen does. */
+    billingInlineOpen?: boolean;
+    /**
      * Opt-in, additive-only: hides the Billing button from this grid.
      * Billing isn't clinical ordering — WorkspaceV2 renders its own billing
      * link elsewhere, grouped with other "go to a different page" actions
@@ -60,6 +70,7 @@ const emit = defineEmits<{
         linkage?: EncounterInlineOrderLinkageContext | null,
     ];
     openTheatreInline: [];
+    openBillingInline: [];
 }>();
 
 const summariesById = computed(
@@ -139,7 +150,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
         </div>
 
         <div
-            v-if="!theatreInlineOpen && hasWorkflowActions"
+            v-if="!theatreInlineOpen && !billingInlineOpen && hasWorkflowActions"
             :class="[
                 'grid gap-2',
                 compact
@@ -473,7 +484,36 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             </Button>
 
             <Button
-                v-if="canOpenBillingWorkflow && !hideBillingLink"
+                v-if="canOpenBillingWorkflow && canOpenBillingInline && !hideBillingLink"
+                variant="outline"
+                :class="[
+                    'h-auto justify-start text-left',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
+                ]"
+                @click="emit('openBillingInline')"
+            >
+                <span
+                    :class="[
+                        'flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary',
+                        compact ? 'size-7' : 'size-8',
+                    ]"
+                >
+                    <AppIcon name="receipt" class="size-4" />
+                </span>
+                <span class="min-w-0">
+                    <span class="block text-sm font-medium">Billing</span>
+                    <span
+                        v-if="!compact"
+                        class="block text-[11px] font-normal text-muted-foreground"
+                    >
+                        Charges
+                    </span>
+                </span>
+            </Button>
+            <Button
+                v-else-if="canOpenBillingWorkflow && !hideBillingLink"
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',

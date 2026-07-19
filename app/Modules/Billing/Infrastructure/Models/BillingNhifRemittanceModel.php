@@ -31,6 +31,7 @@ class BillingNhifRemittanceModel extends Model
         'original_filename',
         'raw_data',
         'status',
+        'error_message',
         'processed_at',
         'uploaded_by_user_id',
     ];

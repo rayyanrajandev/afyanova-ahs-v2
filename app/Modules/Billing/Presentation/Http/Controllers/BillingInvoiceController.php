@@ -3,6 +3,7 @@
 namespace App\Modules\Billing\Presentation\Http\Controllers;
 
 use App\Jobs\GenerateAuditExportCsvJob;
+use App\Jobs\GenerateBillingReportExportJob;
 use App\Http\Controllers\Controller;
 use App\Modules\Billing\Application\Exceptions\AdmissionNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Exceptions\AppointmentNotEligibleForBillingInvoiceException;
@@ -34,6 +35,7 @@ use App\Modules\Billing\Application\UseCases\ReverseBillingInvoicePaymentUseCase
 use App\Modules\Billing\Application\UseCases\UpdateBillingInvoiceStatusUseCase;
 use App\Modules\Billing\Application\UseCases\UpdateBillingInvoiceUseCase;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
+use App\Modules\Billing\Infrastructure\Models\BillingReportExportJobModel;
 use App\Modules\Billing\Presentation\Http\Requests\AddInvoiceAdjustmentRequest;
 use App\Modules\Billing\Presentation\Http\Requests\RecordBillingInvoicePaymentRequest;
 use App\Modules\Billing\Presentation\Http\Requests\ReverseBillingInvoicePaymentRequest;
@@ -46,6 +48,7 @@ use App\Modules\Billing\Presentation\Http\Transformers\BillingInvoiceAuditLogRes
 use App\Modules\Billing\Presentation\Http\Transformers\BillingInvoicePaymentResponseTransformer;
 use App\Modules\Billing\Presentation\Http\Transformers\BillingInvoiceResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -64,6 +67,8 @@ class BillingInvoiceController extends Controller
     private const FINANCIAL_CONTROLS_CSV_COLUMNS = ['path', 'value'];
 
     private const AUDIT_EXPORT_MODULE = GenerateAuditExportCsvJob::MODULE_BILLING;
+
+    private const AGING_REPORT_CSV_SCHEMA_VERSION = 'billing-aging-report-csv.v1';
 
     public function __construct(
         private readonly BillingFinancePostingSnapshotService $financePostingSnapshotService,
@@ -590,6 +595,108 @@ class BillingInvoiceController extends Controller
         return response()->json([
             'data' => BillingAgingReportResponseTransformer::transform($report),
         ]);
+    }
+
+    /**
+     * The aging report's own ->get() over every open invoice is fine for the
+     * on-screen view above, but a full CSV export of it should not run
+     * in-request — see GenerateBillingReportExportJob. Follows the same
+     * queued->processing->completed/failed lifecycle as the audit-log
+     * export jobs above.
+     */
+    public function agingReportExportJobs(
+        Request $request,
+        CurrentPlatformScopeContextInterface $scopeContext,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'currencyCode' => ['nullable', 'string', 'size:3'],
+            'asOfDate' => ['nullable', 'date'],
+            'departmentFilter' => ['nullable', 'string'],
+        ]);
+
+        $reportExportJob = BillingReportExportJobModel::query()->create([
+            'tenant_id' => $scopeContext->tenantId(),
+            'facility_id' => $scopeContext->facilityId(),
+            'report_type' => 'aging',
+            'filters' => $validated,
+            'status' => 'queued',
+            'created_by_user_id' => $request->user()?->id,
+        ]);
+
+        GenerateBillingReportExportJob::dispatch((string) $reportExportJob->id);
+        $reportExportJob->refresh();
+
+        return response()->json([
+            'data' => $this->transformReportExportJob($reportExportJob),
+        ], 202);
+    }
+
+    public function agingReportExportJob(string $jobId, Request $request): JsonResponse
+    {
+        $reportExportJob = $this->findReportExportJob($jobId, $request->user()?->id);
+        abort_if($reportExportJob === null, 404, 'Report export job not found.');
+
+        return response()->json([
+            'data' => $this->transformReportExportJob($reportExportJob),
+        ]);
+    }
+
+    public function downloadAgingReportExportJob(string $jobId, Request $request): JsonResponse|StreamedResponse
+    {
+        $reportExportJob = $this->findReportExportJob($jobId, $request->user()?->id);
+        abort_if($reportExportJob === null, 404, 'Report export job not found.');
+
+        if ($reportExportJob->status !== 'completed' || ! $reportExportJob->file_path) {
+            return response()->json([
+                'code' => 'EXPORT_JOB_NOT_READY',
+                'message' => 'Report export job is not ready for download.',
+            ], 409);
+        }
+
+        $disk = Storage::disk('local');
+        abort_if(! $disk->exists($reportExportJob->file_path), 404, 'Report export file not found.');
+
+        return $this->downloadStoredCsvExport(
+            filePath: $reportExportJob->file_path,
+            downloadName: $reportExportJob->file_name ?: $this->brandedCsvFilename('billing_aging_report'),
+            schemaHeaderName: 'X-Billing-Report-CSV-Schema-Version',
+            schemaVersion: self::AGING_REPORT_CSV_SCHEMA_VERSION,
+        );
+    }
+
+    private function findReportExportJob(string $jobId, ?int $actorId): ?BillingReportExportJobModel
+    {
+        return BillingReportExportJobModel::query()
+            ->where('id', $jobId)
+            ->where('report_type', 'aging')
+            ->where('created_by_user_id', $actorId)
+            ->first();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function transformReportExportJob(BillingReportExportJobModel $reportExportJob): array
+    {
+        $downloadUrl = null;
+        if ($reportExportJob->status === 'completed' && $reportExportJob->file_path) {
+            $downloadUrl = sprintf(
+                '/api/v1/aging-report/export-jobs/%s/download',
+                $reportExportJob->id,
+            );
+        }
+
+        return [
+            'id' => $reportExportJob->id,
+            'status' => $reportExportJob->status,
+            'rowCount' => $reportExportJob->row_count,
+            'errorMessage' => $reportExportJob->error_message,
+            'createdAt' => optional($reportExportJob->created_at)?->toISOString(),
+            'startedAt' => optional($reportExportJob->started_at)?->toISOString(),
+            'completedAt' => optional($reportExportJob->completed_at)?->toISOString(),
+            'failedAt' => optional($reportExportJob->failed_at)?->toISOString(),
+            'downloadUrl' => $downloadUrl,
+        ];
     }
 
     public function reversePayment(
