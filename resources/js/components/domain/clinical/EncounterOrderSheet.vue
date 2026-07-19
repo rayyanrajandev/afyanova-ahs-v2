@@ -2,7 +2,14 @@
 import { computed, useTemplateRef } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import EncounterInlineOrderPanel from '@/components/domain/clinical/encounter-orders/EncounterInlineOrderPanel.vue';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import {
     encounterInlineOrderModeLabel,
@@ -21,21 +28,26 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     close: [];
-    created: [type: EncounterInlineOrderType];
+    created: [type: EncounterInlineOrderType, order: Record<string, unknown>];
 }>();
 
-const panelRef = useTemplateRef<InstanceType<typeof EncounterInlineOrderPanel>>('panel');
+const panelRef =
+    useTemplateRef<InstanceType<typeof EncounterInlineOrderPanel>>('panel');
 
 const title = computed(() => {
     if (!props.orderType) return 'New order';
     const label = encounterInlineOrderTypeLabel(props.orderType);
-    const mode = props.linkage ? ` — ${encounterInlineOrderModeLabel(props.linkage.mode)}` : '';
+    const mode = props.linkage
+        ? ` — ${encounterInlineOrderModeLabel(props.linkage.mode)}`
+        : '';
     return `New ${label}${mode}`;
 });
 
 const description = computed(() => {
-    if (props.linkage?.mode === 'reorder') return `Replacement linked to ${props.linkage.sourceLabel}.`;
-    if (props.linkage?.mode === 'add_on') return `Add-on linked to ${props.linkage.sourceLabel}.`;
+    if (props.linkage?.mode === 'reorder')
+        return `Replacement linked to ${props.linkage.sourceLabel}.`;
+    if (props.linkage?.mode === 'add_on')
+        return `Add-on linked to ${props.linkage.sourceLabel}.`;
     return 'Order is linked to this encounter. Duplicate checks run before placement.';
 });
 
@@ -48,14 +60,23 @@ function handleSubmit(): void {
 </script>
 
 <template>
-    <Sheet :open="open && orderType !== null" @update:open="(value) => { if (!value) emit('close'); }">
+    <Sheet
+        :open="open && orderType !== null"
+        @update:open="
+            (value) => {
+                if (!value) emit('close');
+            }
+        "
+    >
         <SheetContent
             side="right"
             variant="form"
             size="2xl"
             @open-auto-focus="(event: Event) => event.preventDefault()"
         >
-            <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <SheetHeader
+                class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80"
+            >
                 <SheetTitle>{{ title }}</SheetTitle>
                 <SheetDescription>{{ description }}</SheetDescription>
             </SheetHeader>
@@ -68,11 +89,13 @@ function handleSubmit(): void {
                     :linkage="linkage"
                     :context="context"
                     @close="emit('close')"
-                    @created="emit('created', $event)"
+                    @created="(type, order) => emit('created', type, order)"
                 />
             </div>
 
-            <SheetFooter class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <SheetFooter
+                class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+            >
                 <Button variant="outline" @click="emit('close')">Cancel</Button>
                 <Button :disabled="!canSubmit" @click="handleSubmit">
                     <AppIcon

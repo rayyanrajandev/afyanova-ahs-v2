@@ -1,6 +1,11 @@
-import { useMutation, type UseMutationReturnType } from '@tanstack/vue-query';
+import {
+    useMutation,
+    useQueryClient,
+    type UseMutationReturnType,
+} from '@tanstack/vue-query';
 import { apiPatch } from '@/lib/apiClient';
 import { type ReceptionAppointmentSummary } from '@/composables/reception/useCheckIn';
+import { type ReceptionQueueEntry } from '@/composables/reception/useReceptionQueue';
 
 /**
  * PATCH /appointments/{id}/triage (RecordAppointmentTriageUseCase), gated
@@ -33,19 +38,87 @@ export type RecordTriageVariables = {
     clinicianUserId?: number | null;
 };
 
+type ReceptionQueueCache = {
+    data: ReceptionQueueEntry[];
+    meta: {
+        currentPage: number;
+        perPage: number;
+        total: number;
+        lastPage: number;
+    };
+};
+
+type RecordTriageContext = {
+    previousQueries: Array<
+        [readonly unknown[], ReceptionQueueCache | undefined]
+    >;
+};
+
 export function useRecordTriage(): UseMutationReturnType<
     ReceptionAppointmentSummary,
     Error,
     RecordTriageVariables,
-    unknown
+    RecordTriageContext
 > {
+    const queryClient = useQueryClient();
+
     return useMutation({
-        mutationFn: async (variables: RecordTriageVariables): Promise<ReceptionAppointmentSummary> => {
+        mutationFn: async (
+            variables: RecordTriageVariables,
+        ): Promise<ReceptionAppointmentSummary> => {
             const { appointmentId, ...payload } = variables;
-            const response = await apiPatch<RecordTriageResponse>(`/appointments/${appointmentId}/triage`, {
-                body: payload,
-            });
+            const response = await apiPatch<RecordTriageResponse>(
+                `/appointments/${appointmentId}/triage`,
+                {
+                    body: payload,
+                },
+            );
             return response.data;
+        },
+        // Optimistic: recording triage always moves an appointment out of
+        // the waiting_triage stage, so drop it from any cached
+        // waiting_triage queue view immediately rather than waiting for the
+        // round trip + invalidateQueries refetch — the nurse's queue row
+        // disappears the instant they submit. Other stages' cached queues
+        // (e.g. waiting_provider) aren't optimistically populated here since
+        // this mutation's response shape doesn't carry a full
+        // ReceptionQueueEntry; the follow-up invalidate still reconciles them.
+        onMutate: async ({ appointmentId }) => {
+            await queryClient.cancelQueries({ queryKey: ['reception-queue'] });
+            const queries = queryClient.getQueriesData<ReceptionQueueCache>({
+                queryKey: ['reception-queue'],
+            });
+            const previousQueries = queries.map(
+                ([queryKey, data]) => [queryKey, data] as const,
+            );
+
+            for (const [queryKey, data] of queries) {
+                if (!data) continue;
+                const stage = (queryKey[1] as { stage?: string } | undefined)
+                    ?.stage;
+                if (stage !== 'waiting_triage') continue;
+
+                const visible = data.data.filter(
+                    (entry) => entry.appointmentId !== appointmentId,
+                );
+                if (visible.length === data.data.length) continue;
+
+                queryClient.setQueryData(queryKey, {
+                    ...data,
+                    data: visible,
+                    meta: {
+                        ...data.meta,
+                        total: Math.max(0, data.meta.total - 1),
+                    },
+                });
+            }
+
+            return { previousQueries };
+        },
+        onError: (_error, _variables, context) => {
+            context?.previousQueries?.forEach(([queryKey, data]) => {
+                queryClient.setQueryData(queryKey, data);
+            });
         },
     });
 }

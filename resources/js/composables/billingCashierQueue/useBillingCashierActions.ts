@@ -1,0 +1,107 @@
+import { useMutation, useQueryClient } from '@tanstack/vue-query';
+import { apiGet, apiPatch, apiPost } from '@/lib/apiClient';
+
+export type RecordPaymentInput = {
+    invoiceId: string;
+    amount: number;
+    paymentMethod: string;
+    paymentReference: string;
+};
+
+type PaymentResponse = {
+    data: {
+        id: string;
+        amount: number;
+        paymentMethod: string;
+        payerType: string;
+    };
+};
+
+/**
+ * Wraps the Cashier Queue's write endpoints as mutations that invalidate the
+ * queue list and the affected patient's invoice detail on success, so the
+ * next read of either always reflects the server's state. Optimistic UI
+ * (instant balance updates, the undo toast, draft-payment localStorage) stays
+ * in billing/IndexV2.vue — that's page-local presentation state, not a data
+ * concern this composable should own.
+ */
+export function useBillingCashierActions() {
+    const queryClient = useQueryClient();
+
+    function invalidate(patientId: string | null) {
+        void queryClient.invalidateQueries({ queryKey: ['billing-cashier-queue'] });
+        if (patientId) {
+            void queryClient.invalidateQueries({ queryKey: ['billing-cashier-patient', patientId] });
+        }
+    }
+
+    const recordPayment = useMutation({
+        mutationFn: ({ invoiceId, amount, paymentMethod, paymentReference }: RecordPaymentInput) =>
+            apiPost<PaymentResponse>(`/billing-invoices/${invoiceId}/payments`, {
+                body: {
+                    amount,
+                    payerType: 'self_pay',
+                    paymentMethod,
+                    paymentReference: paymentReference || null,
+                },
+            }),
+    });
+
+    /**
+     * `/billing-invoices/{id}/payments/undo` (what the legacy Cashier Queue
+     * called) doesn't exist server-side — grepped routes/api.php and
+     * BillingInvoiceController, no such route or method. The only real
+     * reversal path is `/billing-invoices/{id}/payments/{paymentId}/reversals`
+     * (permission billing.payments.reverse, distinct from
+     * billing.payments.record), which requires an audited `reason` — see
+     * ReverseBillingInvoicePaymentRequest::rules(). billing/IndexV2.vue gates
+     * the Undo toast on billing.payments.reverse and collects that reason
+     * before calling this.
+     */
+    const reversePayment = useMutation({
+        mutationFn: ({
+            invoiceId,
+            paymentId,
+            amount,
+            reason,
+        }: {
+            invoiceId: string;
+            paymentId: string;
+            amount: number;
+            reason: string;
+        }) =>
+            apiPost(`/billing-invoices/${invoiceId}/payments/${paymentId}/reversals`, {
+                body: { amount, reason },
+            }),
+    });
+
+    const issueInvoice = useMutation({
+        mutationFn: (invoiceId: string) =>
+            apiPatch(`/billing-invoices/${invoiceId}/status`, { body: { status: 'issued' } }),
+    });
+
+    const addChargeCandidateToDraft = useMutation({
+        mutationFn: ({ draftInvoiceId, lineItems }: { draftInvoiceId: string; lineItems: Record<string, unknown>[] }) =>
+            apiPatch(`/billing-invoices/${draftInvoiceId}`, { body: { lineItems } }),
+    });
+
+    const createInvoiceFromCandidate = useMutation({
+        mutationFn: (body: Record<string, unknown>) => apiPost('/billing-invoices', { body }),
+    });
+
+    async function fetchPatientSummary(patientId: string) {
+        return apiGet<{ data: { patientNumber: string | null; firstName: string | null; lastName: string | null; phone: string | null } }>(
+            `/patients/${patientId}`,
+        ).catch(() => null);
+    }
+
+    return {
+        recordPayment,
+        reversePayment,
+        issueInvoice,
+        addChargeCandidateToDraft,
+        createInvoiceFromCandidate,
+        fetchPatientSummary,
+        invalidate,
+    };
+}

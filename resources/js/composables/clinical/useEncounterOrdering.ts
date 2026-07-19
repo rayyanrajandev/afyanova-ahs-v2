@@ -53,20 +53,43 @@ export function useEncounterOrdering(options: {
     pharmacyOrders: () => EncounterCarePharmacyOrder[];
     radiologyOrders: () => EncounterCareRadiologyOrder[];
     theatreProcedures: () => EncounterCareTheatreProcedure[];
-    onOrderChanged: () => void;
+    onOrderChanged: (
+        type?: EncounterInlineOrderType,
+        order?: Record<string, unknown>,
+    ) => void;
 }) {
     const permissions = usePermissions();
 
-    const canReadLaboratoryOrders = computed(() => permissions.has('laboratory.orders.read'));
-    const canCreateLaboratoryOrders = computed(() => permissions.has('lab.order'));
-    const canReadPharmacyOrders = computed(() => permissions.has('pharmacy.orders.read'));
-    const canCreatePharmacyOrders = computed(() => permissions.has('medication.prescribe'));
-    const canReadRadiologyOrders = computed(() => permissions.has('radiology.orders.read'));
-    const canCreateRadiologyOrders = computed(() => permissions.has('imaging.order'));
-    const canReadTheatreProcedures = computed(() => permissions.has('theatre.procedures.read'));
-    const canCreateTheatreProcedures = computed(() => permissions.has('theatre.procedures.create'));
-    const canReadBillingInvoices = computed(() => permissions.has('billing.invoices.read'));
-    const canCreateBillingInvoices = computed(() => permissions.has('billing.invoices.create'));
+    const canReadLaboratoryOrders = computed(() =>
+        permissions.has('laboratory.orders.read'),
+    );
+    const canCreateLaboratoryOrders = computed(() =>
+        permissions.has('lab.order'),
+    );
+    const canReadPharmacyOrders = computed(() =>
+        permissions.has('pharmacy.orders.read'),
+    );
+    const canCreatePharmacyOrders = computed(() =>
+        permissions.has('medication.prescribe'),
+    );
+    const canReadRadiologyOrders = computed(() =>
+        permissions.has('radiology.orders.read'),
+    );
+    const canCreateRadiologyOrders = computed(() =>
+        permissions.has('imaging.order'),
+    );
+    const canReadTheatreProcedures = computed(() =>
+        permissions.has('theatre.procedures.read'),
+    );
+    const canCreateTheatreProcedures = computed(() =>
+        permissions.has('theatre.procedures.create'),
+    );
+    const canReadBillingInvoices = computed(() =>
+        permissions.has('billing.invoices.read'),
+    );
+    const canCreateBillingInvoices = computed(() =>
+        permissions.has('billing.invoices.create'),
+    );
 
     const canOpenLaboratoryWorkflow = computed(
         () => canReadLaboratoryOrders.value && canCreateLaboratoryOrders.value,
@@ -78,7 +101,8 @@ export function useEncounterOrdering(options: {
         () => canReadRadiologyOrders.value && canCreateRadiologyOrders.value,
     );
     const canOpenTheatreWorkflow = computed(
-        () => canReadTheatreProcedures.value && canCreateTheatreProcedures.value,
+        () =>
+            canReadTheatreProcedures.value && canCreateTheatreProcedures.value,
     );
     const canOpenBillingWorkflow = computed(() => canReadBillingInvoices.value);
     const canCreateBillingWorkflow = computed(
@@ -97,9 +121,9 @@ export function useEncounterOrdering(options: {
     function canUseInlineOrders(): boolean {
         return Boolean(
             options.patientId().trim() &&
-                (options.encounterId().trim() ||
-                    (options.appointmentId() ?? '').trim() ||
-                    (options.admissionId() ?? '').trim()),
+            (options.encounterId().trim() ||
+                (options.appointmentId() ?? '').trim() ||
+                (options.admissionId() ?? '').trim()),
         );
     }
 
@@ -114,10 +138,15 @@ export function useEncounterOrdering(options: {
                 label: 'Laboratory orders',
                 singularLabel: 'order',
                 pluralLabel: 'orders',
-                description: 'Tests, specimen workflow, and result progression.',
+                description:
+                    'Tests, specimen workflow, and result progression.',
                 icon: 'flask-conical',
                 count: options.laboratoryOrders().length,
-                state: encounterCareState(options.laboratoryOrders().length, loading, error),
+                state: encounterCareState(
+                    options.laboratoryOrders().length,
+                    loading,
+                    error,
+                ),
             });
         }
 
@@ -127,10 +156,15 @@ export function useEncounterOrdering(options: {
                 label: 'Pharmacy orders',
                 singularLabel: 'order',
                 pluralLabel: 'orders',
-                description: 'Medication requests, dispensing status, and supply follow-up.',
+                description:
+                    'Medication requests, dispensing status, and supply follow-up.',
                 icon: 'pill',
                 count: options.pharmacyOrders().length,
-                state: encounterCareState(options.pharmacyOrders().length, loading, error),
+                state: encounterCareState(
+                    options.pharmacyOrders().length,
+                    loading,
+                    error,
+                ),
             });
         }
 
@@ -140,10 +174,15 @@ export function useEncounterOrdering(options: {
                 label: 'Imaging orders',
                 singularLabel: 'order',
                 pluralLabel: 'orders',
-                description: 'Scheduling, study execution, and reporting status.',
+                description:
+                    'Scheduling, study execution, and reporting status.',
                 icon: 'activity',
                 count: options.radiologyOrders().length,
-                state: encounterCareState(options.radiologyOrders().length, loading, error),
+                state: encounterCareState(
+                    options.radiologyOrders().length,
+                    loading,
+                    error,
+                ),
             });
         }
 
@@ -153,10 +192,15 @@ export function useEncounterOrdering(options: {
                 label: 'Theatre procedures',
                 singularLabel: 'procedure',
                 pluralLabel: 'procedures',
-                description: 'Bookings, pre-op readiness, and theatre progression.',
+                description:
+                    'Bookings, pre-op readiness, and theatre progression.',
                 icon: 'scissors',
                 count: options.theatreProcedures().length,
-                state: encounterCareState(options.theatreProcedures().length, loading, error),
+                state: encounterCareState(
+                    options.theatreProcedures().length,
+                    loading,
+                    error,
+                ),
             });
         }
 
@@ -167,19 +211,28 @@ export function useEncounterOrdering(options: {
         careSummaries.value.filter((summary) => summary.state !== 'empty'),
     );
     const canShowCare = computed(
-        () => Boolean(options.patientId().trim()) && careSummaries.value.length > 0,
+        () =>
+            Boolean(options.patientId().trim()) &&
+            careSummaries.value.length > 0,
     );
     const careCountLabel = computed(() => {
-        const total = careSummaries.value.reduce((sum, summary) => sum + summary.count, 0);
+        const total = careSummaries.value.reduce(
+            (sum, summary) => sum + summary.count,
+            0,
+        );
         return `${total} ${total === 1 ? 'linked item' : 'linked items'}`;
     });
     const careActiveCount = computed(
-        () => careSummaries.value.filter((summary) => summary.state === 'active').length,
+        () =>
+            careSummaries.value.filter((summary) => summary.state === 'active')
+                .length,
     );
 
     // Inline order (lab/pharmacy/radiology) dialog state.
     const inlineOrderType = ref<EncounterInlineOrderType | null>(null);
-    const inlineOrderLinkage = ref<EncounterInlineOrderLinkageContext | null>(null);
+    const inlineOrderLinkage = ref<EncounterInlineOrderLinkageContext | null>(
+        null,
+    );
     const careTab = ref<CreateEncounterCareSectionId | ''>('');
 
     const inlineOrderContext = computed(() => ({
@@ -189,7 +242,9 @@ export function useEncounterOrdering(options: {
         admissionId: (options.admissionId() ?? '').trim() || undefined,
     }));
 
-    function careTabFor(type: EncounterInlineOrderType): CreateEncounterCareSectionId {
+    function careTabFor(
+        type: EncounterInlineOrderType,
+    ): CreateEncounterCareSectionId {
         if (type === 'laboratory') return 'laboratory-orders';
         if (type === 'pharmacy') return 'pharmacy-orders';
         return 'radiology-orders';
@@ -209,11 +264,14 @@ export function useEncounterOrdering(options: {
         inlineOrderLinkage.value = null;
     }
 
-    function handleInlineOrderCreated(type: EncounterInlineOrderType): void {
+    function handleInlineOrderCreated(
+        type: EncounterInlineOrderType,
+        order?: Record<string, unknown>,
+    ): void {
         inlineOrderType.value = null;
         inlineOrderLinkage.value = null;
         careTab.value = careTabFor(type);
-        options.onOrderChanged();
+        options.onOrderChanged(type, order);
     }
 
     // Context-preserving href builder for workflows that link out to their
@@ -290,15 +348,28 @@ export function useEncounterOrdering(options: {
         if (!kind || !id) return null;
 
         if (kind === 'laboratory') {
-            return options.laboratoryOrders().find((order) => order.id === id) ?? null;
+            return (
+                options.laboratoryOrders().find((order) => order.id === id) ??
+                null
+            );
         }
         if (kind === 'pharmacy') {
-            return options.pharmacyOrders().find((order) => order.id === id) ?? null;
+            return (
+                options.pharmacyOrders().find((order) => order.id === id) ??
+                null
+            );
         }
         if (kind === 'radiology') {
-            return options.radiologyOrders().find((order) => order.id === id) ?? null;
+            return (
+                options.radiologyOrders().find((order) => order.id === id) ??
+                null
+            );
         }
-        return options.theatreProcedures().find((procedure) => procedure.id === id) ?? null;
+        return (
+            options
+                .theatreProcedures()
+                .find((procedure) => procedure.id === id) ?? null
+        );
     }
 
     function lifecycleTargetName(): string {
@@ -308,15 +379,27 @@ export function useEncounterOrdering(options: {
 
         if (kind === 'laboratory') {
             const order = target as EncounterCareLaboratoryOrder;
-            return order.testName?.trim() || order.orderNumber?.trim() || 'this laboratory order';
+            return (
+                order.testName?.trim() ||
+                order.orderNumber?.trim() ||
+                'this laboratory order'
+            );
         }
         if (kind === 'pharmacy') {
             const order = target as EncounterCarePharmacyOrder;
-            return order.medicationName?.trim() || order.orderNumber?.trim() || 'this medication order';
+            return (
+                order.medicationName?.trim() ||
+                order.orderNumber?.trim() ||
+                'this medication order'
+            );
         }
         if (kind === 'radiology') {
             const order = target as EncounterCareRadiologyOrder;
-            return order.studyDescription?.trim() || order.orderNumber?.trim() || 'this imaging order';
+            return (
+                order.studyDescription?.trim() ||
+                order.orderNumber?.trim() ||
+                'this imaging order'
+            );
         }
         const procedure = target as EncounterCareTheatreProcedure;
         return (
@@ -350,7 +433,10 @@ export function useEncounterOrdering(options: {
             options.onOrderChanged();
             closeLifecycleDialog();
         } catch (error) {
-            lifecycleError.value = messageFromUnknown(error, 'Unable to apply lifecycle action.');
+            lifecycleError.value = messageFromUnknown(
+                error,
+                'Unable to apply lifecycle action.',
+            );
             notifyError(lifecycleError.value);
         } finally {
             lifecycleSubmitting.value = false;

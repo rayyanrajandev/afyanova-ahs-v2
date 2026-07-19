@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
+import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, useTemplateRef, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -24,8 +25,12 @@ import EncounterHistorySheet from '@/components/clinical/panels/EncounterHistory
 import LaboratoryOrderDetailSheet from '@/components/laboratoryOrders/LaboratoryOrderDetailSheet.vue';
 import LabResultSummaryPopover from '@/components/laboratoryOrders/LabResultSummaryPopover.vue';
 import TheatreInlineOrderForm from '@/components/clinical/panels/TheatreInlineOrderForm.vue';
+import EncounterInlineBillingForm from '@/components/clinical/panels/EncounterInlineBillingForm.vue';
 import ReferralManagementSheet from '@/components/clinician/ReferralManagementSheet.vue';
-import { useEncounterWorkspace } from '@/composables/useEncounterWorkspace';
+import {
+    useEncounterWorkspace,
+    type EncounterWorkspaceResponse,
+} from '@/composables/useEncounterWorkspace';
 import { usePermissions } from '@/composables/usePermissions';
 import {
     formatDateTime,
@@ -38,7 +43,14 @@ import { useLaboratoryOrder } from '@/composables/laboratoryOrders/useLaboratory
 import { useEncounterCharges } from '@/composables/clinical/useEncounterCharges';
 import { useAppointmentReferrals } from '@/composables/clinician/useAppointmentReferrals';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { medicalRecordNoteTypeLabel } from '@/pages/medical-records/noteTypes';
@@ -54,6 +66,7 @@ import {
     type EncounterCareTheatreProcedure,
 } from '@/lib/encounterWorkspaceCare';
 import { type EncounterCloseReadiness } from '@/lib/encounterCloseReadiness';
+import { type EncounterInlineOrderType } from '@/lib/encounterInlineOrders';
 import { type MedicalRecordResponse } from '@/types/medicalRecord';
 import { type BreadcrumbItem } from '@/types';
 
@@ -75,6 +88,43 @@ const props = defineProps<{
 
 const workspace = useEncounterWorkspace(computed(() => props.encounterId));
 const permissions = usePermissions();
+const queryClient = useQueryClient();
+
+/**
+ * Placing an order previously required two full round trips before it
+ * appeared: the create POST, then a full `workspace.refetch()` GET of the
+ * entire workspace read model. This merges the just-created order (the real
+ * server response, not a guess) into the cached workspace data the instant
+ * the POST resolves, so the order shows up in the tracking stream and the
+ * sheet closes without waiting on that second GET. `onOrderChanged` below
+ * still triggers a background refetch afterward to reconcile derived state
+ * this merge doesn't touch (e.g. closeReadiness), but the visible list is
+ * already correct by the time that resolves.
+ */
+function mergeOrderIntoWorkspace(
+    type: EncounterInlineOrderType,
+    order: Record<string, unknown>,
+): void {
+    const listKey =
+        type === 'laboratory'
+            ? 'laboratoryOrders'
+            : type === 'pharmacy'
+              ? 'pharmacyOrders'
+              : 'radiologyOrders';
+    const orderId = order.id;
+
+    queryClient.setQueryData<EncounterWorkspaceResponse>(
+        ['encounter-workspace', props.encounterId],
+        (old) => {
+            if (!old) return old;
+            const existing = old[listKey] ?? [];
+            const withoutDuplicate = existing.filter(
+                (item) => item.id !== orderId,
+            );
+            return { ...old, [listKey]: [order, ...withoutDuplicate] };
+        },
+    );
+}
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Encounters', href: '/encounters' },
@@ -236,7 +286,9 @@ const chargesCurrency = computed(
  * record when set, `startingNewNote` overrides it to a blank draft.
  */
 const encounterNotes = useEncounterNotes(() => props.encounterId);
-const encounterNoteRecords = computed(() => encounterNotes.data.value?.data ?? []);
+const encounterNoteRecords = computed(
+    () => encounterNotes.data.value?.data ?? [],
+);
 const selectedRecordId = ref<string | null>(null);
 const startingNewNote = ref(false);
 
@@ -294,7 +346,9 @@ const locationLabel = computed(() => {
 });
 
 const diagnoses = computed(() => workspace.data.value?.diagnoses ?? []);
-const canManageDiagnoses = computed(() => permissions.has('medical.records.create'));
+const canManageDiagnoses = computed(() =>
+    permissions.has('medical.records.create'),
+);
 
 const encounterDiagnoses = useEncounterDiagnoses(
     () => props.encounterId,
@@ -405,8 +459,7 @@ const closedAt = computed(
             | undefined) ?? null,
 );
 const primaryDiagnosis = computed(
-    () =>
-        diagnoses.value.find((d) => d.diagnosisType === 'primary') ?? null,
+    () => diagnoses.value.find((d) => d.diagnosisType === 'primary') ?? null,
 );
 
 const ordering = useEncounterOrdering({
@@ -423,7 +476,10 @@ const ordering = useEncounterOrdering({
     pharmacyOrders: () => pharmacyOrders.value,
     radiologyOrders: () => radiologyOrders.value,
     theatreProcedures: () => theatreProcedures.value,
-    onOrderChanged: () => void workspace.refetch(),
+    onOrderChanged: (type, order) => {
+        if (type && order) mergeOrderIntoWorkspace(type, order);
+        void workspace.refetch();
+    },
 });
 
 const theatreInlineOrderOpen = ref(false);
@@ -436,6 +492,23 @@ const theatreInlineOrderContext = computed(() => ({
 function handleTheatreInlineOrderCreated(): void {
     theatreInlineOrderOpen.value = false;
     activeTab.value = 'orders';
+    void workspace.refetch();
+}
+
+const billingInlineOpen = ref(false);
+const billingInlineContext = computed(() => ({
+    patientId: patientId.value,
+    encounterId: props.encounterId,
+    appointmentId: appointmentId.value ?? undefined,
+    admissionId: admissionId.value ?? undefined,
+}));
+
+function openBillingInline(): void {
+    billingInlineOpen.value = true;
+    activeTab.value = 'orders';
+}
+
+function handleBillingInlineOrderCreated(): void {
     void workspace.refetch();
 }
 
@@ -454,8 +527,9 @@ function openInlineOrder(
 
 function handleInlineOrderCreated(
     type: Parameters<typeof ordering.handleInlineOrderCreated>[0],
+    order: Record<string, unknown>,
 ): void {
-    ordering.handleInlineOrderCreated(type);
+    ordering.handleInlineOrderCreated(type, order);
     activeTab.value = 'orders';
 }
 
@@ -618,368 +692,657 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
             :style="{ height: scrollContainerHeight }"
         >
             <Tabs v-model="activeTab" class="contents">
-            <div
-                v-if="workspace.data.value"
-                class="sticky top-0 z-10 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-            >
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div class="min-w-0 space-y-0.5">
-                        <div
-                            v-if="patientName"
-                            class="flex flex-wrap items-baseline gap-2"
-                        >
-                            <!-- The patient's name is the primary identifier for this
+                <div
+                    v-if="workspace.data.value"
+                    class="sticky top-0 z-10 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                >
+                    <div
+                        class="flex flex-wrap items-start justify-between gap-3"
+                    >
+                        <div class="min-w-0 space-y-0.5">
+                            <div
+                                v-if="patientName"
+                                class="flex flex-wrap items-baseline gap-2"
+                            >
+                                <!-- The patient's name is the primary identifier for this
                                  workspace — it carries the navigation to their chart
                                  itself rather than sitting inert next to a separate
                                  "View chart" button. -->
-                            <h1 class="text-lg font-bold tracking-tight md:text-xl">
-                                <Link v-if="patientChartHref" :href="patientChartHref" class="hover:underline">{{ patientName }}</Link>
-                                <template v-else>{{ patientName }}</template>
-                            </h1>
-                            <span
-                                v-if="patientDemographics"
-                                class="text-xs text-muted-foreground"
-                                >{{ patientDemographics }}</span
+                                <h1
+                                    class="text-lg font-bold tracking-tight md:text-xl"
+                                >
+                                    <Link
+                                        v-if="patientChartHref"
+                                        :href="patientChartHref"
+                                        class="hover:underline"
+                                        >{{ patientName }}</Link
+                                    >
+                                    <template v-else>{{
+                                        patientName
+                                    }}</template>
+                                </h1>
+                                <span
+                                    v-if="patientDemographics"
+                                    class="text-xs text-muted-foreground"
+                                    >{{ patientDemographics }}</span
+                                >
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <component
+                                    :is="patientName ? 'p' : 'h1'"
+                                    :class="
+                                        patientName
+                                            ? 'text-sm font-medium text-muted-foreground md:text-base'
+                                            : 'text-base font-semibold tracking-tight md:text-lg'
+                                    "
+                                >
+                                    Encounter
+                                    {{
+                                        workspace.data.value.encounter
+                                            ?.encounterNumber
+                                    }}
+                                </component>
+                                <Badge :variant="encounterStatusVariant">{{
+                                    encounterStatus
+                                }}</Badge>
+                            </div>
+                            <div
+                                v-if="activeRecord"
+                                class="flex flex-wrap items-center gap-2"
                             >
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <component
-                                :is="patientName ? 'p' : 'h1'"
-                                :class="
-                                    patientName
-                                        ? 'text-sm font-medium text-muted-foreground md:text-base'
-                                        : 'text-base font-semibold tracking-tight md:text-lg'
-                                "
-                            >
-                                Encounter
+                                <p class="text-sm font-medium text-foreground">
+                                    {{
+                                        medicalRecordNoteTypeLabel(
+                                            activeRecord.recordType,
+                                        )
+                                    }}
+                                    <span
+                                        v-if="activeRecord.recordNumber"
+                                        class="font-normal text-muted-foreground"
+                                        >· {{ activeRecord.recordNumber }}</span
+                                    >
+                                </p>
+                                <Badge
+                                    :variant="noteStatusVariant"
+                                    class="text-[10px]"
+                                    >{{ activeRecord.status }}</Badge
+                                >
+                            </div>
+                            <p v-else class="text-sm text-muted-foreground">
+                                No clinical note started yet
+                            </p>
+                            <p class="text-xs text-muted-foreground">
                                 {{
-                                    workspace.data.value.encounter
-                                        ?.encounterNumber
+                                    closeReadiness?.canClose
+                                        ? 'Ready to close'
+                                        : 'Not ready to close yet'
                                 }}
-                            </component>
-                            <Badge :variant="encounterStatusVariant">{{
-                                encounterStatus
-                            }}</Badge>
+                            </p>
+                        </div>
+                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                            <TooltipProvider :delay-duration="150">
+                                <Tooltip>
+                                    <TooltipTrigger as-child>
+                                        <span tabindex="0">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                :disabled="!activeRecordId"
+                                                @click="historyOpen = true"
+                                            >
+                                                History
+                                            </Button>
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent v-if="!activeRecordId">
+                                        Save the note first.
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider
+                                v-if="
+                                    permissions.has('medical.records.finalize')
+                                "
+                                :delay-duration="150"
+                            >
+                                <Tooltip>
+                                    <TooltipTrigger as-child>
+                                        <span tabindex="0">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                :disabled="!canCloseEncounter"
+                                                @click="
+                                                    encounterClose.requestClose()
+                                                "
+                                            >
+                                                Close encounter
+                                            </Button>
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent
+                                        v-if="closeButtonDisabledReason"
+                                    >
+                                        {{ closeButtonDisabledReason }}
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                        <div
+                            class="rounded-md border bg-muted/50 px-2.5 py-1.5"
+                        >
+                            <p
+                                class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
+                            >
+                                Results pending
+                            </p>
+                            <p class="text-sm font-bold tabular-nums">
+                                {{ pendingResultCount }}
+                            </p>
                         </div>
                         <div
-                            v-if="activeRecord"
-                            class="flex flex-wrap items-center gap-2"
+                            class="rounded-md border bg-muted/50 px-2.5 py-1.5"
                         >
-                            <p class="text-sm font-medium text-foreground">
-                                {{
-                                    medicalRecordNoteTypeLabel(
-                                        activeRecord.recordType,
-                                    )
-                                }}
-                                <span
-                                    v-if="activeRecord.recordNumber"
-                                    class="font-normal text-muted-foreground"
-                                    >· {{ activeRecord.recordNumber }}</span
-                                >
-                            </p>
-                            <Badge
-                                :variant="noteStatusVariant"
-                                class="text-[10px]"
-                                >{{ activeRecord.status }}</Badge
+                            <p
+                                class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
                             >
-                        </div>
-                        <p v-else class="text-sm text-muted-foreground">
-                            No clinical note started yet
-                        </p>
-                        <p class="text-xs text-muted-foreground">
-                            {{
-                                closeReadiness?.canClose
-                                    ? 'Ready to close'
-                                    : 'Not ready to close yet'
-                            }}
-                        </p>
-                    </div>
-                    <div class="flex shrink-0 flex-wrap items-center gap-2">
-                        <TooltipProvider :delay-duration="150">
-                            <Tooltip>
-                                <TooltipTrigger as-child>
-                                    <span tabindex="0">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            :disabled="!activeRecordId"
-                                            @click="historyOpen = true"
-                                        >
-                                            History
-                                        </Button>
-                                    </span>
-                                </TooltipTrigger>
-                                <TooltipContent v-if="!activeRecordId">
-                                    Save the note first.
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider
-                            v-if="permissions.has('medical.records.finalize')"
-                            :delay-duration="150"
-                        >
-                            <Tooltip>
-                                <TooltipTrigger as-child>
-                                    <span tabindex="0">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            :disabled="!canCloseEncounter"
-                                            @click="
-                                                encounterClose.requestClose()
-                                            "
-                                        >
-                                            Close encounter
-                                        </Button>
-                                    </span>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                    v-if="closeButtonDisabledReason"
+                                Close readiness
+                            </p>
+                            <div class="mt-1 flex items-center gap-2">
+                                <div
+                                    class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
                                 >
-                                    {{ closeButtonDisabledReason }}
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                                    <div
+                                        class="h-full rounded-full transition-all"
+                                        :class="closeReadinessBarClass"
+                                        :style="{
+                                            width: `${closeReadinessPercent}%`,
+                                        }"
+                                    />
+                                </div>
+                                <span class="text-xs font-bold tabular-nums"
+                                    >{{ closeReadinessPercent }}%</span
+                                >
+                            </div>
+                        </div>
                     </div>
+
+                    <TabsList
+                        v-if="patientId"
+                        class="mt-3 flex w-full flex-wrap justify-start gap-1"
+                    >
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger
+                            value="notes"
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            Notes
+                            <Badge
+                                v-if="encounterNoteRecords.length"
+                                variant="secondary"
+                                class="h-4 min-w-4 px-1 text-[10px]"
+                                >{{ encounterNoteRecords.length }}</Badge
+                            >
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="orders"
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            Orders
+                            <Badge
+                                v-if="ordering.careActiveCount.value"
+                                variant="secondary"
+                                class="h-4 min-w-4 px-1 text-[10px]"
+                                >{{ ordering.careActiveCount.value }}</Badge
+                            >
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="results"
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            Results
+                            <Badge
+                                v-if="
+                                    resultedLabOrders.length +
+                                    reportedRadiologyOrders.length
+                                "
+                                variant="secondary"
+                                class="h-4 min-w-4 px-1 text-[10px]"
+                                >{{
+                                    resultedLabOrders.length +
+                                    reportedRadiologyOrders.length
+                                }}</Badge
+                            >
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="medications"
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            Medications
+                            <Badge
+                                v-if="activeMedications.length"
+                                variant="secondary"
+                                class="h-4 min-w-4 px-1 text-[10px]"
+                                >{{ activeMedications.length }}</Badge
+                            >
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="diagnoses"
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            Diagnoses
+                            <Badge
+                                v-if="diagnoses.length"
+                                variant="secondary"
+                                class="h-4 min-w-4 px-1 text-[10px]"
+                                >{{ diagnoses.length }}</Badge
+                            >
+                        </TabsTrigger>
+                        <TabsTrigger
+                            v-if="showReferralsTab"
+                            value="referrals"
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            Referrals
+                            <Badge
+                                v-if="referrals.data.value?.meta.total"
+                                variant="secondary"
+                                class="h-4 min-w-4 px-1 text-[10px]"
+                                >{{ referrals.data.value?.meta.total }}</Badge
+                            >
+                        </TabsTrigger>
+                        <TabsTrigger
+                            v-if="canViewCharges"
+                            value="charges"
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            Charges
+                            <Badge
+                                v-if="charges.data.value?.meta?.total"
+                                variant="secondary"
+                                class="h-4 min-w-4 px-1 text-[10px]"
+                                >{{ charges.data.value?.meta.total }}</Badge
+                            >
+                        </TabsTrigger>
+                    </TabsList>
                 </div>
 
-                <div class="mt-3 grid grid-cols-2 gap-2">
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p
-                            class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
+                <div class="space-y-4 p-4 md:p-6">
+                    <Alert
+                        v-if="showResumedDraftBanner"
+                        class="border-primary/20 bg-primary/5"
+                    >
+                        <AlertTitle
+                            >Continuing an existing draft note</AlertTitle
                         >
-                            Results pending
-                        </p>
-                        <p class="text-sm font-bold tabular-nums">
-                            {{ pendingResultCount }}
-                        </p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p
-                            class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
-                        >
-                            Close readiness
-                        </p>
-                        <div class="mt-1 flex items-center gap-2">
-                            <div
-                                class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+                        <AlertDescription class="space-y-2">
+                            <p>
+                                A draft note already existed for this visit —
+                                its saved content has been loaded below rather
+                                than starting blank.
+                            </p>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                @click="draftBannerDismissed = true"
                             >
+                                Got it
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
+
+                    <div v-if="workspace.isPending.value" class="space-y-2">
+                        <Skeleton class="h-6 w-1/2" />
+                        <Skeleton class="h-24 w-full" />
+                    </div>
+
+                    <Alert
+                        v-else-if="workspace.isError.value"
+                        variant="destructive"
+                    >
+                        <AlertTitle>Unable to load this encounter</AlertTitle>
+                        <AlertDescription>
+                            {{
+                                workspace.error.value?.message ??
+                                'Unknown error.'
+                            }}
+                        </AlertDescription>
+                    </Alert>
+
+                    <template v-else-if="workspace.data.value && patientId">
+                        <TabsContent value="overview" class="space-y-4">
+                            <!-- Visit summary -->
+                            <div class="rounded-lg border bg-card p-4">
                                 <div
-                                    class="h-full rounded-full transition-all"
-                                    :class="closeReadinessBarClass"
-                                    :style="{
-                                        width: `${closeReadinessPercent}%`,
-                                    }"
+                                    class="flex flex-wrap items-center justify-between gap-2"
+                                >
+                                    <p
+                                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                                    >
+                                        Visit
+                                    </p>
+                                    <Badge :variant="encounterStatusVariant">{{
+                                        formatEnumLabel(encounterStatus)
+                                    }}</Badge>
+                                </div>
+                                <div
+                                    class="mt-2 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2"
+                                >
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-muted-foreground"
+                                            >Type</span
+                                        ><span class="font-medium">{{
+                                            encounterType
+                                                ? formatEnumLabel(encounterType)
+                                                : '—'
+                                        }}</span>
+                                    </div>
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-muted-foreground"
+                                            >Location</span
+                                        ><span class="font-medium">{{
+                                            locationLabel ?? '—'
+                                        }}</span>
+                                    </div>
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-muted-foreground"
+                                            >Opened</span
+                                        ><span class="font-medium">{{
+                                            openedAt
+                                                ? formatDateTime(openedAt)
+                                                : '—'
+                                        }}</span>
+                                    </div>
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-muted-foreground"
+                                            >Closed</span
+                                        ><span class="font-medium">{{
+                                            closedAt
+                                                ? formatDateTime(closedAt)
+                                                : '—'
+                                        }}</span>
+                                    </div>
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-muted-foreground"
+                                            >Disposition</span
+                                        ><span class="font-medium">{{
+                                            encounterDisposition
+                                                ? formatEnumLabel(
+                                                      encounterDisposition,
+                                                  )
+                                                : '—'
+                                        }}</span>
+                                    </div>
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-muted-foreground"
+                                            >Reason</span
+                                        ><span class="font-medium">{{
+                                            visitReason ?? '—'
+                                        }}</span>
+                                    </div>
+                                </div>
+                                <div
+                                    v-if="triageVitalsSummary"
+                                    class="mt-3 rounded-md bg-muted/25 px-3 py-2 text-xs"
+                                >
+                                    <span
+                                        class="font-medium text-muted-foreground"
+                                        >Triage vitals: </span
+                                    >{{ triageVitalsSummary }}
+                                </div>
+                            </div>
+
+                            <!-- Counts -->
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <button
+                                    type="button"
+                                    class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                    @click="activeTab = 'results'"
+                                >
+                                    <p
+                                        class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
+                                    >
+                                        Results
+                                    </p>
+                                    <p class="text-lg font-bold tabular-nums">
+                                        {{
+                                            resultedLabOrders.length +
+                                            reportedRadiologyOrders.length
+                                        }}<span
+                                            v-if="pendingResultCount > 0"
+                                            class="text-xs font-normal text-muted-foreground"
+                                        >
+                                            ·
+                                            {{
+                                                pendingResultCount
+                                            }}
+                                            pending</span
+                                        >
+                                    </p>
+                                </button>
+                                <button
+                                    v-if="canViewCharges"
+                                    type="button"
+                                    class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                    @click="activeTab = 'charges'"
+                                >
+                                    <p
+                                        class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
+                                    >
+                                        Charges
+                                    </p>
+                                    <p class="text-lg font-bold tabular-nums">
+                                        {{ chargesCurrency }}
+                                        {{ chargesTotal.toLocaleString() }}
+                                    </p>
+                                </button>
+                            </div>
+
+                            <div class="grid gap-4 lg:grid-cols-2">
+                                <!-- Diagnoses -->
+                                <div class="rounded-lg border bg-card p-4">
+                                    <div
+                                        class="flex items-center justify-between gap-2"
+                                    >
+                                        <p
+                                            class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                                        >
+                                            Diagnoses
+                                        </p>
+                                        <button
+                                            type="button"
+                                            class="text-xs font-medium text-primary hover:underline"
+                                            @click="activeTab = 'diagnoses'"
+                                        >
+                                            Open
+                                        </button>
+                                    </div>
+                                    <p
+                                        v-if="diagnoses.length === 0"
+                                        class="mt-1.5 text-xs text-muted-foreground"
+                                    >
+                                        No diagnoses recorded yet.
+                                    </p>
+                                    <div
+                                        v-else
+                                        class="mt-1.5 flex flex-wrap gap-1.5"
+                                    >
+                                        <span
+                                            v-for="diagnosis in diagnoses"
+                                            :key="diagnosis.id"
+                                            class="inline-flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1 text-xs"
+                                        >
+                                            <Badge
+                                                :variant="
+                                                    diagnosis.diagnosisType ===
+                                                    'primary'
+                                                        ? 'default'
+                                                        : 'outline'
+                                                "
+                                                class="text-[10px]"
+                                                >{{
+                                                    diagnosis.diagnosisType ===
+                                                    'primary'
+                                                        ? 'Primary'
+                                                        : 'Secondary'
+                                                }}</Badge
+                                            >
+                                            {{ diagnosis.diagnosisCode }}
+                                            <span
+                                                v-if="
+                                                    diagnosis.diagnosisDescription
+                                                "
+                                                class="text-muted-foreground"
+                                                >—
+                                                {{
+                                                    diagnosis.diagnosisDescription
+                                                }}</span
+                                            >
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Active medications -->
+                                <div class="rounded-lg border bg-card p-4">
+                                    <div
+                                        class="flex items-center justify-between gap-2"
+                                    >
+                                        <p
+                                            class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                                        >
+                                            Medications
+                                        </p>
+                                        <button
+                                            type="button"
+                                            class="text-xs font-medium text-primary hover:underline"
+                                            @click="activeTab = 'medications'"
+                                        >
+                                            Open
+                                        </button>
+                                    </div>
+                                    <p
+                                        v-if="activeMedications.length === 0"
+                                        class="mt-1.5 text-xs text-muted-foreground"
+                                    >
+                                        No active medications.
+                                    </p>
+                                    <ul v-else class="mt-1.5 space-y-1 text-sm">
+                                        <li
+                                            v-for="med in activeMedications.slice(
+                                                0,
+                                                5,
+                                            )"
+                                            :key="med.id"
+                                            class="flex items-center justify-between gap-2"
+                                        >
+                                            <span class="font-medium">{{
+                                                med.medicationName ||
+                                                'Medication'
+                                            }}</span>
+                                            <span
+                                                class="text-xs text-muted-foreground"
+                                                >{{
+                                                    med.dosageInstruction ||
+                                                    formatEnumLabel(med.status)
+                                                }}</span
+                                            >
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent
+                            value="notes"
+                            force-mount
+                            class="space-y-4 data-[state=inactive]:hidden"
+                        >
+                            <div
+                                v-if="
+                                    encounterNoteRecords.length ||
+                                    permissions.has('medical.records.create')
+                                "
+                                class="flex flex-wrap items-center gap-1.5"
+                            >
+                                <button
+                                    v-for="record in encounterNoteRecords"
+                                    :key="record.id"
+                                    type="button"
+                                    class="rounded-md border px-2.5 py-1 text-xs transition-colors"
+                                    :class="
+                                        record.id === existingRecord?.id
+                                            ? 'border-primary bg-primary/5 text-primary'
+                                            : 'border-border bg-muted/20 text-muted-foreground hover:bg-muted/40'
+                                    "
+                                    @click="selectNote(record.id)"
+                                >
+                                    {{
+                                        medicalRecordNoteTypeLabel(
+                                            record.recordType,
+                                        )
+                                    }}
+                                    · {{ record.status }}
+                                </button>
+                                <Button
+                                    v-if="
+                                        permissions.has(
+                                            'medical.records.create',
+                                        )
+                                    "
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-7 gap-1.5 text-xs"
+                                    @click="startNewNote()"
+                                >
+                                    <AppIcon name="plus" class="size-3" />New
+                                    note
+                                </Button>
+                            </div>
+
+                            <div class="rounded-lg border p-4">
+                                <NoteComposerShell
+                                    ref="noteComposer"
+                                    :key="existingRecord?.id ?? 'new'"
+                                    :patient-id="patientId"
+                                    :encounter-id="encounterId"
+                                    :appointment-id="appointmentId"
+                                    :admission-id="admissionId"
+                                    :encounter-at="
+                                        (workspace.data.value.encounter
+                                            ?.openedAt as string | undefined) ??
+                                        new Date().toISOString()
+                                    "
+                                    :existing-record="existingRecord"
+                                    :can-finalize="
+                                        permissions.has(
+                                            'medical.records.finalize',
+                                        )
+                                    "
+                                    :can-amend="
+                                        permissions.has('medical.records.amend')
+                                    "
+                                    :can-archive="
+                                        permissions.has(
+                                            'medical.records.archive',
+                                        )
+                                    "
+                                    :encounter-diagnoses="diagnoses"
+                                    :can-manage-encounter-diagnoses="
+                                        canManageDiagnoses
+                                    "
+                                    @status-changed="handleNoteStatusChanged()"
+                                    @open-add-encounter-diagnosis="
+                                        encounterDiagnoses.openDialog()
+                                    "
                                 />
                             </div>
-                            <span class="text-xs font-bold tabular-nums"
-                                >{{ closeReadinessPercent }}%</span
-                            >
-                        </div>
-                    </div>
-                </div>
+                        </TabsContent>
 
-                <TabsList v-if="patientId" class="mt-3 flex w-full flex-wrap justify-start gap-1">
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="notes" class="inline-flex items-center gap-1.5">
-                        Notes
-                        <Badge v-if="encounterNoteRecords.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ encounterNoteRecords.length }}</Badge>
-                    </TabsTrigger>
-                    <TabsTrigger value="orders" class="inline-flex items-center gap-1.5">
-                        Orders
-                        <Badge v-if="ordering.careActiveCount.value" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ ordering.careActiveCount.value }}</Badge>
-                    </TabsTrigger>
-                    <TabsTrigger value="results" class="inline-flex items-center gap-1.5">
-                        Results
-                        <Badge v-if="resultedLabOrders.length + reportedRadiologyOrders.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ resultedLabOrders.length + reportedRadiologyOrders.length }}</Badge>
-                    </TabsTrigger>
-                    <TabsTrigger value="medications" class="inline-flex items-center gap-1.5">
-                        Medications
-                        <Badge v-if="activeMedications.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ activeMedications.length }}</Badge>
-                    </TabsTrigger>
-                    <TabsTrigger value="diagnoses" class="inline-flex items-center gap-1.5">
-                        Diagnoses
-                        <Badge v-if="diagnoses.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ diagnoses.length }}</Badge>
-                    </TabsTrigger>
-                    <TabsTrigger v-if="showReferralsTab" value="referrals" class="inline-flex items-center gap-1.5">
-                        Referrals
-                        <Badge v-if="referrals.data.value?.meta.total" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ referrals.data.value?.meta.total }}</Badge>
-                    </TabsTrigger>
-                    <TabsTrigger v-if="canViewCharges" value="charges" class="inline-flex items-center gap-1.5">
-                        Charges
-                        <Badge v-if="charges.data.value?.meta?.total" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ charges.data.value?.meta.total }}</Badge>
-                    </TabsTrigger>
-                </TabsList>
-            </div>
-
-            <div class="space-y-4 p-4 md:p-6">
-                <Alert
-                    v-if="showResumedDraftBanner"
-                    class="border-primary/20 bg-primary/5"
-                >
-                    <AlertTitle>Continuing an existing draft note</AlertTitle>
-                    <AlertDescription class="space-y-2">
-                        <p>
-                            A draft note already existed for this visit — its
-                            saved content has been loaded below rather than
-                            starting blank.
-                        </p>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            @click="draftBannerDismissed = true"
-                        >
-                            Got it
-                        </Button>
-                    </AlertDescription>
-                </Alert>
-
-                <div v-if="workspace.isPending.value" class="space-y-2">
-                    <Skeleton class="h-6 w-1/2" />
-                    <Skeleton class="h-24 w-full" />
-                </div>
-
-                <Alert
-                    v-else-if="workspace.isError.value"
-                    variant="destructive"
-                >
-                    <AlertTitle>Unable to load this encounter</AlertTitle>
-                    <AlertDescription>
-                        {{ workspace.error.value?.message ?? 'Unknown error.' }}
-                    </AlertDescription>
-                </Alert>
-
-                <template v-else-if="workspace.data.value && patientId">
-
-                    <TabsContent value="overview" class="space-y-4">
-                        <!-- Visit summary -->
-                        <div class="rounded-lg border bg-card p-4">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Visit</p>
-                                <Badge :variant="encounterStatusVariant">{{ formatEnumLabel(encounterStatus) }}</Badge>
-                            </div>
-                            <div class="mt-2 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
-                                <div class="flex justify-between gap-3"><span class="text-muted-foreground">Type</span><span class="font-medium">{{ encounterType ? formatEnumLabel(encounterType) : '—' }}</span></div>
-                                <div class="flex justify-between gap-3"><span class="text-muted-foreground">Location</span><span class="font-medium">{{ locationLabel ?? '—' }}</span></div>
-                                <div class="flex justify-between gap-3"><span class="text-muted-foreground">Opened</span><span class="font-medium">{{ openedAt ? formatDateTime(openedAt) : '—' }}</span></div>
-                                <div class="flex justify-between gap-3"><span class="text-muted-foreground">Closed</span><span class="font-medium">{{ closedAt ? formatDateTime(closedAt) : '—' }}</span></div>
-                                <div class="flex justify-between gap-3"><span class="text-muted-foreground">Disposition</span><span class="font-medium">{{ encounterDisposition ? formatEnumLabel(encounterDisposition) : '—' }}</span></div>
-                                <div class="flex justify-between gap-3"><span class="text-muted-foreground">Reason</span><span class="font-medium">{{ visitReason ?? '—' }}</span></div>
-                            </div>
-                            <div v-if="triageVitalsSummary" class="mt-3 rounded-md bg-muted/25 px-3 py-2 text-xs">
-                                <span class="font-medium text-muted-foreground">Triage vitals: </span>{{ triageVitalsSummary }}
-                            </div>
-                        </div>
-
-                        <!-- Counts -->
-                        <div class="grid gap-3 sm:grid-cols-2">
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'results'">
-                                <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Results</p>
-                                <p class="text-lg font-bold tabular-nums">{{ resultedLabOrders.length + reportedRadiologyOrders.length }}<span v-if="pendingResultCount > 0" class="text-xs font-normal text-muted-foreground"> · {{ pendingResultCount }} pending</span></p>
-                            </button>
-                            <button v-if="canViewCharges" type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'charges'">
-                                <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Charges</p>
-                                <p class="text-lg font-bold tabular-nums">{{ chargesCurrency }} {{ chargesTotal.toLocaleString() }}</p>
-                            </button>
-                        </div>
-
-                        <div class="grid gap-4 lg:grid-cols-2">
-                            <!-- Diagnoses -->
-                            <div class="rounded-lg border bg-card p-4">
-                                <div class="flex items-center justify-between gap-2">
-                                    <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Diagnoses</p>
-                                    <button type="button" class="text-xs font-medium text-primary hover:underline" @click="activeTab = 'diagnoses'">Open</button>
-                                </div>
-                                <p v-if="diagnoses.length === 0" class="mt-1.5 text-xs text-muted-foreground">No diagnoses recorded yet.</p>
-                                <div v-else class="mt-1.5 flex flex-wrap gap-1.5">
-                                    <span
-                                        v-for="diagnosis in diagnoses"
-                                        :key="diagnosis.id"
-                                        class="inline-flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1 text-xs"
-                                    >
-                                        <Badge :variant="diagnosis.diagnosisType === 'primary' ? 'default' : 'outline'" class="text-[10px]">{{ diagnosis.diagnosisType === 'primary' ? 'Primary' : 'Secondary' }}</Badge>
-                                        {{ diagnosis.diagnosisCode }}
-                                        <span v-if="diagnosis.diagnosisDescription" class="text-muted-foreground">— {{ diagnosis.diagnosisDescription }}</span>
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- Active medications -->
-                            <div class="rounded-lg border bg-card p-4">
-                                <div class="flex items-center justify-between gap-2">
-                                    <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Medications</p>
-                                    <button type="button" class="text-xs font-medium text-primary hover:underline" @click="activeTab = 'medications'">Open</button>
-                                </div>
-                                <p v-if="activeMedications.length === 0" class="mt-1.5 text-xs text-muted-foreground">No active medications.</p>
-                                <ul v-else class="mt-1.5 space-y-1 text-sm">
-                                    <li v-for="med in activeMedications.slice(0, 5)" :key="med.id" class="flex items-center justify-between gap-2">
-                                        <span class="font-medium">{{ med.medicationName || 'Medication' }}</span>
-                                        <span class="text-xs text-muted-foreground">{{ med.dosageInstruction || formatEnumLabel(med.status) }}</span>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </TabsContent>
-
-                    <TabsContent value="notes" force-mount class="space-y-4 data-[state=inactive]:hidden">
-                        <div
-                            v-if="encounterNoteRecords.length || permissions.has('medical.records.create')"
-                            class="flex flex-wrap items-center gap-1.5"
-                        >
-                            <button
-                                v-for="record in encounterNoteRecords"
-                                :key="record.id"
-                                type="button"
-                                class="rounded-md border px-2.5 py-1 text-xs transition-colors"
-                                :class="record.id === existingRecord?.id ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-muted/20 text-muted-foreground hover:bg-muted/40'"
-                                @click="selectNote(record.id)"
-                            >
-                                {{ medicalRecordNoteTypeLabel(record.recordType) }} · {{ record.status }}
-                            </button>
-                            <Button
-                                v-if="permissions.has('medical.records.create')"
-                                variant="outline"
-                                size="sm"
-                                class="h-7 gap-1.5 text-xs"
-                                @click="startNewNote()"
-                            >
-                                <AppIcon name="plus" class="size-3" />New note
-                            </Button>
-                        </div>
-
-                        <div class="rounded-lg border p-4">
-                        <NoteComposerShell
-                            ref="noteComposer"
-                            :key="existingRecord?.id ?? 'new'"
-                            :patient-id="patientId"
-                            :encounter-id="encounterId"
-                            :appointment-id="appointmentId"
-                            :admission-id="admissionId"
-                            :encounter-at="
-                                (workspace.data.value.encounter?.openedAt as
-                                    | string
-                                    | undefined) ?? new Date().toISOString()
-                            "
-                            :existing-record="existingRecord"
-                            :can-finalize="
-                                permissions.has('medical.records.finalize')
-                            "
-                            :can-amend="
-                                permissions.has('medical.records.amend')
-                            "
-                            :can-archive="
-                                permissions.has('medical.records.archive')
-                            "
-                            :encounter-diagnoses="diagnoses"
-                            :can-manage-encounter-diagnoses="canManageDiagnoses"
-                            @status-changed="handleNoteStatusChanged()"
-                            @open-add-encounter-diagnosis="encounterDiagnoses.openDialog()"
-                        />
-                        </div>
-                    </TabsContent>
-
-                    <TabsContent value="orders" class="space-y-4">
-                        <div class="space-y-4">
+                        <TabsContent value="orders" class="space-y-4">
+                            <div class="space-y-4">
                                 <EncounterOrdersCommandCenter
                                     :patient-id="patientId"
                                     :has-workflow-actions="
@@ -1021,18 +1384,28 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                     :theatre-inline-open="
                                         theatreInlineOrderOpen
                                     "
-                                    :hide-billing-link="true"
+                                    :can-open-billing-inline="true"
+                                    :billing-inline-open="billingInlineOpen"
                                     @open-inline-order="openInlineOrder($event)"
                                     @open-theatre-inline="openTheatreInline()"
+                                    @open-billing-inline="openBillingInline()"
                                 />
 
                                 <EncounterOrderSheet
-                                    :open="ordering.inlineOrderType.value !== null"
+                                    :open="
+                                        ordering.inlineOrderType.value !== null
+                                    "
                                     :order-type="ordering.inlineOrderType.value"
                                     :linkage="ordering.inlineOrderLinkage.value"
                                     :context="ordering.inlineOrderContext.value"
                                     @close="ordering.closeInlineOrder()"
-                                    @created="handleInlineOrderCreated($event)"
+                                    @created="
+                                        (type, order) =>
+                                            handleInlineOrderCreated(
+                                                type,
+                                                order,
+                                            )
+                                    "
                                 />
 
                                 <TheatreInlineOrderForm
@@ -1041,12 +1414,17 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                     @close="theatreInlineOrderOpen = false"
                                     @created="handleTheatreInlineOrderCreated()"
                                 />
+
+                                <EncounterInlineBillingForm
+                                    v-if="billingInlineOpen"
+                                    :context="billingInlineContext"
+                                    @close="billingInlineOpen = false"
+                                    @created="handleBillingInlineOrderCreated()"
+                                />
                                 <div
                                     v-if="
-                                        (!theatreInlineOrderOpen &&
-                                            ordering.canOpenTheatreWorkflow
-                                                .value) ||
-                                        ordering.canOpenBillingWorkflow.value
+                                        !theatreInlineOrderOpen &&
+                                        ordering.canOpenTheatreWorkflow.value
                                     "
                                     class="flex flex-wrap justify-end gap-2 border-t pt-3"
                                 >
@@ -1057,11 +1435,6 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                         own pages:
                                     </p>
                                     <Button
-                                        v-if="
-                                            !theatreInlineOrderOpen &&
-                                            ordering.canOpenTheatreWorkflow
-                                                .value
-                                        "
                                         variant="outline"
                                         size="sm"
                                         as-child
@@ -1077,349 +1450,680 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                             Book on full theatre page
                                         </Link>
                                     </Button>
-                                    <Button
-                                        v-if="
-                                            ordering.canOpenBillingWorkflow
-                                                .value
-                                        "
-                                        variant="outline"
-                                        size="sm"
-                                        as-child
+                                </div>
+                            </div>
+
+                            <div
+                                v-if="!ordering.canShowCare.value"
+                                class="rounded-lg border bg-card px-4 py-6 text-center text-sm text-muted-foreground"
+                            >
+                                No orders placed for this encounter yet.
+                            </div>
+                            <section
+                                v-else
+                                class="space-y-3 rounded-lg border bg-card p-4 shadow-sm"
+                            >
+                                <div
+                                    v-if="
+                                        !ordering.visibleCareSummaries.value
+                                            .length
+                                    "
+                                    class="rounded-lg bg-muted/25 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/30"
+                                >
+                                    No orders linked yet. Use the command center
+                                    above to place the first order.
+                                </div>
+                                <EncounterWorkflowCareStreams
+                                    v-else
+                                    v-model="ordering.careTab.value"
+                                    :visible-summaries="
+                                        ordering.visibleCareSummaries.value
+                                    "
+                                    :laboratory-orders="laboratoryOrders"
+                                    :pharmacy-orders="pharmacyOrders"
+                                    :radiology-orders="radiologyOrders"
+                                    :theatre-procedures="theatreProcedures"
+                                    :laboratory-loading="
+                                        workspace.isPending.value
+                                    "
+                                    :pharmacy-loading="
+                                        workspace.isPending.value
+                                    "
+                                    :radiology-loading="
+                                        workspace.isPending.value
+                                    "
+                                    :theatre-loading="workspace.isPending.value"
+                                    :laboratory-error="null"
+                                    :pharmacy-error="null"
+                                    :radiology-error="null"
+                                    :theatre-error="null"
+                                    :can-open-laboratory-workflow="
+                                        ordering.canOpenLaboratoryWorkflow.value
+                                    "
+                                    :can-open-pharmacy-workflow="
+                                        ordering.canOpenPharmacyWorkflow.value
+                                    "
+                                    :can-open-radiology-workflow="
+                                        ordering.canOpenRadiologyWorkflow.value
+                                    "
+                                    :can-open-theatre-workflow="
+                                        ordering.canOpenTheatreWorkflow.value
+                                    "
+                                    :can-create-laboratory-orders="
+                                        ordering.canCreateLaboratoryOrders.value
+                                    "
+                                    :can-create-pharmacy-orders="
+                                        ordering.canCreatePharmacyOrders.value
+                                    "
+                                    :can-create-radiology-orders="
+                                        ordering.canCreateRadiologyOrders.value
+                                    "
+                                    :can-create-theatre-procedures="
+                                        ordering.canCreateTheatreProcedures
+                                            .value
+                                    "
+                                    :can-use-inline-orders="
+                                        ordering.canUseInlineOrders()
+                                    "
+                                    :context-create-href="
+                                        ordering.contextCreateHref
+                                    "
+                                    :format-date-time="formatDateTime"
+                                    @lifecycle="
+                                        ordering.openLifecycleDialog(
+                                            $event.kind,
+                                            $event.id,
+                                            $event.action,
+                                            $event.defaultReason,
+                                        )
+                                    "
+                                    @open-inline-order="
+                                        openInlineOrder(
+                                            $event.type,
+                                            $event.linkage,
+                                        )
+                                    "
+                                    @view-lab-result="
+                                        openLabResultReview($event)
+                                    "
+                                />
+                            </section>
+                        </TabsContent>
+
+                        <TabsContent value="results" class="space-y-3">
+                            <p class="text-xs text-muted-foreground">
+                                Reported lab results and imaging reports for
+                                this encounter. Results are the narrative
+                                summary entered by the lab/imaging team; order
+                                status and pending items are on the Orders tab.
+                            </p>
+                            <div
+                                v-if="!hasAnyResults"
+                                class="rounded-lg border bg-card px-4 py-6 text-center text-sm text-muted-foreground"
+                            >
+                                No results reported yet.
+                                <span v-if="pendingResultCount > 0"
+                                    >{{ pendingResultCount }} order(s) still
+                                    pending on the Orders tab.</span
+                                >
+                            </div>
+                            <template v-else>
+                                <div
+                                    v-if="resultedLabOrders.length"
+                                    class="rounded-lg border bg-card p-4"
+                                >
+                                    <p
+                                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
                                     >
-                                        <Link
-                                            :href="
-                                                ordering.contextCreateHref(
-                                                    '/billing-invoices',
-                                                    { includeTabNew: true },
+                                        Laboratory
+                                    </p>
+                                    <div class="mt-2 space-y-2">
+                                        <div
+                                            v-for="order in resultedLabOrders"
+                                            :key="order.id"
+                                            class="rounded-md border bg-muted/20 p-3"
+                                        >
+                                            <div
+                                                class="flex flex-wrap items-center justify-between gap-2"
+                                            >
+                                                <span
+                                                    class="text-sm font-medium"
+                                                    >{{
+                                                        order.testName ||
+                                                        order.orderNumber ||
+                                                        'Lab test'
+                                                    }}</span
+                                                >
+                                                <div
+                                                    class="flex items-center gap-2"
+                                                >
+                                                    <Badge
+                                                        :variant="
+                                                            laboratoryOrderStatusVariant(
+                                                                order.status,
+                                                            )
+                                                        "
+                                                        class="text-[10px]"
+                                                        >{{
+                                                            formatEnumLabel(
+                                                                order.status,
+                                                            )
+                                                        }}</Badge
+                                                    >
+                                                    <span
+                                                        v-if="order.resultedAt"
+                                                        class="text-xs text-muted-foreground"
+                                                        >{{
+                                                            formatDateTime(
+                                                                order.resultedAt,
+                                                            )
+                                                        }}</span
+                                                    >
+                                                </div>
+                                            </div>
+                                            <div class="mt-2">
+                                                <LabResultSummaryPopover
+                                                    :result-summary="
+                                                        order.resultSummary
+                                                    "
+                                                    show-view-full
+                                                    @view-full-result="
+                                                        openLabResultReview(
+                                                            order.id,
+                                                        )
+                                                    "
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div
+                                    v-if="reportedRadiologyOrders.length"
+                                    class="rounded-lg border bg-card p-4"
+                                >
+                                    <p
+                                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                                    >
+                                        Imaging
+                                    </p>
+                                    <div class="mt-2 space-y-2">
+                                        <div
+                                            v-for="order in reportedRadiologyOrders"
+                                            :key="order.id"
+                                            class="rounded-md border bg-muted/20 p-3"
+                                        >
+                                            <div
+                                                class="flex flex-wrap items-center justify-between gap-2"
+                                            >
+                                                <span
+                                                    class="text-sm font-medium"
+                                                    >{{
+                                                        order.studyDescription ||
+                                                        order.orderNumber ||
+                                                        'Imaging study'
+                                                    }}</span
+                                                >
+                                                <div
+                                                    class="flex items-center gap-2"
+                                                >
+                                                    <Badge
+                                                        :variant="
+                                                            radiologyOrderStatusVariant(
+                                                                order.status,
+                                                            )
+                                                        "
+                                                        class="text-[10px]"
+                                                        >{{
+                                                            formatEnumLabel(
+                                                                order.status,
+                                                            )
+                                                        }}</Badge
+                                                    >
+                                                    <span
+                                                        v-if="order.completedAt"
+                                                        class="text-xs text-muted-foreground"
+                                                        >{{
+                                                            formatDateTime(
+                                                                order.completedAt,
+                                                            )
+                                                        }}</span
+                                                    >
+                                                </div>
+                                            </div>
+                                            <p
+                                                class="mt-1 text-sm whitespace-pre-line"
+                                            >
+                                                {{ order.reportSummary }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </TabsContent>
+
+                        <TabsContent value="medications" class="space-y-3">
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-sm font-medium">Medications</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    Prescriptions and dispensing for this
+                                    encounter. Manage in the
+                                    <button
+                                        type="button"
+                                        class="font-medium text-primary hover:underline"
+                                        @click="activeTab = 'orders'"
+                                    >
+                                        Pharmacy workflow</button
+                                    >.
+                                </p>
+                                <p
+                                    v-if="pharmacyOrders.length === 0"
+                                    class="mt-3 text-sm text-muted-foreground"
+                                >
+                                    No medications prescribed for this encounter
+                                    yet.
+                                </p>
+                                <div v-else class="mt-3 space-y-2">
+                                    <div
+                                        v-for="med in pharmacyOrders"
+                                        :key="med.id"
+                                        class="rounded-md border bg-muted/20 p-3"
+                                    >
+                                        <div
+                                            class="flex flex-wrap items-center justify-between gap-2"
+                                        >
+                                            <span class="text-sm font-medium">{{
+                                                med.medicationName ||
+                                                'Medication'
+                                            }}</span>
+                                            <Badge
+                                                :variant="
+                                                    pharmacyOrderStatusVariant(
+                                                        med.status,
+                                                    )
+                                                "
+                                                class="text-[10px]"
+                                                >{{
+                                                    formatEnumLabel(med.status)
+                                                }}</Badge
+                                            >
+                                        </div>
+                                        <p
+                                            v-if="med.dosageInstruction"
+                                            class="mt-1 text-sm"
+                                        >
+                                            {{ med.dosageInstruction }}
+                                        </p>
+                                        <p
+                                            class="mt-1 text-xs text-muted-foreground"
+                                        >
+                                            <span
+                                                v-if="
+                                                    pharmacyOrderQuantityLabel(
+                                                        med.quantityPrescribed,
+                                                    )
+                                                "
+                                                >Prescribed
+                                                {{
+                                                    pharmacyOrderQuantityLabel(
+                                                        med.quantityPrescribed,
+                                                    )
+                                                }}</span
+                                            >
+                                            <span v-if="med.quantityDispensed">
+                                                · Dispensed
+                                                {{
+                                                    pharmacyOrderQuantityLabel(
+                                                        med.quantityDispensed,
+                                                    )
+                                                }}</span
+                                            >
+                                            <span v-if="med.dispensedAt">
+                                                ·
+                                                {{
+                                                    formatDateTime(
+                                                        med.dispensedAt,
+                                                    )
+                                                }}</span
+                                            >
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="diagnoses" class="space-y-3">
+                            <div class="rounded-lg border bg-card p-4">
+                                <div
+                                    class="flex items-center justify-between gap-2"
+                                >
+                                    <p class="text-sm font-medium">
+                                        Encounter diagnoses
+                                    </p>
+                                    <Button
+                                        v-if="canManageDiagnoses"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-8 gap-1.5"
+                                        @click="encounterDiagnoses.openDialog()"
+                                    >
+                                        <AppIcon
+                                            name="plus"
+                                            class="size-3.5"
+                                        />Add diagnosis
+                                    </Button>
+                                </div>
+                                <p
+                                    v-if="diagnoses.length === 0"
+                                    class="mt-2 text-sm text-muted-foreground"
+                                >
+                                    No diagnoses recorded for this encounter
+                                    yet.
+                                </p>
+                                <div v-else class="mt-3 space-y-2">
+                                    <div
+                                        v-for="diagnosis in diagnoses"
+                                        :key="diagnosis.id"
+                                        class="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2"
+                                    >
+                                        <div
+                                            class="flex flex-wrap items-center gap-2 text-sm"
+                                        >
+                                            <Badge
+                                                :variant="
+                                                    diagnosis.diagnosisType ===
+                                                    'primary'
+                                                        ? 'default'
+                                                        : 'outline'
+                                                "
+                                                class="text-[10px]"
+                                            >
+                                                {{
+                                                    diagnosis.diagnosisType ===
+                                                    'primary'
+                                                        ? 'Primary'
+                                                        : 'Secondary'
+                                                }}
+                                            </Badge>
+                                            <span class="font-medium">{{
+                                                diagnosis.diagnosisCode
+                                            }}</span>
+                                            <span
+                                                v-if="
+                                                    diagnosis.diagnosisDescription
+                                                "
+                                                class="text-muted-foreground"
+                                                >{{
+                                                    diagnosis.diagnosisDescription
+                                                }}</span
+                                            >
+                                        </div>
+                                        <button
+                                            v-if="canManageDiagnoses"
+                                            type="button"
+                                            class="text-muted-foreground hover:text-destructive"
+                                            :aria-label="`Remove diagnosis ${diagnosis.diagnosisCode}`"
+                                            :disabled="
+                                                encounterDiagnoses.removingId
+                                                    .value === diagnosis.id
+                                            "
+                                            @click="
+                                                encounterDiagnoses.removeDiagnosis(
+                                                    diagnosis.id,
                                                 )
                                             "
                                         >
-                                            Billing charges
-                                        </Link>
+                                            <AppIcon name="x" class="size-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent
+                            v-if="showReferralsTab"
+                            value="referrals"
+                            class="space-y-3"
+                        >
+                            <div class="rounded-lg border bg-card p-4">
+                                <div
+                                    class="flex items-center justify-between gap-2"
+                                >
+                                    <p class="text-sm font-medium">
+                                        Referrals for this visit
+                                    </p>
+                                    <Button
+                                        v-if="canManageReferrals"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-8 gap-1.5"
+                                        @click="referralSheetOpen = true"
+                                    >
+                                        <AppIcon
+                                            name="arrow-up-right"
+                                            class="size-3.5"
+                                        />Manage referrals
                                     </Button>
                                 </div>
-                        </div>
-
-                        <div
-                            v-if="!ordering.canShowCare.value"
-                            class="rounded-lg border bg-card px-4 py-6 text-center text-sm text-muted-foreground"
-                        >
-                            No orders placed for this encounter yet.
-                        </div>
-                        <section
-                            v-else
-                                    class="space-y-3 rounded-lg border bg-card p-4 shadow-sm"
+                                <div
+                                    v-if="referrals.isPending.value"
+                                    class="mt-3 space-y-2"
                                 >
+                                    <Skeleton class="h-14 w-full" />
+                                    <Skeleton class="h-14 w-full" />
+                                </div>
+                                <Alert
+                                    v-else-if="referrals.isError.value"
+                                    variant="destructive"
+                                    class="mt-3"
+                                >
+                                    <AlertTitle
+                                        >Unable to load referrals</AlertTitle
+                                    >
+                                    <AlertDescription>{{
+                                        referrals.error.value?.message ??
+                                        'Unknown error.'
+                                    }}</AlertDescription>
+                                </Alert>
+                                <p
+                                    v-else-if="
+                                        !referrals.data.value?.data.length
+                                    "
+                                    class="mt-2 text-sm text-muted-foreground"
+                                >
+                                    No referrals for this visit yet.
+                                </p>
+                                <div v-else class="mt-3 space-y-2">
                                     <div
-                                        v-if="
-                                            !ordering.visibleCareSummaries.value
-                                                .length
-                                        "
-                                        class="rounded-lg bg-muted/25 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/30"
+                                        v-for="referral in referrals.data.value
+                                            .data"
+                                        :key="referral.id"
+                                        class="rounded-md border bg-muted/20 px-3 py-2"
                                     >
-                                        No orders linked yet. Use the command
-                                        center above to place the first order.
-                                    </div>
-                                    <EncounterWorkflowCareStreams
-                                        v-else
-                                        v-model="ordering.careTab.value"
-                                        :visible-summaries="
-                                            ordering.visibleCareSummaries.value
-                                        "
-                                        :laboratory-orders="laboratoryOrders"
-                                        :pharmacy-orders="pharmacyOrders"
-                                        :radiology-orders="radiologyOrders"
-                                        :theatre-procedures="theatreProcedures"
-                                        :laboratory-loading="
-                                            workspace.isPending.value
-                                        "
-                                        :pharmacy-loading="
-                                            workspace.isPending.value
-                                        "
-                                        :radiology-loading="
-                                            workspace.isPending.value
-                                        "
-                                        :theatre-loading="
-                                            workspace.isPending.value
-                                        "
-                                        :laboratory-error="null"
-                                        :pharmacy-error="null"
-                                        :radiology-error="null"
-                                        :theatre-error="null"
-                                        :can-open-laboratory-workflow="
-                                            ordering.canOpenLaboratoryWorkflow
-                                                .value
-                                        "
-                                        :can-open-pharmacy-workflow="
-                                            ordering.canOpenPharmacyWorkflow
-                                                .value
-                                        "
-                                        :can-open-radiology-workflow="
-                                            ordering.canOpenRadiologyWorkflow
-                                                .value
-                                        "
-                                        :can-open-theatre-workflow="
-                                            ordering.canOpenTheatreWorkflow
-                                                .value
-                                        "
-                                        :can-create-laboratory-orders="
-                                            ordering.canCreateLaboratoryOrders
-                                                .value
-                                        "
-                                        :can-create-pharmacy-orders="
-                                            ordering.canCreatePharmacyOrders
-                                                .value
-                                        "
-                                        :can-create-radiology-orders="
-                                            ordering.canCreateRadiologyOrders
-                                                .value
-                                        "
-                                        :can-create-theatre-procedures="
-                                            ordering.canCreateTheatreProcedures
-                                                .value
-                                        "
-                                        :can-use-inline-orders="
-                                            ordering.canUseInlineOrders()
-                                        "
-                                        :context-create-href="
-                                            ordering.contextCreateHref
-                                        "
-                                        :format-date-time="formatDateTime"
-                                        @lifecycle="
-                                            ordering.openLifecycleDialog(
-                                                $event.kind,
-                                                $event.id,
-                                                $event.action,
-                                                $event.defaultReason,
-                                            )
-                                        "
-                                        @open-inline-order="
-                                            openInlineOrder(
-                                                $event.type,
-                                                $event.linkage,
-                                            )
-                                        "
-                                        @view-lab-result="openLabResultReview($event)"
-                                    />
-                                </section>
-                    </TabsContent>
-
-                    <TabsContent value="results" class="space-y-3">
-                        <p class="text-xs text-muted-foreground">
-                            Reported lab results and imaging reports for this encounter. Results are the narrative summary entered by the lab/imaging team; order status and pending items are on the Orders tab.
-                        </p>
-                        <div
-                            v-if="!hasAnyResults"
-                            class="rounded-lg border bg-card px-4 py-6 text-center text-sm text-muted-foreground"
-                        >
-                            No results reported yet.
-                            <span v-if="pendingResultCount > 0">{{ pendingResultCount }} order(s) still pending on the Orders tab.</span>
-                        </div>
-                        <template v-else>
-                            <div v-if="resultedLabOrders.length" class="rounded-lg border bg-card p-4">
-                                <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Laboratory</p>
-                                <div class="mt-2 space-y-2">
-                                    <div v-for="order in resultedLabOrders" :key="order.id" class="rounded-md border bg-muted/20 p-3">
-                                        <div class="flex flex-wrap items-center justify-between gap-2">
-                                            <span class="text-sm font-medium">{{ order.testName || order.orderNumber || 'Lab test' }}</span>
-                                            <div class="flex items-center gap-2">
-                                                <Badge :variant="laboratoryOrderStatusVariant(order.status)" class="text-[10px]">{{ formatEnumLabel(order.status) }}</Badge>
-                                                <span v-if="order.resultedAt" class="text-xs text-muted-foreground">{{ formatDateTime(order.resultedAt) }}</span>
+                                        <div
+                                            class="flex flex-wrap items-center justify-between gap-2"
+                                        >
+                                            <div
+                                                class="flex flex-wrap items-center gap-2 text-sm"
+                                            >
+                                                <span class="font-medium">{{
+                                                    referral.targetDepartment ||
+                                                    referral.targetFacilityName ||
+                                                    'Referral'
+                                                }}</span>
+                                                <Badge
+                                                    variant="outline"
+                                                    class="text-[10px]"
+                                                    >{{
+                                                        referral.referralType ||
+                                                        '—'
+                                                    }}</Badge
+                                                >
+                                                <Badge
+                                                    v-if="referral.priority"
+                                                    :variant="
+                                                        referral.priority ===
+                                                        'critical'
+                                                            ? 'destructive'
+                                                            : 'secondary'
+                                                    "
+                                                    class="text-[10px]"
+                                                    >{{
+                                                        referral.priority
+                                                    }}</Badge
+                                                >
                                             </div>
+                                            <Badge
+                                                variant="secondary"
+                                                class="text-[10px]"
+                                                >{{
+                                                    referral.status || '—'
+                                                }}</Badge
+                                            >
                                         </div>
-                                        <div class="mt-2">
-                                            <LabResultSummaryPopover
-                                                :result-summary="order.resultSummary"
-                                                show-view-full
-                                                @view-full-result="openLabResultReview(order.id)"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div v-if="reportedRadiologyOrders.length" class="rounded-lg border bg-card p-4">
-                                <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Imaging</p>
-                                <div class="mt-2 space-y-2">
-                                    <div v-for="order in reportedRadiologyOrders" :key="order.id" class="rounded-md border bg-muted/20 p-3">
-                                        <div class="flex flex-wrap items-center justify-between gap-2">
-                                            <span class="text-sm font-medium">{{ order.studyDescription || order.orderNumber || 'Imaging study' }}</span>
-                                            <div class="flex items-center gap-2">
-                                                <Badge :variant="radiologyOrderStatusVariant(order.status)" class="text-[10px]">{{ formatEnumLabel(order.status) }}</Badge>
-                                                <span v-if="order.completedAt" class="text-xs text-muted-foreground">{{ formatDateTime(order.completedAt) }}</span>
-                                            </div>
-                                        </div>
-                                        <p class="mt-1 text-sm whitespace-pre-line">{{ order.reportSummary }}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
-                    </TabsContent>
-
-                    <TabsContent value="medications" class="space-y-3">
-                        <div class="rounded-lg border bg-card p-4">
-                            <p class="text-sm font-medium">Medications</p>
-                            <p class="mt-0.5 text-xs text-muted-foreground">
-                                Prescriptions and dispensing for this encounter. Manage in the
-                                <button type="button" class="font-medium text-primary hover:underline" @click="activeTab = 'orders'">Pharmacy workflow</button>.
-                            </p>
-                            <p v-if="pharmacyOrders.length === 0" class="mt-3 text-sm text-muted-foreground">No medications prescribed for this encounter yet.</p>
-                            <div v-else class="mt-3 space-y-2">
-                                <div v-for="med in pharmacyOrders" :key="med.id" class="rounded-md border bg-muted/20 p-3">
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <span class="text-sm font-medium">{{ med.medicationName || 'Medication' }}</span>
-                                        <Badge :variant="pharmacyOrderStatusVariant(med.status)" class="text-[10px]">{{ formatEnumLabel(med.status) }}</Badge>
-                                    </div>
-                                    <p v-if="med.dosageInstruction" class="mt-1 text-sm">{{ med.dosageInstruction }}</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">
-                                        <span v-if="pharmacyOrderQuantityLabel(med.quantityPrescribed)">Prescribed {{ pharmacyOrderQuantityLabel(med.quantityPrescribed) }}</span>
-                                        <span v-if="med.quantityDispensed"> · Dispensed {{ pharmacyOrderQuantityLabel(med.quantityDispensed) }}</span>
-                                        <span v-if="med.dispensedAt"> · {{ formatDateTime(med.dispensedAt) }}</span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </TabsContent>
-
-                    <TabsContent value="diagnoses" class="space-y-3">
-                        <div class="rounded-lg border bg-card p-4">
-                            <div class="flex items-center justify-between gap-2">
-                                <p class="text-sm font-medium">Encounter diagnoses</p>
-                                <Button
-                                    v-if="canManageDiagnoses"
-                                    size="sm"
-                                    variant="outline"
-                                    class="h-8 gap-1.5"
-                                    @click="encounterDiagnoses.openDialog()"
-                                >
-                                    <AppIcon name="plus" class="size-3.5" />Add diagnosis
-                                </Button>
-                            </div>
-                            <p v-if="diagnoses.length === 0" class="mt-2 text-sm text-muted-foreground">
-                                No diagnoses recorded for this encounter yet.
-                            </p>
-                            <div v-else class="mt-3 space-y-2">
-                                <div
-                                    v-for="diagnosis in diagnoses"
-                                    :key="diagnosis.id"
-                                    class="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2"
-                                >
-                                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                                        <Badge :variant="diagnosis.diagnosisType === 'primary' ? 'default' : 'outline'" class="text-[10px]">
-                                            {{ diagnosis.diagnosisType === 'primary' ? 'Primary' : 'Secondary' }}
-                                        </Badge>
-                                        <span class="font-medium">{{ diagnosis.diagnosisCode }}</span>
-                                        <span v-if="diagnosis.diagnosisDescription" class="text-muted-foreground">{{ diagnosis.diagnosisDescription }}</span>
-                                    </div>
-                                    <button
-                                        v-if="canManageDiagnoses"
-                                        type="button"
-                                        class="text-muted-foreground hover:text-destructive"
-                                        :aria-label="`Remove diagnosis ${diagnosis.diagnosisCode}`"
-                                        :disabled="encounterDiagnoses.removingId.value === diagnosis.id"
-                                        @click="encounterDiagnoses.removeDiagnosis(diagnosis.id)"
-                                    >
-                                        <AppIcon name="x" class="size-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </TabsContent>
-
-                    <TabsContent v-if="showReferralsTab" value="referrals" class="space-y-3">
-                        <div class="rounded-lg border bg-card p-4">
-                            <div class="flex items-center justify-between gap-2">
-                                <p class="text-sm font-medium">Referrals for this visit</p>
-                                <Button
-                                    v-if="canManageReferrals"
-                                    size="sm"
-                                    variant="outline"
-                                    class="h-8 gap-1.5"
-                                    @click="referralSheetOpen = true"
-                                >
-                                    <AppIcon name="arrow-up-right" class="size-3.5" />Manage referrals
-                                </Button>
-                            </div>
-                            <div v-if="referrals.isPending.value" class="mt-3 space-y-2">
-                                <Skeleton class="h-14 w-full" />
-                                <Skeleton class="h-14 w-full" />
-                            </div>
-                            <Alert v-else-if="referrals.isError.value" variant="destructive" class="mt-3">
-                                <AlertTitle>Unable to load referrals</AlertTitle>
-                                <AlertDescription>{{ referrals.error.value?.message ?? 'Unknown error.' }}</AlertDescription>
-                            </Alert>
-                            <p v-else-if="!referrals.data.value?.data.length" class="mt-2 text-sm text-muted-foreground">
-                                No referrals for this visit yet.
-                            </p>
-                            <div v-else class="mt-3 space-y-2">
-                                <div
-                                    v-for="referral in referrals.data.value.data"
-                                    :key="referral.id"
-                                    class="rounded-md border bg-muted/20 px-3 py-2"
-                                >
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <div class="flex flex-wrap items-center gap-2 text-sm">
-                                            <span class="font-medium">{{ referral.targetDepartment || referral.targetFacilityName || 'Referral' }}</span>
-                                            <Badge variant="outline" class="text-[10px]">{{ referral.referralType || '—' }}</Badge>
-                                            <Badge v-if="referral.priority" :variant="referral.priority === 'critical' ? 'destructive' : 'secondary'" class="text-[10px]">{{ referral.priority }}</Badge>
-                                        </div>
-                                        <Badge variant="secondary" class="text-[10px]">{{ referral.status || '—' }}</Badge>
-                                    </div>
-                                    <p v-if="referral.referralReason" class="mt-1 text-xs text-muted-foreground">{{ referral.referralReason }}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </TabsContent>
-
-                    <TabsContent v-if="canViewCharges" value="charges" class="space-y-3">
-                        <div class="rounded-lg border bg-card p-4">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <p class="text-sm font-medium">Charges for this visit</p>
-                                <span v-if="charges.data.value" class="text-sm font-semibold tabular-nums">
-                                    Total: {{ chargesCurrency }} {{ chargesTotal.toLocaleString() }}
-                                </span>
-                            </div>
-                            <p class="mt-0.5 text-xs text-muted-foreground">
-                                Billable services captured on this encounter, priced from the service catalog.
-                            </p>
-                            <div v-if="charges.isPending.value" class="mt-3 space-y-2">
-                                <Skeleton class="h-12 w-full" />
-                                <Skeleton class="h-12 w-full" />
-                            </div>
-                            <Alert v-else-if="charges.isError.value" variant="destructive" class="mt-3">
-                                <AlertTitle>Unable to load charges</AlertTitle>
-                                <AlertDescription>{{ charges.error.value?.message ?? 'Unknown error.' }}</AlertDescription>
-                            </Alert>
-                            <p v-else-if="!charges.data.value?.data.length" class="mt-2 text-sm text-muted-foreground">
-                                No billable services captured for this encounter yet.
-                            </p>
-                            <div v-else class="mt-3 space-y-2">
-                                <div
-                                    v-for="charge in charges.data.value.data"
-                                    :key="charge.id"
-                                    class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2"
-                                >
-                                    <div class="min-w-0">
-                                        <p class="text-sm font-medium">{{ charge.serviceName }}</p>
-                                        <p class="text-xs text-muted-foreground">
-                                            {{ formatEnumLabel(charge.serviceType) }}
-                                            <span v-if="charge.serviceCode">· {{ charge.serviceCode }}</span>
-                                            <span v-if="charge.quantity && charge.quantity !== 1"> · ×{{ charge.quantity }}</span>
+                                        <p
+                                            v-if="referral.referralReason"
+                                            class="mt-1 text-xs text-muted-foreground"
+                                        >
+                                            {{ referral.referralReason }}
                                         </p>
                                     </div>
-                                    <div class="flex shrink-0 items-center gap-2">
-                                        <Badge v-if="charge.alreadyInvoiced" variant="secondary" class="text-[10px]">
-                                            Invoiced{{ charge.invoiceNumber ? ` · ${charge.invoiceNumber}` : '' }}
-                                        </Badge>
-                                        <Badge v-else variant="outline" class="text-[10px]">Pending</Badge>
-                                        <Badge v-if="charge.pricingStatus !== 'priced'" variant="destructive" class="text-[10px]">No price</Badge>
-                                        <span class="text-sm font-semibold tabular-nums">{{ charge.currencyCode }} {{ Number(charge.lineTotal).toLocaleString() }}</span>
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent
+                            v-if="canViewCharges"
+                            value="charges"
+                            class="space-y-3"
+                        >
+                            <div class="rounded-lg border bg-card p-4">
+                                <div
+                                    class="flex flex-wrap items-center justify-between gap-2"
+                                >
+                                    <p class="text-sm font-medium">
+                                        Charges for this visit
+                                    </p>
+                                    <span
+                                        v-if="charges.data.value"
+                                        class="text-sm font-semibold tabular-nums"
+                                    >
+                                        Total: {{ chargesCurrency }}
+                                        {{ chargesTotal.toLocaleString() }}
+                                    </span>
+                                </div>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    Billable services captured on this
+                                    encounter, priced from the service catalog.
+                                </p>
+                                <div
+                                    v-if="charges.isPending.value"
+                                    class="mt-3 space-y-2"
+                                >
+                                    <Skeleton class="h-12 w-full" />
+                                    <Skeleton class="h-12 w-full" />
+                                </div>
+                                <Alert
+                                    v-else-if="charges.isError.value"
+                                    variant="destructive"
+                                    class="mt-3"
+                                >
+                                    <AlertTitle
+                                        >Unable to load charges</AlertTitle
+                                    >
+                                    <AlertDescription>{{
+                                        charges.error.value?.message ??
+                                        'Unknown error.'
+                                    }}</AlertDescription>
+                                </Alert>
+                                <p
+                                    v-else-if="!charges.data.value?.data.length"
+                                    class="mt-2 text-sm text-muted-foreground"
+                                >
+                                    No billable services captured for this
+                                    encounter yet.
+                                </p>
+                                <div v-else class="mt-3 space-y-2">
+                                    <div
+                                        v-for="charge in charges.data.value
+                                            .data"
+                                        :key="charge.id"
+                                        class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2"
+                                    >
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-medium">
+                                                {{ charge.serviceName }}
+                                            </p>
+                                            <p
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                {{
+                                                    formatEnumLabel(
+                                                        charge.serviceType,
+                                                    )
+                                                }}
+                                                <span v-if="charge.serviceCode"
+                                                    >·
+                                                    {{
+                                                        charge.serviceCode
+                                                    }}</span
+                                                >
+                                                <span
+                                                    v-if="
+                                                        charge.quantity &&
+                                                        charge.quantity !== 1
+                                                    "
+                                                >
+                                                    · ×{{
+                                                        charge.quantity
+                                                    }}</span
+                                                >
+                                            </p>
+                                        </div>
+                                        <div
+                                            class="flex shrink-0 items-center gap-2"
+                                        >
+                                            <Badge
+                                                v-if="charge.alreadyInvoiced"
+                                                variant="secondary"
+                                                class="text-[10px]"
+                                            >
+                                                Invoiced{{
+                                                    charge.invoiceNumber
+                                                        ? ` · ${charge.invoiceNumber}`
+                                                        : ''
+                                                }}
+                                            </Badge>
+                                            <Badge
+                                                v-else
+                                                variant="outline"
+                                                class="text-[10px]"
+                                                >Pending</Badge
+                                            >
+                                            <Badge
+                                                v-if="
+                                                    charge.pricingStatus !==
+                                                    'priced'
+                                                "
+                                                variant="destructive"
+                                                class="text-[10px]"
+                                                >No price</Badge
+                                            >
+                                            <span
+                                                class="text-sm font-semibold tabular-nums"
+                                                >{{ charge.currencyCode }}
+                                                {{
+                                                    Number(
+                                                        charge.lineTotal,
+                                                    ).toLocaleString()
+                                                }}</span
+                                            >
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </TabsContent>
-                </template>
-            </div>
+                        </TabsContent>
+                    </template>
+                </div>
             </Tabs>
 
             <EncounterHistorySheet
@@ -1434,7 +2138,12 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                 v-model:open="reviewLabSheetOpen"
                 :order="reviewLabOrderQuery.data.value?.data ?? null"
                 :loading="reviewLabOrderQuery.isPending.value"
-                :load-error="reviewLabOrderQuery.isError.value ? ((reviewLabOrderQuery.error.value as Error | null)?.message ?? 'Unable to load this result.') : null"
+                :load-error="
+                    reviewLabOrderQuery.isError.value
+                        ? ((reviewLabOrderQuery.error.value as Error | null)
+                              ?.message ?? 'Unable to load this result.')
+                        : null
+                "
                 :can-create="false"
             />
 
@@ -1457,7 +2166,9 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
 
             <EncounterCloseChecklistDialog
                 :open="encounterClose.dialogOpen.value"
-                :readiness="encounterClose.blockedReadiness.value ?? closeReadiness"
+                :readiness="
+                    encounterClose.blockedReadiness.value ?? closeReadiness
+                "
                 :reason="encounterClose.reason.value"
                 :disposition="encounterClose.disposition.value"
                 :disposition-notes="encounterClose.dispositionNotes.value"
@@ -1481,48 +2192,81 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
 
             <Dialog
                 :open="encounterDiagnoses.dialogOpen.value"
-                @update:open="(value) => (value ? undefined : encounterDiagnoses.closeDialog())"
+                @update:open="
+                    (value) =>
+                        value ? undefined : encounterDiagnoses.closeDialog()
+                "
             >
                 <DialogContent class="max-w-md">
                     <DialogHeader>
                         <DialogTitle>Add diagnosis</DialogTitle>
                         <DialogDescription>
-                            Record a diagnosis for this encounter. Adding a new primary diagnosis demotes the existing one to secondary.
+                            Record a diagnosis for this encounter. Adding a new
+                            primary diagnosis demotes the existing one to
+                            secondary.
                         </DialogDescription>
                     </DialogHeader>
                     <div class="grid gap-4">
                         <div class="grid gap-2">
-                            <Label for="encounter-diagnosis-code">Diagnosis code</Label>
-                            <Input id="encounter-diagnosis-code" v-model="encounterDiagnoses.form.diagnosisCode" placeholder="e.g. R52" />
+                            <Label for="encounter-diagnosis-code"
+                                >Diagnosis code</Label
+                            >
+                            <Input
+                                id="encounter-diagnosis-code"
+                                v-model="encounterDiagnoses.form.diagnosisCode"
+                                placeholder="e.g. R52"
+                            />
                         </div>
                         <div class="grid gap-2">
-                            <Label for="encounter-diagnosis-description">Description</Label>
-                            <Input id="encounter-diagnosis-description" v-model="encounterDiagnoses.form.diagnosisDescription" placeholder="Optional" />
+                            <Label for="encounter-diagnosis-description"
+                                >Description</Label
+                            >
+                            <Input
+                                id="encounter-diagnosis-description"
+                                v-model="
+                                    encounterDiagnoses.form.diagnosisDescription
+                                "
+                                placeholder="Optional"
+                            />
                         </div>
                         <div class="grid gap-2">
                             <Label for="encounter-diagnosis-type">Type</Label>
                             <select
                                 id="encounter-diagnosis-type"
                                 v-model="encounterDiagnoses.form.diagnosisType"
-                                class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <option value="secondary">Secondary</option>
                                 <option value="primary">Primary</option>
                             </select>
                         </div>
-                        <p v-if="encounterDiagnoses.error.value" class="text-sm text-destructive">
+                        <p
+                            v-if="encounterDiagnoses.error.value"
+                            class="text-sm text-destructive"
+                        >
                             {{ encounterDiagnoses.error.value }}
                         </p>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" :disabled="encounterDiagnoses.submitting.value" @click="encounterDiagnoses.closeDialog()">
+                        <Button
+                            variant="outline"
+                            :disabled="encounterDiagnoses.submitting.value"
+                            @click="encounterDiagnoses.closeDialog()"
+                        >
                             Cancel
                         </Button>
                         <Button
-                            :disabled="encounterDiagnoses.submitting.value || !encounterDiagnoses.form.diagnosisCode.trim()"
+                            :disabled="
+                                encounterDiagnoses.submitting.value ||
+                                !encounterDiagnoses.form.diagnosisCode.trim()
+                            "
                             @click="void encounterDiagnoses.submitDialog()"
                         >
-                            {{ encounterDiagnoses.submitting.value ? 'Saving...' : 'Add diagnosis' }}
+                            {{
+                                encounterDiagnoses.submitting.value
+                                    ? 'Saving...'
+                                    : 'Add diagnosis'
+                            }}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

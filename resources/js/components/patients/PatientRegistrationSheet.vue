@@ -7,8 +7,21 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -23,7 +36,11 @@ import {
 import { type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { isApiClientError } from '@/lib/apiClient';
 import { isLikelyPatientOfflineFailure } from '@/lib/offlinePatientRegistration';
-import { deriveAgeFromDateOfBirth, deriveDateOfBirthFromAge, formatAgeLabel } from '@/lib/patientAge';
+import {
+    deriveAgeFromDateOfBirth,
+    deriveDateOfBirthFromAge,
+    formatAgeLabel,
+} from '@/lib/patientAge';
 import { notifySuccess } from '@/lib/notify';
 
 /**
@@ -106,10 +123,16 @@ const debouncedIdentity = refDebounced(identitySource, 400);
 const duplicateCheck = usePatientDuplicateCheck(debouncedIdentity);
 
 const countryCode = computed(() => form.countryCode);
-const { profile: countryProfile, regionOptions, districtOptionsForRegion } = usePatientCountryProfile(countryCode);
+const {
+    profile: countryProfile,
+    regionOptions,
+    districtOptionsForRegion,
+} = usePatientCountryProfile(countryCode);
 const districtOptions = computed(() => districtOptionsForRegion(form.region));
 const districtPlaceholder = computed(() =>
-    form.region.trim() ? countryProfile.value.districtPlaceholder : `Select ${countryProfile.value.regionLabel.toLowerCase()} first`,
+    form.region.trim()
+        ? countryProfile.value.districtPlaceholder
+        : `Select ${countryProfile.value.regionLabel.toLowerCase()} first`,
 );
 
 watch(
@@ -137,14 +160,18 @@ const derivedAge = computed(() => {
         const ageYears = String(form.ageYears ?? '').trim();
         const ageMonths = String(form.ageMonths ?? '').trim();
         if (ageYears === '' && ageMonths === '') return null;
-        return { years: Number.parseInt(ageYears, 10) || 0, months: Number.parseInt(ageMonths, 10) || 0 };
+        return {
+            years: Number.parseInt(ageYears, 10) || 0,
+            months: Number.parseInt(ageMonths, 10) || 0,
+        };
     }
     return deriveAgeFromDateOfBirth(form.dateOfBirth);
 });
 
 watch([() => form.ageYears, () => form.ageMonths], () => {
     if (dobMode.value !== 'estimated') return;
-    form.dateOfBirth = deriveDateOfBirthFromAge(form.ageYears, form.ageMonths) ?? '';
+    form.dateOfBirth =
+        deriveDateOfBirthFromAge(form.ageYears, form.ageMonths) ?? '';
 });
 
 function setDobMode(mode: string | number): void {
@@ -212,8 +239,11 @@ const canSubmit = computed(
         // The duplicate check can't have run while offline — its last
         // result may be stale (from before the connection dropped) and
         // must not gate an offline save.
-        (!isOnline.value || duplicateCheck.data.value?.severity !== 'hard_block') &&
-        (!isOnline.value || !requiresWarningAcknowledgment.value || warningAcknowledged.value) &&
+        (!isOnline.value ||
+            duplicateCheck.data.value?.severity !== 'hard_block') &&
+        (!isOnline.value ||
+            !requiresWarningAcknowledgment.value ||
+            warningAcknowledged.value) &&
         !registration.isPending.value,
 );
 
@@ -231,12 +261,19 @@ function submitErrorMessage(): string | null {
 
 async function submitOffline(): Promise<void> {
     try {
-        const record = await saveOfflineRegistration(buildPatientRegistrationPayload(form));
-        notifySuccess(`Patient saved offline as ${record.temporaryPatientNumber}. It will upload automatically once you're back online.`);
+        const record = await saveOfflineRegistration(
+            buildPatientRegistrationPayload(form),
+        );
+        notifySuccess(
+            `Patient saved offline as ${record.temporaryPatientNumber}. It will upload automatically once you're back online.`,
+        );
         open.value = false;
         resetForm();
     } catch (error) {
-        offlineSaveError.value = error instanceof Error ? error.message : 'Unable to save this patient offline.';
+        offlineSaveError.value =
+            error instanceof Error
+                ? error.message
+                : 'Unable to save this patient offline.';
     }
 }
 
@@ -287,194 +324,386 @@ function resetForm(): void {
 <template>
     <Sheet :open="open" @update:open="(value) => (open = value)">
         <SheetContent side="right" variant="form" size="2xl">
-            <SheetHeader
-                class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80"
-            >
-                <SheetTitle>Register Patient</SheetTitle>
-                <SheetDescription>
-                    {{ isOnline ? 'Duplicate checks run against the server as you type.' : "You're offline — this patient will be saved locally and uploaded once you're back online." }}
-                </SheetDescription>
-            </SheetHeader>
+            <form class="contents" @submit.prevent="submit">
+                <SheetHeader
+                    class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                >
+                    <SheetTitle>Register Patient</SheetTitle>
+                    <SheetDescription>
+                        {{
+                            isOnline
+                                ? 'Duplicate checks run against the server as you type.'
+                                : "You're offline — this patient will be saved locally and uploaded once you're back online."
+                        }}
+                    </SheetDescription>
+                </SheetHeader>
 
-            <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-                <Alert v-if="!isOnline" class="border-amber-500/40 bg-amber-500/10">
-                    <AlertTitle>Offline</AlertTitle>
-                    <AlertDescription>Duplicate checks are unavailable right now. Registering will queue this patient for upload when your connection returns.</AlertDescription>
-                </Alert>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="space-y-1.5">
-                        <Label for="reg-first-name">First name</Label>
-                        <Input id="reg-first-name" v-model="form.firstName" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-last-name">Last name</Label>
-                        <Input id="reg-last-name" v-model="form.lastName" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-middle-name">Middle name (optional)</Label>
-                        <Input id="reg-middle-name" v-model="form.middleName" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-gender">Gender</Label>
-                        <Select v-model="form.gender">
-                            <SelectTrigger id="reg-gender" class="h-9 w-full bg-background">
-                                <SelectValue placeholder="Select gender" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="female">Female</SelectItem>
-                                <SelectItem value="male">Male</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
-                                <SelectItem value="unknown">Unknown</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div class="col-span-2 space-y-1.5 rounded-lg border bg-muted/20 p-3">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <Label class="text-sm">
-                                Date of birth
-                                <span v-if="derivedAge" class="ml-1.5 font-normal text-muted-foreground">
-                                    (≈ {{ formatAgeLabel(derivedAge) }} old)
-                                </span>
-                            </Label>
-                            <Tabs :model-value="dobMode" @update:model-value="setDobMode">
-                                <TabsList class="h-8">
-                                    <TabsTrigger value="estimated" class="h-6.5 px-2.5 text-xs">Estimated age</TabsTrigger>
-                                    <TabsTrigger value="exact" class="h-6.5 px-2.5 text-xs">Exact date</TabsTrigger>
-                                </TabsList>
-                            </Tabs>
-                        </div>
-
-                        <div v-if="dobMode === 'estimated'" class="grid grid-cols-2 gap-3">
-                            <div class="space-y-1.5">
-                                <Label for="reg-age-years" class="text-xs text-muted-foreground">Years</Label>
-                                <Input id="reg-age-years" v-model="form.ageYears" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 45" />
-                            </div>
-                            <div class="space-y-1.5">
-                                <Label for="reg-age-months" class="text-xs text-muted-foreground">Months</Label>
-                                <Input id="reg-age-months" v-model="form.ageMonths" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 6" />
-                            </div>
-                            <p class="col-span-2 text-xs text-muted-foreground">Enter years, months, or both — months only is fine for infants.</p>
-                        </div>
-                        <Input v-else id="reg-dob" v-model="form.dateOfBirth" type="date" :max="todayIsoDate" />
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <Label for="reg-phone">Phone</Label>
-                        <Input id="reg-phone" v-model="form.phone" placeholder="+255…" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-email">Email (optional)</Label>
-                        <Input id="reg-email" v-model="form.email" type="email" />
-                    </div>
-                    <div class="col-span-2 space-y-1.5">
-                        <Label for="reg-national-id">National ID (optional)</Label>
-                        <Input id="reg-national-id" v-model="form.nationalId" />
-                    </div>
-                    <div v-if="props.suggestedRegions.length > 0" class="col-span-2 flex flex-wrap items-center gap-1.5">
-                        <span class="text-xs text-muted-foreground">Common here:</span>
-                        <button
-                            v-for="region in props.suggestedRegions"
-                            :key="region"
-                            type="button"
-                            class="rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-accent"
-                            :class="form.region === region ? 'border-primary bg-primary/5 text-foreground' : 'text-muted-foreground'"
-                            @click="form.region = region"
+                <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                    <Alert
+                        v-if="!isOnline"
+                        class="border-amber-500/40 bg-amber-500/10"
+                    >
+                        <AlertTitle>Offline</AlertTitle>
+                        <AlertDescription
+                            >Duplicate checks are unavailable right now.
+                            Registering will queue this patient for upload when
+                            your connection returns.</AlertDescription
                         >
-                            {{ region }}
-                        </button>
-                    </div>
-                    <SearchableSelectField
-                        input-id="reg-region"
-                        v-model="form.region"
-                        :label="countryProfile.regionLabel"
-                        :options="regionOptions"
-                        :placeholder="countryProfile.regionPlaceholder"
-                        :search-placeholder="`Search ${countryProfile.regionLabel.toLowerCase()} or use a custom value`"
-                        :empty-text="`No ${countryProfile.regionLabel.toLowerCase()} suggestion found.`"
-                        :allow-custom-value="true"
-                    />
-                    <SearchableSelectField
-                        input-id="reg-district"
-                        v-model="form.district"
-                        :label="countryProfile.districtLabel"
-                        :options="districtOptions"
-                        :placeholder="districtPlaceholder"
-                        :search-placeholder="`Search ${countryProfile.districtLabel.toLowerCase()} or use a custom value`"
-                        :empty-text="`No ${countryProfile.districtLabel.toLowerCase()} suggestion found.`"
-                        :allow-custom-value="true"
-                        :disabled="!form.region.trim()"
-                    />
-                    <div class="col-span-2 space-y-1.5">
-                        <Label for="reg-address">{{ countryProfile.addressLabel }}</Label>
-                        <Textarea id="reg-address" v-model="form.addressLine" rows="2" :placeholder="countryProfile.addressPlaceholder" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-nok-name">Next of kin (optional)</Label>
-                        <Input id="reg-nok-name" v-model="form.nextOfKinName" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-nok-phone">Next of kin phone (optional)</Label>
-                        <Input id="reg-nok-phone" v-model="form.nextOfKinPhone" />
-                    </div>
-                </div>
+                    </Alert>
 
-                <div v-if="isOnline && duplicateCheck.data.value && duplicateCheck.data.value.severity !== 'none'" class="space-y-2">
-                    <Alert :variant="duplicateCheck.data.value.severity === 'hard_block' ? 'destructive' : 'default'">
-                        <AlertTitle class="flex items-center gap-2">
-                            {{ severityLabel[duplicateCheck.data.value.severity] }}
-                            <Badge variant="outline">{{ duplicateCheck.data.value.duplicates.length }} match(es)</Badge>
-                        </AlertTitle>
-                        <AlertDescription>
-                            <ul class="mt-1 space-y-1">
-                                <li v-for="match in duplicateCheck.data.value.duplicates" :key="match.id" class="flex items-center gap-1.5 text-xs">
-                                    <span>
-                                        {{ [match.firstName, match.lastName].filter(Boolean).join(' ') || 'Unnamed patient' }}
-                                        — {{ match.patientNumber ?? 'No MRN' }}
-                                        <span v-if="match.matchedFields?.length"> (matched: {{ match.matchedFields.join(', ') }})</span>
-                                    </span>
-                                    <a
-                                        v-if="match.id"
-                                        :href="`/patients/${match.id}/chart`"
-                                        target="_blank"
-                                        rel="noopener"
-                                        class="shrink-0 text-primary underline-offset-2 hover:underline"
-                                    >
-                                        View chart
-                                    </a>
-                                </li>
-                            </ul>
-                            <label
-                                v-if="requiresWarningAcknowledgment"
-                                for="reg-duplicate-acknowledge"
-                                class="mt-3 flex items-start gap-2 rounded-md border border-dashed px-2.5 py-2 text-xs"
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1.5">
+                            <Label for="reg-first-name">First name</Label>
+                            <Input
+                                id="reg-first-name"
+                                v-model="form.firstName"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="reg-last-name">Last name</Label>
+                            <Input id="reg-last-name" v-model="form.lastName" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="reg-middle-name"
+                                >Middle name (optional)</Label
                             >
-                                <Checkbox
-                                    id="reg-duplicate-acknowledge"
-                                    :checked="warningAcknowledged"
-                                    @update:checked="warningAcknowledged = $event === true"
-                                />
-                                <span>I've reviewed the match(es) above and confirm this is a different patient.</span>
-                            </label>
-                        </AlertDescription>
+                            <Input
+                                id="reg-middle-name"
+                                v-model="form.middleName"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="reg-gender">Gender</Label>
+                            <Select v-model="form.gender">
+                                <SelectTrigger
+                                    id="reg-gender"
+                                    class="h-9 w-full bg-background"
+                                >
+                                    <SelectValue placeholder="Select gender" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="female"
+                                        >Female</SelectItem
+                                    >
+                                    <SelectItem value="male">Male</SelectItem>
+                                    <SelectItem value="other">Other</SelectItem>
+                                    <SelectItem value="unknown"
+                                        >Unknown</SelectItem
+                                    >
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div
+                            class="col-span-2 space-y-1.5 rounded-lg border bg-muted/20 p-3"
+                        >
+                            <div
+                                class="flex flex-wrap items-center justify-between gap-2"
+                            >
+                                <Label class="text-sm">
+                                    Date of birth
+                                    <span
+                                        v-if="derivedAge"
+                                        class="ml-1.5 font-normal text-muted-foreground"
+                                    >
+                                        (≈ {{ formatAgeLabel(derivedAge) }} old)
+                                    </span>
+                                </Label>
+                                <Tabs
+                                    :model-value="dobMode"
+                                    @update:model-value="setDobMode"
+                                >
+                                    <TabsList class="h-8">
+                                        <TabsTrigger
+                                            value="estimated"
+                                            class="h-6.5 px-2.5 text-xs"
+                                            >Estimated age</TabsTrigger
+                                        >
+                                        <TabsTrigger
+                                            value="exact"
+                                            class="h-6.5 px-2.5 text-xs"
+                                            >Exact date</TabsTrigger
+                                        >
+                                    </TabsList>
+                                </Tabs>
+                            </div>
+
+                            <div
+                                v-if="dobMode === 'estimated'"
+                                class="grid grid-cols-2 gap-3"
+                            >
+                                <div class="space-y-1.5">
+                                    <Label
+                                        for="reg-age-years"
+                                        class="text-xs text-muted-foreground"
+                                        >Years</Label
+                                    >
+                                    <Input
+                                        id="reg-age-years"
+                                        v-model="form.ageYears"
+                                        type="text"
+                                        inputmode="numeric"
+                                        pattern="[0-9]*"
+                                        placeholder="e.g. 45"
+                                    />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <Label
+                                        for="reg-age-months"
+                                        class="text-xs text-muted-foreground"
+                                        >Months</Label
+                                    >
+                                    <Input
+                                        id="reg-age-months"
+                                        v-model="form.ageMonths"
+                                        type="text"
+                                        inputmode="numeric"
+                                        pattern="[0-9]*"
+                                        placeholder="e.g. 6"
+                                    />
+                                </div>
+                                <p
+                                    class="col-span-2 text-xs text-muted-foreground"
+                                >
+                                    Enter years, months, or both — months only
+                                    is fine for infants.
+                                </p>
+                            </div>
+                            <Input
+                                v-else
+                                id="reg-dob"
+                                v-model="form.dateOfBirth"
+                                type="date"
+                                :max="todayIsoDate"
+                            />
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label for="reg-phone">Phone</Label>
+                            <Input
+                                id="reg-phone"
+                                v-model="form.phone"
+                                placeholder="+255…"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="reg-email">Email (optional)</Label>
+                            <Input
+                                id="reg-email"
+                                v-model="form.email"
+                                type="email"
+                            />
+                        </div>
+                        <div class="col-span-2 space-y-1.5">
+                            <Label for="reg-national-id"
+                                >National ID (optional)</Label
+                            >
+                            <Input
+                                id="reg-national-id"
+                                v-model="form.nationalId"
+                            />
+                        </div>
+                        <div
+                            v-if="props.suggestedRegions.length > 0"
+                            class="col-span-2 flex flex-wrap items-center gap-1.5"
+                        >
+                            <span class="text-xs text-muted-foreground"
+                                >Common here:</span
+                            >
+                            <button
+                                v-for="region in props.suggestedRegions"
+                                :key="region"
+                                type="button"
+                                class="rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-accent"
+                                :class="
+                                    form.region === region
+                                        ? 'border-primary bg-primary/5 text-foreground'
+                                        : 'text-muted-foreground'
+                                "
+                                @click="form.region = region"
+                            >
+                                {{ region }}
+                            </button>
+                        </div>
+                        <SearchableSelectField
+                            input-id="reg-region"
+                            v-model="form.region"
+                            :label="countryProfile.regionLabel"
+                            :options="regionOptions"
+                            :placeholder="countryProfile.regionPlaceholder"
+                            :search-placeholder="`Search ${countryProfile.regionLabel.toLowerCase()} or use a custom value`"
+                            :empty-text="`No ${countryProfile.regionLabel.toLowerCase()} suggestion found.`"
+                            :allow-custom-value="true"
+                        />
+                        <SearchableSelectField
+                            input-id="reg-district"
+                            v-model="form.district"
+                            :label="countryProfile.districtLabel"
+                            :options="districtOptions"
+                            :placeholder="districtPlaceholder"
+                            :search-placeholder="`Search ${countryProfile.districtLabel.toLowerCase()} or use a custom value`"
+                            :empty-text="`No ${countryProfile.districtLabel.toLowerCase()} suggestion found.`"
+                            :allow-custom-value="true"
+                            :disabled="!form.region.trim()"
+                        />
+                        <div class="col-span-2 space-y-1.5">
+                            <Label for="reg-address">{{
+                                countryProfile.addressLabel
+                            }}</Label>
+                            <Textarea
+                                id="reg-address"
+                                v-model="form.addressLine"
+                                rows="2"
+                                :placeholder="countryProfile.addressPlaceholder"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="reg-nok-name"
+                                >Next of kin (optional)</Label
+                            >
+                            <Input
+                                id="reg-nok-name"
+                                v-model="form.nextOfKinName"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="reg-nok-phone"
+                                >Next of kin phone (optional)</Label
+                            >
+                            <Input
+                                id="reg-nok-phone"
+                                v-model="form.nextOfKinPhone"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="
+                            isOnline &&
+                            duplicateCheck.data.value &&
+                            duplicateCheck.data.value.severity !== 'none'
+                        "
+                        class="space-y-2"
+                    >
+                        <Alert
+                            :variant="
+                                duplicateCheck.data.value.severity ===
+                                'hard_block'
+                                    ? 'destructive'
+                                    : 'default'
+                            "
+                        >
+                            <AlertTitle class="flex items-center gap-2">
+                                {{
+                                    severityLabel[
+                                        duplicateCheck.data.value.severity
+                                    ]
+                                }}
+                                <Badge variant="outline"
+                                    >{{
+                                        duplicateCheck.data.value.duplicates
+                                            .length
+                                    }}
+                                    match(es)</Badge
+                                >
+                            </AlertTitle>
+                            <AlertDescription>
+                                <ul class="mt-1 space-y-1">
+                                    <li
+                                        v-for="match in duplicateCheck.data
+                                            .value.duplicates"
+                                        :key="match.id"
+                                        class="flex items-center gap-1.5 text-xs"
+                                    >
+                                        <span>
+                                            {{
+                                                [
+                                                    match.firstName,
+                                                    match.lastName,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' ') ||
+                                                'Unnamed patient'
+                                            }}
+                                            —
+                                            {{
+                                                match.patientNumber ?? 'No MRN'
+                                            }}
+                                            <span
+                                                v-if="
+                                                    match.matchedFields?.length
+                                                "
+                                            >
+                                                (matched:
+                                                {{
+                                                    match.matchedFields.join(
+                                                        ', ',
+                                                    )
+                                                }})</span
+                                            >
+                                        </span>
+                                        <a
+                                            v-if="match.id"
+                                            :href="`/patients/${match.id}/chart`"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="shrink-0 text-primary underline-offset-2 hover:underline"
+                                        >
+                                            View chart
+                                        </a>
+                                    </li>
+                                </ul>
+                                <label
+                                    v-if="requiresWarningAcknowledgment"
+                                    for="reg-duplicate-acknowledge"
+                                    class="mt-3 flex items-start gap-2 rounded-md border border-dashed px-2.5 py-2 text-xs"
+                                >
+                                    <Checkbox
+                                        id="reg-duplicate-acknowledge"
+                                        :checked="warningAcknowledged"
+                                        @update:checked="
+                                            warningAcknowledged =
+                                                $event === true
+                                        "
+                                    />
+                                    <span
+                                        >I've reviewed the match(es) above and
+                                        confirm this is a different
+                                        patient.</span
+                                    >
+                                </label>
+                            </AlertDescription>
+                        </Alert>
+                    </div>
+
+                    <Alert v-if="submitErrorMessage()" variant="destructive">
+                        <AlertTitle>Unable to register patient</AlertTitle>
+                        <AlertDescription>{{
+                            submitErrorMessage()
+                        }}</AlertDescription>
                     </Alert>
                 </div>
 
-                <Alert v-if="submitErrorMessage()" variant="destructive">
-                    <AlertTitle>Unable to register patient</AlertTitle>
-                    <AlertDescription>{{ submitErrorMessage() }}</AlertDescription>
-                </Alert>
-            </div>
-
-            <SheetFooter
-                class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-            >
-                <Button variant="outline" @click="open = false">Cancel</Button>
-                <Button :disabled="!canSubmit" @click="submit">
-                    {{ registration.isPending.value ? 'Registering…' : isOnline ? 'Register Patient' : 'Save offline' }}
-                </Button>
-            </SheetFooter>
+                <SheetFooter
+                    class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                >
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="open = false"
+                        >Cancel</Button
+                    >
+                    <Button type="submit" :disabled="!canSubmit">
+                        {{
+                            registration.isPending.value
+                                ? 'Registering…'
+                                : isOnline
+                                  ? 'Register Patient'
+                                  : 'Save offline'
+                        }}
+                    </Button>
+                </SheetFooter>
+            </form>
         </SheetContent>
     </Sheet>
 </template>

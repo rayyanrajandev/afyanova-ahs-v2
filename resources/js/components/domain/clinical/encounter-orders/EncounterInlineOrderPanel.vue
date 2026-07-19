@@ -53,7 +53,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     close: [];
-    created: [type: EncounterInlineOrderType];
+    created: [type: EncounterInlineOrderType, order: Record<string, unknown>];
 }>();
 
 const {
@@ -91,8 +91,11 @@ const radiologyForm = reactive({
     clinicalIndication: '',
 });
 
-const selectedCatalogItem = computed(() =>
-    catalogItems.value.find((item) => item.id === activeCatalogItemId.value) ?? null,
+const selectedCatalogItem = computed(
+    () =>
+        catalogItems.value.find(
+            (item) => item.id === activeCatalogItemId.value,
+        ) ?? null,
 );
 
 const activeCatalogItemId = computed(() => {
@@ -110,8 +113,9 @@ const catalogOptions = computed(() =>
     catalogItems.value.map((item) => ({
         value: item.id,
         label: catalogItemLabel(item),
-        keywords: [item.code, item.name, item.category]
-            .filter((k): k is string => Boolean(k)),
+        keywords: [item.code, item.name, item.category].filter(
+            (k): k is string => Boolean(k),
+        ),
     })),
 );
 
@@ -163,7 +167,9 @@ const catalogFieldLabel = computed(() => {
     }
 });
 
-const panelTitle = computed(() => encounterInlineOrderTypeLabel(props.orderType));
+const panelTitle = computed(() =>
+    encounterInlineOrderTypeLabel(props.orderType),
+);
 const panelModeLabel = computed(() =>
     encounterInlineOrderModeLabel(props.linkage?.mode ?? 'new'),
 );
@@ -281,7 +287,9 @@ watch(
         if (!item) return;
 
         const modality = item.category?.trim().toLowerCase() ?? '';
-        if (radiologyModalityOptions.some((option) => option.value === modality)) {
+        if (
+            radiologyModalityOptions.some((option) => option.value === modality)
+        ) {
             radiologyForm.modality = modality;
         }
     },
@@ -305,20 +313,19 @@ async function confirmDuplicateCheck(
         details,
         cancelLabel: 'Review existing orders',
         confirmLabel: 'Continue ordering',
-        confirmVariant: result.severity === 'critical' ? 'destructive' : 'default',
+        confirmVariant:
+            result.severity === 'critical' ? 'destructive' : 'default',
     });
 }
 
-async function resolvePharmacySafetyDecision(
-    payload: {
-        approvedMedicineCatalogItemId: string;
-        medicationCode: string;
-        medicationName: string;
-        dosageInstruction: string;
-        clinicalIndication: string;
-        quantityPrescribed: number;
-    },
-): Promise<MedicationSafetyContinuationDecision | null> {
+async function resolvePharmacySafetyDecision(payload: {
+    approvedMedicineCatalogItemId: string;
+    medicationCode: string;
+    medicationName: string;
+    dosageInstruction: string;
+    clinicalIndication: string;
+    quantityPrescribed: number;
+}): Promise<MedicationSafetyContinuationDecision | null> {
     const summary = await fetchPatientMedicationSafetySummary({
         patientId: props.context.patientId,
         appointmentId: props.context.appointmentId,
@@ -355,7 +362,8 @@ async function resolvePharmacySafetyDecision(
 
     const confirmed = await requestConfirmation({
         title: 'Medication safety review',
-        description: 'Review medication safety warnings before placing this active order.',
+        description:
+            'Review medication safety warnings before placing this active order.',
         details: summary.warnings,
         cancelLabel: 'Review warnings',
         confirmLabel: 'Acknowledge and place order',
@@ -393,12 +401,15 @@ async function submitOrder() {
                   ? 'approvedMedicineCatalogItemId'
                   : 'radiologyProcedureCatalogItemId';
         applyValidationErrors({
-            [field]: ['Select an active catalog item before placing this order.'],
+            [field]: [
+                'Select an active catalog item before placing this order.',
+            ],
         });
         return;
     }
 
     submitLoading.value = true;
+    let createdOrder: Record<string, unknown> | null = null;
 
     try {
         if (props.orderType === 'laboratory') {
@@ -417,7 +428,12 @@ async function submitOrder() {
             );
             const title =
                 payload.testName || payload.testCode || 'this laboratory test';
-            if (!(await confirmDuplicateCheck(`Duplicate advisory for ${title}`, duplicateResult))) {
+            if (
+                !(await confirmDuplicateCheck(
+                    `Duplicate advisory for ${title}`,
+                    duplicateResult,
+                ))
+            ) {
                 return;
             }
 
@@ -427,9 +443,11 @@ async function submitOrder() {
                 createLinkageOptions.value,
             );
             const orderNumber =
-                (response.data.orderNumber as string | null | undefined)?.trim() ||
-                'laboratory order';
+                (
+                    response.data.orderNumber as string | null | undefined
+                )?.trim() || 'laboratory order';
             notifySuccess(`Placed ${orderNumber}.`);
+            createdOrder = response.data;
         } else if (props.orderType === 'pharmacy') {
             if (!pharmacyForm.dosageInstruction.trim()) {
                 applyValidationErrors({
@@ -472,7 +490,12 @@ async function submitOrder() {
                 payload.medicationName ||
                 payload.medicationCode ||
                 'this medicine';
-            if (!(await confirmDuplicateCheck(`Duplicate advisory for ${title}`, duplicateResult))) {
+            if (
+                !(await confirmDuplicateCheck(
+                    `Duplicate advisory for ${title}`,
+                    duplicateResult,
+                ))
+            ) {
                 return;
             }
 
@@ -487,9 +510,11 @@ async function submitOrder() {
                 { ...createLinkageOptions.value, safetyDecision },
             );
             const orderNumber =
-                (response.data.orderNumber as string | null | undefined)?.trim() ||
-                'pharmacy order';
+                (
+                    response.data.orderNumber as string | null | undefined
+                )?.trim() || 'pharmacy order';
             notifySuccess(`Placed ${orderNumber}.`);
+            createdOrder = response.data;
         } else {
             if (!radiologyForm.clinicalIndication.trim()) {
                 applyValidationErrors({
@@ -514,7 +539,12 @@ async function submitOrder() {
                 payload.studyDescription ||
                 payload.procedureCode ||
                 'this imaging study';
-            if (!(await confirmDuplicateCheck(`Duplicate advisory for ${title}`, duplicateResult))) {
+            if (
+                !(await confirmDuplicateCheck(
+                    `Duplicate advisory for ${title}`,
+                    duplicateResult,
+                ))
+            ) {
                 return;
             }
 
@@ -524,16 +554,26 @@ async function submitOrder() {
                 createLinkageOptions.value,
             );
             const orderNumber =
-                (response.data.orderNumber as string | null | undefined)?.trim() ||
-                'imaging order';
+                (
+                    response.data.orderNumber as string | null | undefined
+                )?.trim() || 'imaging order';
             notifySuccess(`Placed ${orderNumber}.`);
+            createdOrder = response.data;
         }
 
-        emit('created', props.orderType);
+        if (createdOrder) {
+            emit('created', props.orderType, createdOrder);
+        }
         resetForms();
     } catch (error) {
-        if (error instanceof ApiClientError && error.status === 422 && error.payload?.errors) {
-            applyValidationErrors(error.payload.errors as Record<string, string[]>);
+        if (
+            error instanceof ApiClientError &&
+            error.status === 422 &&
+            error.payload?.errors
+        ) {
+            applyValidationErrors(
+                error.payload.errors as Record<string, string[]>,
+            );
             return;
         }
 
@@ -548,7 +588,10 @@ async function submitOrder() {
 }
 
 const canSubmit = computed(
-    () => !submitLoading.value && !catalogLoading.value && selectedCatalogItem.value !== null,
+    () =>
+        !submitLoading.value &&
+        !catalogLoading.value &&
+        selectedCatalogItem.value !== null,
 );
 
 defineExpose({ submitOrder, submitLoading, canSubmit });
@@ -586,7 +629,10 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                 <div class="grid gap-2">
                     <Label for="encounter-inline-lab-priority">Priority</Label>
                     <Select v-model="labForm.priority">
-                        <SelectTrigger id="encounter-inline-lab-priority" class="w-full">
+                        <SelectTrigger
+                            id="encounter-inline-lab-priority"
+                            class="w-full"
+                        >
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -601,18 +647,25 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                     </Select>
                 </div>
                 <div class="grid gap-2">
-                    <Label for="encounter-inline-lab-specimen">Specimen type</Label>
+                    <Label for="encounter-inline-lab-specimen"
+                        >Specimen type</Label
+                    >
                     <Input
                         id="encounter-inline-lab-specimen"
                         v-model="labForm.specimenType"
                         placeholder="Blood, urine, swab…"
                     />
-                    <p v-if="fieldError('specimenType')" class="text-xs text-destructive">
+                    <p
+                        v-if="fieldError('specimenType')"
+                        class="text-xs text-destructive"
+                    >
                         {{ fieldError('specimenType') }}
                     </p>
                 </div>
                 <div class="grid gap-2">
-                    <Label for="encounter-inline-lab-notes">Clinical indication</Label>
+                    <Label for="encounter-inline-lab-notes"
+                        >Clinical indication</Label
+                    >
                     <Textarea
                         id="encounter-inline-lab-notes"
                         v-model="labForm.clinicalNotes"
@@ -624,18 +677,25 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
 
             <template v-else-if="orderType === 'pharmacy'">
                 <div class="grid gap-2">
-                    <Label for="encounter-inline-pharm-dose">Dosage instruction</Label>
+                    <Label for="encounter-inline-pharm-dose"
+                        >Dosage instruction</Label
+                    >
                     <Input
                         id="encounter-inline-pharm-dose"
                         v-model="pharmacyForm.dosageInstruction"
                         placeholder="1 tablet orally twice daily"
                     />
-                    <p v-if="fieldError('dosageInstruction')" class="text-xs text-destructive">
+                    <p
+                        v-if="fieldError('dosageInstruction')"
+                        class="text-xs text-destructive"
+                    >
                         {{ fieldError('dosageInstruction') }}
                     </p>
                 </div>
                 <div class="grid gap-2">
-                    <Label for="encounter-inline-pharm-qty">Quantity prescribed</Label>
+                    <Label for="encounter-inline-pharm-qty"
+                        >Quantity prescribed</Label
+                    >
                     <Input
                         id="encounter-inline-pharm-qty"
                         v-model="pharmacyForm.quantityPrescribed"
@@ -643,19 +703,27 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                         min="1"
                         step="1"
                     />
-                    <p v-if="fieldError('quantityPrescribed')" class="text-xs text-destructive">
+                    <p
+                        v-if="fieldError('quantityPrescribed')"
+                        class="text-xs text-destructive"
+                    >
                         {{ fieldError('quantityPrescribed') }}
                     </p>
                 </div>
                 <div class="grid gap-2">
-                    <Label for="encounter-inline-pharm-indication">Clinical indication</Label>
+                    <Label for="encounter-inline-pharm-indication"
+                        >Clinical indication</Label
+                    >
                     <Textarea
                         id="encounter-inline-pharm-indication"
                         v-model="pharmacyForm.clinicalIndication"
                         class="min-h-20"
                         placeholder="Diagnosis or treatment reason"
                     />
-                    <p v-if="fieldError('clinicalIndication')" class="text-xs text-destructive">
+                    <p
+                        v-if="fieldError('clinicalIndication')"
+                        class="text-xs text-destructive"
+                    >
                         {{ fieldError('clinicalIndication') }}
                     </p>
                 </div>
@@ -663,7 +731,9 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                     :patient-id="context.patientId"
                     :appointment-id="context.appointmentId"
                     :admission-id="context.admissionId"
-                    :approved-medicine-catalog-item-id="pharmacySafetyCatalogItemId"
+                    :approved-medicine-catalog-item-id="
+                        pharmacySafetyCatalogItemId
+                    "
                     :medication-code="pharmacySafetyMedicationCode"
                     :medication-name="pharmacySafetyMedicationName"
                     :dosage-instruction="pharmacyForm.dosageInstruction"
@@ -671,7 +741,9 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                     :quantity-prescribed="pharmacyForm.quantityPrescribed"
                 />
                 <div class="grid gap-2">
-                    <Label for="encounter-inline-pharm-notes">Dispensing notes</Label>
+                    <Label for="encounter-inline-pharm-notes"
+                        >Dispensing notes</Label
+                    >
                     <Textarea
                         id="encounter-inline-pharm-notes"
                         v-model="pharmacyForm.dispensingNotes"
@@ -685,7 +757,10 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                 <div class="grid gap-2">
                     <Label for="encounter-inline-rad-modality">Modality</Label>
                     <Select v-model="radiologyForm.modality">
-                        <SelectTrigger id="encounter-inline-rad-modality" class="w-full">
+                        <SelectTrigger
+                            id="encounter-inline-rad-modality"
+                            class="w-full"
+                        >
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -700,21 +775,26 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                     </Select>
                 </div>
                 <div class="grid gap-2">
-                    <Label for="encounter-inline-rad-indication">Clinical indication</Label>
+                    <Label for="encounter-inline-rad-indication"
+                        >Clinical indication</Label
+                    >
                     <Textarea
                         id="encounter-inline-rad-indication"
                         v-model="radiologyForm.clinicalIndication"
                         class="min-h-20"
                         placeholder="Reason for imaging"
                     />
-                    <p v-if="fieldError('clinicalIndication')" class="text-xs text-destructive">
+                    <p
+                        v-if="fieldError('clinicalIndication')"
+                        class="text-xs text-destructive"
+                    >
                         {{ fieldError('clinicalIndication') }}
                     </p>
                 </div>
             </template>
-            </div>
+        </div>
 
-            <ConfirmationDialog
+        <ConfirmationDialog
             :open="confirmationDialogState.open"
             :title="confirmationDialogState.title"
             :description="confirmationDialogState.description"

@@ -311,13 +311,30 @@ Route::get('direct-service/queue', function () {
     return Inertia::render('directService/Queue');
 })->middleware(['auth', 'verified', 'can:service.requests.read', 'facility.entitlement:clinical.walk_in_queue'])->name('direct-service.queue');
 
+// Cut over to the rebuilt Cashier Queue (V2 pages architecture: TanStack
+// Query composables, URL-synced filters, sticky search bar). The old page
+// remains reachable at billing-invoices/legacy for rollback — same
+// precedent as /patients/legacy.
 Route::get('billing-invoices', function () {
-    return Inertia::render('billing/Index');
+    return Inertia::render('billing/IndexV2');
 })->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-invoices.page');
 
+// Rollback path — the pre-cutover page, unchanged.
+Route::get('billing-invoices/legacy', function () {
+    return Inertia::render('billing/Index');
+})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-invoices.page.legacy');
+
+// Cut over to the rebuilt Cash Payments page (V2 pages architecture, full
+// charge/payment/convert-to-invoice/void/refund workflow). The old page
+// remains reachable at billing-cash/legacy for rollback.
 Route::get('billing-cash', function () {
-    return Inertia::render('billing/Cash');
+    return Inertia::render('billing/CashV2');
 })->middleware(['auth', 'verified', 'can:billing.cash-accounts.read', 'facility.entitlement:billing.cash_accounts'])->name('billing-cash.page');
+
+// Rollback path — the pre-cutover page, unchanged.
+Route::get('billing-cash/legacy', function () {
+    return Inertia::render('billing/Cash');
+})->middleware(['auth', 'verified', 'can:billing.cash-accounts.read', 'facility.entitlement:billing.cash_accounts'])->name('billing-cash.page.legacy');
 
 Route::get('billing-payment-plans', function () {
     return Inertia::render('billing/PaymentPlans');

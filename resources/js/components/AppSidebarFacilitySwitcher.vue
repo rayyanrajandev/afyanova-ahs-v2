@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import {
     clearScopeCookies,
     setScopeCookies,
@@ -191,7 +196,11 @@ const facilityTriggerMeta = computed(() => {
     return `${count} facilities available`;
 });
 
+const switcherOpen = ref(false);
+
 function selectScope(key: string) {
+    switcherOpen.value = false;
+
     if (key === selectedScopeKey.value) return;
 
     if (key === 'auto') {
@@ -212,8 +221,8 @@ function selectScope(key: string) {
 </script>
 
 <template>
-    <DropdownMenu>
-        <DropdownMenuTrigger as-child>
+    <Popover v-model:open="switcherOpen">
+        <PopoverTrigger as-child>
             <button
                 type="button"
                 class="mx-2 flex min-h-9 items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2 py-1.5 text-left text-sidebar-foreground transition-colors group-data-[collapsible=icon]:mx-0 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 hover:bg-sidebar-accent"
@@ -239,9 +248,9 @@ function selectScope(key: string) {
                     {{ scopeMode.label }}
                 </Badge>
             </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="right" class="w-[320px]">
-            <DropdownMenuLabel class="space-y-0.5">
+        </PopoverTrigger>
+        <PopoverContent align="end" side="right" class="w-[320px] p-0">
+            <div class="space-y-0.5 px-3 pt-3 pb-2">
                 <span class="flex items-center justify-between gap-2">
                     <span class="text-sm font-medium">Facility scope</span>
                     <Badge
@@ -254,73 +263,93 @@ function selectScope(key: string) {
                 <span class="block text-xs font-normal text-muted-foreground">
                     {{ scopeMode.description }} | {{ facilityTriggerMeta }}
                 </span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-                class="cursor-pointer text-sm"
-                :class="{ 'bg-accent': selectedScopeKey === 'auto' }"
-                @select="selectScope('auto')"
-            >
-                <div class="flex min-w-0 items-center gap-2">
-                    <AppIcon
-                        :name="
-                            hasUniversalAdminAccess
-                                ? 'shield-check'
-                                : 'refresh-cw'
-                        "
-                        class="size-3.5 shrink-0 text-muted-foreground"
-                    />
-                    <div class="min-w-0">
-                        <p class="text-sm font-medium">
-                            {{
-                                hasUniversalAdminAccess
-                                    ? 'Global admin / all facilities'
-                                    : 'Auto-resolve'
-                            }}
-                        </p>
-                        <p class="text-xs text-muted-foreground">
-                            {{
-                                hasUniversalAdminAccess
-                                    ? 'Use platform-wide scope where pages support it.'
-                                    : 'Use your primary assigned facility.'
-                            }}
-                        </p>
+            </div>
+            <Command class="rounded-t-none border-t">
+                <CommandInput placeholder="Search facilities..." />
+                <CommandList>
+                    <CommandEmpty>No matching facility found.</CommandEmpty>
+                    <CommandGroup>
+                        <CommandItem
+                            value="auto-resolve global admin all facilities primary default"
+                            class="cursor-pointer"
+                            :class="{
+                                'bg-accent': selectedScopeKey === 'auto',
+                            }"
+                            @select="selectScope('auto')"
+                        >
+                            <div class="flex min-w-0 items-center gap-2">
+                                <AppIcon
+                                    :name="
+                                        hasUniversalAdminAccess
+                                            ? 'shield-check'
+                                            : 'refresh-cw'
+                                    "
+                                    class="size-3.5 shrink-0 text-muted-foreground"
+                                />
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium">
+                                        {{
+                                            hasUniversalAdminAccess
+                                                ? 'Global admin / all facilities'
+                                                : 'Auto-resolve'
+                                        }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        {{
+                                            hasUniversalAdminAccess
+                                                ? 'Use platform-wide scope where pages support it.'
+                                                : 'Use your primary assigned facility.'
+                                        }}
+                                    </p>
+                                </div>
+                            </div>
+                        </CommandItem>
+                    </CommandGroup>
+                    <div
+                        v-if="accessibleFacilities.length === 0"
+                        class="px-2 py-1.5 text-sm text-muted-foreground"
+                    >
+                        No active facility assignments.
                     </div>
-                </div>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-                v-if="accessibleFacilities.length === 0"
-                disabled
-                class="text-sm text-muted-foreground"
-            >
-                No active facility assignments.
-            </DropdownMenuItem>
-            <DropdownMenuItem
-                v-for="facility in accessibleFacilities"
-                :key="facility.key"
-                class="cursor-pointer text-sm"
-                :class="{ 'bg-accent': selectedScopeKey === facility.key }"
-                @select="selectScope(facility.key)"
-            >
-                <div class="flex min-w-0 items-center gap-2">
-                    <AppIcon
-                        name="map-pin"
-                        class="size-3.5 shrink-0 text-muted-foreground"
-                    />
-                    <div class="min-w-0">
-                        <p class="truncate text-sm font-medium">
-                            {{ facility.facilityName }}
-                        </p>
-                        <p class="truncate text-xs text-muted-foreground">
-                            {{ facility.facilityCode
-                            }}{{
-                                facility.isPrimary ? ' | Primary facility' : ''
-                            }}
-                        </p>
-                    </div>
-                </div>
-            </DropdownMenuItem>
-        </DropdownMenuContent>
-    </DropdownMenu>
+                    <CommandGroup
+                        v-if="accessibleFacilities.length > 0"
+                        heading="Facilities"
+                    >
+                        <CommandItem
+                            v-for="facility in accessibleFacilities"
+                            :key="facility.key"
+                            :value="`${facility.facilityName} ${facility.facilityCode} ${facility.tenantName} ${facility.tenantCode}`"
+                            class="cursor-pointer"
+                            :class="{
+                                'bg-accent': selectedScopeKey === facility.key,
+                            }"
+                            @select="selectScope(facility.key)"
+                        >
+                            <div class="flex min-w-0 items-center gap-2">
+                                <AppIcon
+                                    name="map-pin"
+                                    class="size-3.5 shrink-0 text-muted-foreground"
+                                />
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-medium">
+                                        {{ facility.facilityName }}
+                                    </p>
+                                    <p
+                                        class="truncate text-xs text-muted-foreground"
+                                    >
+                                        {{ facility.facilityCode
+                                        }}{{
+                                            facility.isPrimary
+                                                ? ' | Primary facility'
+                                                : ''
+                                        }}
+                                    </p>
+                                </div>
+                            </div>
+                        </CommandItem>
+                    </CommandGroup>
+                </CommandList>
+            </Command>
+        </PopoverContent>
+    </Popover>
 </template>
