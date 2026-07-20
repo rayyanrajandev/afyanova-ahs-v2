@@ -14,11 +14,15 @@ export type BillingInvoice = {
     invoiceNumber: string | null;
     status: string;
     currencyCode?: string;
+    subtotalAmount?: number;
+    discountAmount?: number;
+    taxAmount?: number;
     totalAmount: number;
     paidAmount: number;
     balanceAmount: number;
     invoiceDate: string;
     paymentDueAt: string | null;
+    notes?: string | null;
     lineItems: BillingInvoiceLineItem[];
 };
 
@@ -57,6 +61,9 @@ export type BillingPatientInvoicesResult = {
 function normalizeInvoiceAmounts(invoice: BillingInvoice): BillingInvoice {
     return {
         ...invoice,
+        subtotalAmount: Number(invoice.subtotalAmount) || 0,
+        discountAmount: Number(invoice.discountAmount) || 0,
+        taxAmount: Number(invoice.taxAmount) || 0,
         totalAmount: Number(invoice.totalAmount) || 0,
         paidAmount: Number(invoice.paidAmount) || 0,
         balanceAmount: Number(invoice.balanceAmount) || 0,

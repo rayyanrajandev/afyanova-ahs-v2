@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceDocumentController;
+use App\Modules\Billing\Presentation\Http\Controllers\BillingPaymentReceiptDocumentController;
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceDocumentController;
 use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardDischargeChecklistDocumentController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementDocumentController;
@@ -319,6 +320,21 @@ Route::get('billing-invoices', function () {
     return Inertia::render('billing/IndexV2');
 })->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-invoices.page');
 
+// Consolidated billing queue — list-only, links into the patient workspace
+// below instead of an inline detail panel (reports/billing-module-
+// architecture-redesign.md Phase 6). billing-invoices above stays on the
+// master-detail IndexV2 page during the transition.
+Route::get('billing', function () {
+    return Inertia::render('billing/List');
+})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing.page');
+
+// Billing Patient Workspace — analogue of the Encounter module's
+// List → Workspace flow. A single patient's billing activity
+// (invoices, payments, charges, insurance) in one place.
+Route::get('billing/{patientId}', function (string $patientId) {
+    return Inertia::render('billing/workspace/Workspace', ['patientId' => $patientId]);
+})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing.workspace.page');
+
 // Rollback path — the pre-cutover page, unchanged.
 Route::get('billing-invoices/legacy', function () {
     return Inertia::render('billing/Index');
@@ -407,6 +423,14 @@ Route::get('billing-invoices/{id}/print', [BillingInvoiceDocumentController::cla
 Route::get('billing-invoices/{id}/pdf', [BillingInvoiceDocumentController::class, 'downloadPdf'])
     ->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])
     ->name('billing-invoices.pdf.download');
+
+Route::get('billing-invoices/{invoiceId}/payments/{paymentId}/receipt', [BillingPaymentReceiptDocumentController::class, 'show'])
+    ->middleware(['auth', 'verified', 'can:billing.payments.view-history', 'facility.entitlement:billing.invoices'])
+    ->name('billing-invoices.payment-receipt.page');
+
+Route::get('billing-invoices/{invoiceId}/payments/{paymentId}/receipt/pdf', [BillingPaymentReceiptDocumentController::class, 'downloadPdf'])
+    ->middleware(['auth', 'verified', 'can:billing.payments.view-history', 'facility.entitlement:billing.invoices'])
+    ->name('billing-invoices.payment-receipt.pdf.download');
 
 Route::get('claims-insurance/{id}/print', [ClaimsInsuranceDocumentController::class, 'show'])
     ->middleware(['auth', 'verified', 'can:claims.insurance.read', 'facility.entitlement:claims.insurance'])

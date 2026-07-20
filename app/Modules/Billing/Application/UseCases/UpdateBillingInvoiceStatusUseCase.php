@@ -3,6 +3,7 @@
 namespace App\Modules\Billing\Application\UseCases;
 
 use App\Modules\Billing\Application\Support\BillingFinancePostingService;
+use App\Modules\Billing\Domain\Events\BillingCashierQueueUpdated;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceAuditLogRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoicePaymentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
@@ -167,6 +168,8 @@ class UpdateBillingInvoiceStatusUseCase
                 'reason_provided' => trim((string) ($updated['status_reason'] ?? '')) !== '',
             ],
         );
+
+        event(new BillingCashierQueueUpdated($updated['facility_id'] ?? null));
 
         return $updated;
     }

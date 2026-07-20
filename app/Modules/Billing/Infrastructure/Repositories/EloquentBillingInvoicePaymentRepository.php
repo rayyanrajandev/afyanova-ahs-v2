@@ -89,4 +89,19 @@ class EloquentBillingInvoicePaymentRepository implements BillingInvoicePaymentRe
             ],
         ];
     }
+
+    public function listByBillingInvoiceIds(array $billingInvoiceIds): array
+    {
+        if ($billingInvoiceIds === []) {
+            return [];
+        }
+
+        return BillingInvoicePaymentModel::query()
+            ->whereIn('billing_invoice_id', $billingInvoiceIds)
+            ->orderByDesc('payment_at')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(static fn (BillingInvoicePaymentModel $payment): array => $payment->toArray())
+            ->all();
+    }
 }

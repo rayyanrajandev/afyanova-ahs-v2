@@ -8,13 +8,14 @@ use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
+use App\Modules\Platform\Domain\ValueObjects\ClinicalSourceKind;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Modules\Pos\Domain\ValueObjects\PosSaleChannel;
 use App\Modules\Pos\Domain\ValueObjects\PosSaleStatus;
 use App\Modules\Pos\Infrastructure\Models\PosSaleLineModel;
-use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
-use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
@@ -22,34 +23,6 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 
 class FrontdeskQuickCashierSupport
 {
-    private const SOURCE_KINDS = [
-        'laboratory_order' => [
-            'model' => LaboratoryOrderModel::class,
-            'catalog_fk' => 'lab_test_catalog_item_id',
-            'statuses' => ['ordered'],
-            'exclude_entered_in_error' => true,
-        ],
-        'pharmacy_prescription' => [
-            'model' => PharmacyOrderModel::class,
-            'catalog_fk' => 'approved_medicine_catalog_item_id',
-            'statuses' => ['pending'],
-            'entry_state' => 'active',
-            'exclude_entered_in_error' => true,
-        ],
-        'radiology_order' => [
-            'model' => RadiologyOrderModel::class,
-            'catalog_fk' => 'radiology_procedure_catalog_item_id',
-            'statuses' => ['ordered'],
-            'exclude_entered_in_error' => true,
-        ],
-        'procedure' => [
-            'model' => TheatreProcedureModel::class,
-            'catalog_fk' => 'theatre_procedure_catalog_item_id',
-            'statuses' => ['planned'],
-            'exclude_entered_in_error' => false,
-        ],
-    ];
-
     public function __construct(
         private readonly BillingServiceCatalogItemRepositoryInterface $billingServiceCatalogItemRepository,
         private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
@@ -59,8 +32,8 @@ class FrontdeskQuickCashierSupport
     public function eligibleStatuses(): array
     {
         $statuses = [];
-        foreach (self::SOURCE_KINDS as $config) {
-            foreach ($config['statuses'] as $status) {
+        foreach (ClinicalSourceKind::orderKinds() as $kind) {
+            foreach ($kind->posStatuses() as $status) {
                 $statuses[$status] = true;
             }
         }
@@ -74,12 +47,29 @@ class FrontdeskQuickCashierSupport
 
     public function sourceKindConfig(string $kind): ?array
     {
-        return self::SOURCE_KINDS[$kind] ?? null;
+        $enum = ClinicalSourceKind::fromWorkflowKind($kind);
+        if ($enum === null) {
+            return null;
+        }
+
+        $config = [
+            'model' => $enum->modelClass(),
+            'catalog_fk' => $enum->catalogFk(),
+            'statuses' => $enum->posStatuses(),
+            'exclude_entered_in_error' => $enum->posExcludeEnteredInError(),
+        ];
+
+        $entryState = $enum->posEntryState();
+        if ($entryState !== null) {
+            $config['entry_state'] = $entryState;
+        }
+
+        return $config;
     }
 
     public function eligibleOrderQuery(string $kind): ?EloquentBuilder
     {
-        $config = self::SOURCE_KINDS[$kind] ?? null;
+        $config = $this->sourceKindConfig($kind);
         if ($config === null) {
             return null;
         }
@@ -143,7 +133,7 @@ class FrontdeskQuickCashierSupport
             return [];
         }
 
-        $config = self::SOURCE_KINDS[$kind] ?? null;
+        $config = $this->sourceKindConfig($kind);
         if ($config === null) {
             return [];
         }
@@ -238,10 +228,8 @@ class FrontdeskQuickCashierSupport
 
         $index = [];
 
-        $expectedKinds = array_keys(self::SOURCE_KINDS);
-
         $query->get(['id', 'invoice_number', 'status', 'line_items'])
-            ->each(function (BillingInvoiceModel $invoice) use (&$index, $expectedKinds): void {
+            ->each(function (BillingInvoiceModel $invoice) use (&$index): void {
                 foreach ((array) ($invoice->line_items ?? []) as $lineItem) {
                     if (! is_array($lineItem)) {
                         continue;
@@ -249,11 +237,13 @@ class FrontdeskQuickCashierSupport
 
                     $kind = strtolower(trim((string) ($lineItem['sourceWorkflowKind'] ?? '')));
                     $sourceId = trim((string) ($lineItem['sourceWorkflowId'] ?? ''));
-                    if (! in_array($kind, $expectedKinds, true) || $sourceId === '') {
+                    $kindEnum = ClinicalSourceKind::fromWorkflowKind($kind);
+                    if ($kindEnum === null || $sourceId === '') {
                         continue;
                     }
 
-                    $index[$kind][$sourceId] = [
+                    $normalizedKind = $kindEnum->value;
+                    $index[$normalizedKind][$sourceId] = [
                         'invoiceId' => (string) $invoice->id,
                         'invoiceNumber' => $invoice->invoice_number,
                         'invoiceStatus' => $invoice->status,
@@ -475,10 +465,10 @@ class FrontdeskQuickCashierSupport
     public function resolveServiceCode(Model $order, ?array $catalogItem, string $kind): ?string
     {
         $codeFields = [
-            match ($kind) {
-                'laboratory_order' => $order->test_code ?? null,
-                'pharmacy_prescription' => $order->medication_code ?? null,
-                'radiology_order' => $order->procedure_code ?? null,
+            match (ClinicalSourceKind::fromWorkflowKind($kind)) {
+                ClinicalSourceKind::LABORATORY_ORDER => $order->test_code ?? null,
+                ClinicalSourceKind::PHARMACY_ORDER => $order->medication_code ?? null,
+                ClinicalSourceKind::RADIOLOGY_ORDER => $order->procedure_code ?? null,
                 default => null,
             },
         ];

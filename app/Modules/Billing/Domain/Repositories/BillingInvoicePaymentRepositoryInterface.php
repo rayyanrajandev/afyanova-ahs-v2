@@ -22,4 +22,10 @@ interface BillingInvoicePaymentRepositoryInterface
         int $perPage,
         array $filters = [],
     ): array;
+
+    /**
+     * @param  array<int, string>  $billingInvoiceIds
+     * @return array<int, array<string, mixed>>
+     */
+    public function listByBillingInvoiceIds(array $billingInvoiceIds): array;
 }

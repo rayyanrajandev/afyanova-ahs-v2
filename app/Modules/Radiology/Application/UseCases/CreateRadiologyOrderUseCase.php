@@ -16,6 +16,7 @@ use App\Modules\Radiology\Domain\Services\PatientLookupServiceInterface;
 use App\Modules\Radiology\Domain\Services\RadiologyProcedureCatalogLookupServiceInterface;
 use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
 use App\Modules\ServiceRequest\Application\UseCases\LinkServiceRequestToClinicalOrderUseCase;
+use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestServiceType;
 use App\Support\ClinicalOrders\ClinicalOrderLifecycle;
 use App\Support\ClinicalOrders\OrderSessionManager;
 use Illuminate\Support\Str;
@@ -115,8 +116,8 @@ class CreateRadiologyOrderUseCase
             $this->serviceRequestLinker->complete(
                 serviceRequestId: $serviceRequestId,
                 patientId: $patientId,
-                serviceType: 'radiology',
-                linkedOrderType: 'radiology_order',
+                serviceType: ServiceRequestServiceType::RADIOLOGY->value,
+                linkedOrderType: ServiceRequestServiceType::RADIOLOGY->linkedOrderType(),
                 linkedOrderId: (string) $createdOrder['id'],
                 linkedOrderNumber: isset($createdOrder['order_number']) ? (string) $createdOrder['order_number'] : null,
                 actorId: $actorId,

@@ -19,6 +19,7 @@ use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\ServiceRequest\Application\UseCases\LinkServiceRequestToClinicalOrderUseCase;
+use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestServiceType;
 use App\Support\ClinicalOrders\ClinicalOrderLifecycle;
 use App\Support\ClinicalOrders\OrderSessionManager;
 use Illuminate\Support\Str;
@@ -196,8 +197,8 @@ class CreatePharmacyOrderUseCase
             $this->serviceRequestLinker->complete(
                 serviceRequestId: $serviceRequestId,
                 patientId: $patientId,
-                serviceType: 'pharmacy',
-                linkedOrderType: 'pharmacy_order',
+                serviceType: ServiceRequestServiceType::PHARMACY->value,
+                linkedOrderType: ServiceRequestServiceType::PHARMACY->linkedOrderType(),
                 linkedOrderId: (string) $createdOrder['id'],
                 linkedOrderNumber: isset($createdOrder['order_number']) ? (string) $createdOrder['order_number'] : null,
                 actorId: $actorId,

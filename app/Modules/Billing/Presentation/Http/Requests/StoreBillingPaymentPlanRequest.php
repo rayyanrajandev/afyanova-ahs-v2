@@ -20,7 +20,7 @@ class StoreBillingPaymentPlanRequest extends FormRequest
             'planName' => ['nullable', 'string', 'max:120'],
             'totalAmount' => ['nullable', 'numeric', 'gt:0'],
             'downPaymentAmount' => ['nullable', 'numeric', 'min:0'],
-            'downPaymentPaymentMethod' => ['nullable', Rule::in(['cash', 'mobile_money', 'card', 'bank_transfer', 'cheque', 'other'])],
+            'downPaymentPaymentMethod' => ['nullable', Rule::in(['cash', 'mobile_money', 'lipa_namba', 'card', 'bank_transfer', 'cheque', 'other'])],
             'downPaymentReference' => ['nullable', 'string', 'max:120'],
             'downPaymentPaidAt' => ['nullable', 'date'],
             'payerType' => ['nullable', Rule::in(['self_pay', 'insurance', 'employer', 'government', 'donor', 'other'])],

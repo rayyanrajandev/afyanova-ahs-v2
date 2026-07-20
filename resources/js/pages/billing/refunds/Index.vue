@@ -20,7 +20,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet, apiPost } from '@/lib/apiClient';
 import { generateRequestKey } from '@/lib/idempotency';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
-import BillingModuleNav from '@/pages/billing/invoices/components/BillingModuleNav.vue';
+import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import { type BreadcrumbItem } from '@/types';
 type RefundStatus = 'pending' | 'approved' | 'processed' | 'rejected' | 'cancelled' | 'all';
 type RefundRecord = {

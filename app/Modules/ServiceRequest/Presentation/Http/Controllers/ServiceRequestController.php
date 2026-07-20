@@ -159,6 +159,7 @@ class ServiceRequestController extends Controller
                 scope: $scopeResolver->resolve($request->user()),
                 actorId: $request->user()?->id,
                 statusReason: isset($validated['statusReason']) ? (string) $validated['statusReason'] : null,
+                linkedOrderNumber: isset($validated['linkedOrderNumber']) ? (string) $validated['linkedOrderNumber'] : null,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());

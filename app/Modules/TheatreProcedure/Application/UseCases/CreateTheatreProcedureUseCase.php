@@ -6,6 +6,7 @@ use App\Modules\Platform\Domain\Repositories\FacilityResourceRepositoryInterface
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\ServiceRequest\Application\UseCases\LinkServiceRequestToClinicalOrderUseCase;
+use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestServiceType;
 use App\Modules\TheatreProcedure\Application\Exceptions\TheatreProcedureCatalogItemNotEligibleException;
 use App\Modules\TheatreProcedure\Application\Exceptions\TheatreRoomServicePointNotEligibleException;
 use App\Modules\TheatreProcedure\Domain\Repositories\TheatreProcedureAuditLogRepositoryInterface;
@@ -120,8 +121,8 @@ class CreateTheatreProcedureUseCase
             $this->serviceRequestLinker->complete(
                 serviceRequestId: $serviceRequestId,
                 patientId: $patientId,
-                serviceType: 'theatre_procedure',
-                linkedOrderType: 'theatre_procedure',
+                serviceType: ServiceRequestServiceType::THEATRE_PROCEDURE->value,
+                linkedOrderType: ServiceRequestServiceType::THEATRE_PROCEDURE->linkedOrderType(),
                 linkedOrderId: (string) $created['id'],
                 linkedOrderNumber: isset($created['procedure_number']) ? (string) $created['procedure_number'] : null,
                 actorId: $actorId,

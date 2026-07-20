@@ -4,6 +4,7 @@ namespace App\Modules\Billing\Application\UseCases;
 
 use App\Modules\Billing\Application\Exceptions\BillingInvoicePaymentRecordingNotAllowedException;
 use App\Modules\Billing\Application\Support\BillingFinancePostingService;
+use App\Modules\Billing\Domain\Events\BillingCashierQueueUpdated;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceAuditLogRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoicePaymentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
@@ -133,6 +134,8 @@ class RecordBillingInvoicePaymentUseCase
                 ],
             ],
         );
+
+        event(new BillingCashierQueueUpdated($updatedInvoice['facility_id'] ?? null));
 
         return [
             'invoice' => $updatedInvoice,

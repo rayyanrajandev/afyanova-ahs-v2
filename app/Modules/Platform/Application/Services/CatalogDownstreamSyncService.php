@@ -49,7 +49,7 @@ class CatalogDownstreamSyncService
             payload: [
                 'service_code' => $catalogItem->code,
                 'service_name' => $catalogItem->name,
-                'service_type' => $this->serviceTypeForCatalogType((string) $catalogItem->catalog_type),
+                'service_type' => ClinicalCatalogType::tryFrom((string) $catalogItem->catalog_type)?->defaultBillingServiceType(),
                 'unit' => $catalogItem->unit,
                 'base_price' => 0,
                 'currency_code' => $currencyCode,
@@ -176,14 +176,4 @@ class CatalogDownstreamSyncService
         $this->syncToInventory($clinicalCatalogItemId, $actorId);
     }
 
-    private function serviceTypeForCatalogType(string $catalogType): ?string
-    {
-        return match ($catalogType) {
-            ClinicalCatalogType::LAB_TEST->value => 'laboratory',
-            ClinicalCatalogType::RADIOLOGY_PROCEDURE->value => 'radiology',
-            ClinicalCatalogType::THEATRE_PROCEDURE->value => 'theatre',
-            ClinicalCatalogType::FORMULARY_ITEM->value => 'pharmacy',
-            default => null,
-        };
-    }
 }

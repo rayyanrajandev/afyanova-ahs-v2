@@ -81,7 +81,7 @@ class BillingPaymentGatewayController extends Controller
             'transaction_reference' => 'required|string',
             'provider_reference' => 'nullable|string',
             'amount' => 'required|numeric|min:0.01',
-            'payment_method' => 'required|string|in:mobile_money,cash,card,bank_transfer,cheque',
+            'payment_method' => 'required|string|in:mobile_money,lipa_namba,cash,card,bank_transfer,cheque',
             'note' => 'nullable|string|max:500',
         ]);
 

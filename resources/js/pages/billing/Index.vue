@@ -65,7 +65,6 @@ type CashierQueueEntry = {
     paidInvoiceCount: number;
     totalPaidAmount: number;
     unbilledServiceCount: number;
-    inConsultation: boolean;
     summaryLabel: string;
 };
 
@@ -305,7 +304,7 @@ async function selectPatient(entry: CashierQueueEntry) {
  * Deep-link entry point from patientChartModuleHref('/billing-invoices',
  * ..., { focusInvoiceId }) — the Patient Chart's Billing tab links straight
  * to one invoice. The cashier queue only lists patients with pending
- * payment/unbilled/in-consultation activity (see ListCashierQueueUseCase),
+ * payment/unbilled activity (see ListCashierQueueUseCase),
  * so a fully-paid patient's invoice history may never appear there; this
  * loads that patient's invoices directly instead of requiring queue
  * selection, computing the same unpaid/paid summary the queue endpoint
@@ -362,7 +361,6 @@ async function loadPatientByIdDirect(targetPatientId: string): Promise<void> {
             paidInvoiceCount: paidInvoices.length,
             totalPaidAmount: paidInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0),
             unbilledServiceCount: candidatesResponse.data.length,
-            inConsultation: false,
             summaryLabel: '',
         };
     } catch (error) {
@@ -806,14 +804,12 @@ function invoiceStatusLabel(status: string): string {
 }
 
 function queueStatusDotClass(entry: CashierQueueEntry): string {
-    if (entry.inConsultation) return 'bg-blue-500';
     if (entry.unpaidInvoiceCount > 0) return 'bg-destructive';
     if (entry.unbilledServiceCount > 0) return 'bg-amber-500';
     return 'bg-emerald-500';
 }
 
 function queueStatusTitle(entry: CashierQueueEntry): string {
-    if (entry.inConsultation) return 'In consultation';
     if (entry.unpaidInvoiceCount > 0) return 'Has unpaid invoices';
     if (entry.unbilledServiceCount > 0) return 'Has unbilled services';
     return 'Fully paid';
@@ -851,7 +847,6 @@ const activeFilterChips = computed(() => {
     const chips: string[] = [];
     if (statusFilter.value !== 'all') {
         const labels: Record<string, string> = {
-            in_consultation: 'In consultation',
             unpaid: 'Has unpaid invoices',
             paid: 'Fully paid',
         };
@@ -1088,7 +1083,6 @@ watch(showPaymentDialog, (open) => {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">All</SelectItem>
-                                        <SelectItem value="in_consultation">In consultation</SelectItem>
                                         <SelectItem value="unpaid">Has unpaid invoices</SelectItem>
                                         <SelectItem value="paid">Fully paid</SelectItem>
                                     </SelectContent>
@@ -1166,13 +1160,6 @@ watch(showPaymentDialog, (open) => {
                                         <template #title>
                                             <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                                 <span class="truncate text-sm font-medium transition-colors hover:text-primary">{{ entry.patientName }}</span>
-                                                <Badge
-                                                    v-if="entry.inConsultation"
-                                                    variant="default"
-                                                    class="h-4.5 bg-blue-500 px-1.5 text-[10px] font-normal leading-none text-white"
-                                                >
-                                                    In consultation
-                                                </Badge>
                                             </div>
                                         </template>
                                         <template #meta>
@@ -1568,6 +1555,7 @@ watch(showPaymentDialog, (open) => {
                                 <SelectItem value="cash">Cash</SelectItem>
                                 <SelectItem value="card">Card</SelectItem>
                                 <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                                <SelectItem value="lipa_namba">Lipa Namba</SelectItem>
                                 <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                                 <SelectItem value="insurance">Insurance</SelectItem>
                             </SelectContent>
@@ -1631,6 +1619,7 @@ watch(showPaymentDialog, (open) => {
                                 <SelectItem value="cash">Cash</SelectItem>
                                 <SelectItem value="card">Card</SelectItem>
                                 <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                                <SelectItem value="lipa_namba">Lipa Namba</SelectItem>
                                 <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                                 <SelectItem value="insurance">Insurance</SelectItem>
                             </SelectContent>

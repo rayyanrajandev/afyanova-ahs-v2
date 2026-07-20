@@ -13,7 +13,6 @@ export type CashierQueueEntry = {
     paidInvoiceCount: number;
     totalPaidAmount: number;
     unbilledServiceCount: number;
-    inConsultation: boolean;
     summaryLabel: string;
 };
 
@@ -27,6 +26,11 @@ type CashierQueueResponse = {
     };
 };
 
+/**
+ * A live read, not a synced table — matches useReceptionQueue.ts's
+ * refetchInterval so a cashier screen left open stays reasonably current
+ * without a manual refresh button or websocket wiring.
+ */
 export function useBillingCashierQueue(
     filters: BillingCashierQueueFilters,
 ): UseQueryReturnType<CashierQueueResponse, Error> {
@@ -40,5 +44,6 @@ export function useBillingCashierQueue(
                 perPage: filters.perPage,
             }),
         placeholderData: (previousData) => previousData,
+        refetchInterval: 30_000,
     });
 }

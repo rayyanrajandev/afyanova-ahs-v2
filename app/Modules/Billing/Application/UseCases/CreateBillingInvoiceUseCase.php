@@ -10,6 +10,7 @@ use App\Modules\Billing\Application\Exceptions\PatientNotEligibleForBillingInvoi
 use App\Modules\Billing\Application\Support\BillingInvoiceLineItemAutoPricingResolver;
 use App\Modules\Billing\Application\Support\BillingInvoicePayerSummaryResolver;
 use App\Modules\Billing\Application\Support\ConsultationReviewDiscountApplier;
+use App\Modules\Billing\Domain\Events\BillingCashierQueueUpdated;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceAuditLogRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Services\AdmissionLookupServiceInterface;
@@ -145,6 +146,8 @@ class CreateBillingInvoiceUseCase
                 requestedAutoPricing: $requestedAutoPricing,
             );
 
+            event(new BillingCashierQueueUpdated($continuedInvoice['facility_id'] ?? null));
+
             return [
                 'invoice' => $continuedInvoice,
                 'draft_reused' => true,
@@ -162,6 +165,8 @@ class CreateBillingInvoiceUseCase
                 'after' => $this->extractTrackedFields($createdInvoice),
             ],
         );
+
+        event(new BillingCashierQueueUpdated($createdInvoice['facility_id'] ?? null));
 
         return [
             'invoice' => $createdInvoice,

@@ -20,7 +20,7 @@ class RecordCashBillingPaymentRequest extends FormRequest
         return [
             'amount_paid' => ['required', 'numeric', 'min:0.01'],
             'currency_code' => ['sometimes', 'string', 'size:3'],
-            'payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_money', 'check'])],
+            'payment_method' => ['required', Rule::in(['cash', 'card', 'mobile_money', 'lipa_namba', 'check'])],
             'payment_reference' => ['sometimes', 'string'],
             'mobile_money_provider' => ['sometimes', 'string'],
             'mobile_money_transaction_id' => ['sometimes', 'string'],

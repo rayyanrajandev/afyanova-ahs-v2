@@ -342,7 +342,7 @@ class BillingFinancePostingService
     private function cashAccountForMethod(string $paymentMethod): array
     {
         return match (strtolower(trim($paymentMethod))) {
-            'mobile_money' => ['1010', 'Mobile Money Clearing'],
+            'mobile_money', 'lipa_namba' => ['1010', 'Mobile Money Clearing'],
             'card', 'bank_transfer', 'bank' => ['1020', 'Bank Clearing Account'],
             'check', 'cheque' => ['1030', 'Cheque Clearing Account'],
             default => ['1000', 'Cash on Hand'],

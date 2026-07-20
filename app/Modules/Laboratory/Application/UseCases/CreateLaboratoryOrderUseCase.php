@@ -16,6 +16,7 @@ use App\Modules\Laboratory\Domain\ValueObjects\LaboratoryOrderStatus;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\ServiceRequest\Application\UseCases\LinkServiceRequestToClinicalOrderUseCase;
+use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestServiceType;
 use App\Support\ClinicalOrders\ClinicalOrderLifecycle;
 use App\Support\ClinicalOrders\OrderSessionManager;
 use Illuminate\Support\Str;
@@ -115,8 +116,8 @@ class CreateLaboratoryOrderUseCase
             $this->serviceRequestLinker->complete(
                 serviceRequestId: $serviceRequestId,
                 patientId: $patientId,
-                serviceType: 'laboratory',
-                linkedOrderType: 'laboratory_order',
+                serviceType: ServiceRequestServiceType::LABORATORY->value,
+                linkedOrderType: ServiceRequestServiceType::LABORATORY->linkedOrderType(),
                 linkedOrderId: (string) $createdOrder['id'],
                 linkedOrderNumber: isset($createdOrder['order_number']) ? (string) $createdOrder['order_number'] : null,
                 actorId: $actorId,

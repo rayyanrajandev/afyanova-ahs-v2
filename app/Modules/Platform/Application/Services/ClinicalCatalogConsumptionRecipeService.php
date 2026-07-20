@@ -2,7 +2,6 @@
 
 namespace App\Modules\Platform\Application\Services;
 
-use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
 use App\Modules\Platform\Domain\Repositories\ClinicalCatalogItemAuditLogRepositoryInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
@@ -16,28 +15,6 @@ use Illuminate\Validation\ValidationException;
 
 class ClinicalCatalogConsumptionRecipeService
 {
-    /**
-     * @var array<string, array<int, string>>
-     */
-    private const ELIGIBLE_INVENTORY_CATEGORIES = [
-        ClinicalCatalogType::LAB_TEST->value => [
-            InventoryItemCategory::LABORATORY->value,
-            InventoryItemCategory::MEDICAL_CONSUMABLE->value,
-        ],
-        ClinicalCatalogType::RADIOLOGY_PROCEDURE->value => [
-            InventoryItemCategory::RADIOLOGY->value,
-            InventoryItemCategory::MEDICAL_CONSUMABLE->value,
-        ],
-        ClinicalCatalogType::THEATRE_PROCEDURE->value => [
-            InventoryItemCategory::MEDICAL_CONSUMABLE->value,
-            InventoryItemCategory::PPE->value,
-            InventoryItemCategory::SURGICAL_INSTRUMENT->value,
-        ],
-    ];
-
-    /**
-     * @var array<int, string>
-     */
     private const CONSUMPTION_STAGES = ['per_order', 'sample_collection', 'processing', 'result_release', 'procedure_completion', 'manual'];
 
     public function __construct(
@@ -59,8 +36,8 @@ class ClinicalCatalogConsumptionRecipeService
         return [
             'catalogItemId' => (string) $catalogItem->id,
             'catalogType' => (string) $catalogItem->catalog_type,
-            'isRecipeSupported' => $this->supportsRecipes((string) $catalogItem->catalog_type),
-            'eligibleCategories' => self::ELIGIBLE_INVENTORY_CATEGORIES[(string) $catalogItem->catalog_type] ?? [],
+            'isRecipeSupported' => ClinicalCatalogType::tryFrom((string) $catalogItem->catalog_type)?->supportsConsumptionRecipes() ?? false,
+            'eligibleCategories' => ClinicalCatalogType::tryFrom((string) $catalogItem->catalog_type)?->eligibleInventoryCategories() ?? [],
             'items' => $this->recipeItemsForCatalogItem((string) $catalogItem->id),
         ];
     }
@@ -76,7 +53,8 @@ class ClinicalCatalogConsumptionRecipeService
             return null;
         }
 
-        if (! $this->supportsRecipes((string) $catalogItem->catalog_type)) {
+        $catalogType = ClinicalCatalogType::tryFrom((string) $catalogItem->catalog_type);
+        if ($catalogType === null || ! $catalogType->supportsConsumptionRecipes()) {
             throw ValidationException::withMessages([
                 'catalogItemId' => ['Consumables mapping is for lab tests, radiology, and theatre procedures. Medicines use the formulary-to-pharmaceutical inventory bridge instead.'],
             ]);
@@ -127,7 +105,7 @@ class ClinicalCatalogConsumptionRecipeService
             'catalogItemId' => (string) $catalogItem->id,
             'catalogType' => (string) $catalogItem->catalog_type,
             'isRecipeSupported' => true,
-            'eligibleCategories' => self::ELIGIBLE_INVENTORY_CATEGORIES[(string) $catalogItem->catalog_type],
+            'eligibleCategories' => ClinicalCatalogType::tryFrom((string) $catalogItem->catalog_type)?->eligibleInventoryCategories() ?? [],
             'items' => $after,
         ];
     }
@@ -137,11 +115,12 @@ class ClinicalCatalogConsumptionRecipeService
      */
     public function eligibleInventoryOptions(string $catalogType, ?string $query = null, int $limit = 100): array
     {
-        if (! $this->supportsRecipes($catalogType)) {
+        $catalogTypeEnum = ClinicalCatalogType::tryFrom($catalogType);
+        if ($catalogTypeEnum === null || ! $catalogTypeEnum->supportsConsumptionRecipes()) {
             return [];
         }
 
-        $categories = self::ELIGIBLE_INVENTORY_CATEGORIES[$catalogType];
+        $categories = $catalogTypeEnum->eligibleInventoryCategories();
         $limit = min(max($limit, 1), 200);
 
         $queryBuilder = InventoryItemModel::query()
@@ -170,11 +149,6 @@ class ClinicalCatalogConsumptionRecipeService
             ->map(fn (InventoryItemModel $item): array => $this->transformInventoryOption($item))
             ->values()
             ->all();
-    }
-
-    private function supportsRecipes(string $catalogType): bool
-    {
-        return array_key_exists($catalogType, self::ELIGIBLE_INVENTORY_CATEGORIES);
     }
 
     private function catalogItem(string $clinicalCatalogItemId, string $catalogType): ?ClinicalCatalogItemModel
@@ -213,7 +187,7 @@ class ClinicalCatalogConsumptionRecipeService
             ]);
         }
 
-        $allowedCategories = self::ELIGIBLE_INVENTORY_CATEGORIES[$catalogType] ?? [];
+        $allowedCategories = ClinicalCatalogType::tryFrom($catalogType)?->eligibleInventoryCategories() ?? [];
         $normalized = [];
         $seenInventoryItemIds = [];
 

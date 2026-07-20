@@ -9,6 +9,7 @@ use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryStockMovementModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogConsumptionRecipeItemModel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -16,15 +17,6 @@ use Illuminate\Validation\ValidationException;
 class ClinicalCatalogRecipeStockConsumptionService
 {
     private const MOVEMENT_SOURCE = 'clinical_catalog_consumption_recipe';
-
-    /**
-     * @var array<int, string>
-     */
-    private const SUPPORTED_CATALOG_TYPES = [
-        'lab_test',
-        'radiology_procedure',
-        'theatre_procedure',
-    ];
 
     public function __construct(
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
@@ -383,7 +375,7 @@ class ClinicalCatalogRecipeStockConsumptionService
 
     private function supportsCatalogType(string $catalogType): bool
     {
-        return in_array($catalogType, self::SUPPORTED_CATALOG_TYPES, true);
+        return ClinicalCatalogType::tryFrom($catalogType)?->supportsConsumptionRecipes() ?? false;
     }
 
     private function precheckSummary(

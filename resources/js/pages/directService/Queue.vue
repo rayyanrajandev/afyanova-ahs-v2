@@ -168,6 +168,17 @@ const statusDialogOpen = ref(false);
 const statusDialogTarget = ref<DirectServiceStatusTargetRequest | null>(null);
 const statusDialogAction = ref<DirectServiceStatusTarget | null>(null);
 
+function serviceWorkspaceHref(item: DirectServiceRequest): string | null {
+    const base = serviceWorkspaceRoutes[item.serviceType ?? ''];
+    if (!base) return null;
+    const params = new URLSearchParams();
+    params.set('tab', 'new');
+    params.set('serviceRequestId', item.id);
+    if (item.patientId) params.set('patientId', item.patientId);
+    if (item.appointmentId) params.set('appointmentId', item.appointmentId);
+    return `${base}?${params.toString()}`;
+}
+
 function openStatusDialog(item: DirectServiceRequest, action: DirectServiceStatusTarget): void {
     statusDialogTarget.value = { requestId: item.id, requestNumber: item.requestNumber };
     statusDialogAction.value = action;
@@ -317,11 +328,11 @@ const { scrollContainerHeight } = useStickyScrollContainer();
 
                             <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
                                 <a
-                                    v-if="item.status === 'in_progress' && item.serviceType && serviceWorkspaceRoutes[item.serviceType]"
-                                    :href="serviceWorkspaceRoutes[item.serviceType]"
+                                    v-if="item.status === 'in_progress' && serviceWorkspaceHref(item)"
+                                    :href="serviceWorkspaceHref(item)"
                                     class="inline-flex h-7 items-center rounded-md border px-2 text-xs font-medium text-primary hover:bg-muted"
                                 >
-                                    Open workspace
+                                    Create order
                                     <AppIcon name="chevron-right" class="ml-0.5 size-3.5" />
                                 </a>
                                 <template v-if="canUpdateStatus">

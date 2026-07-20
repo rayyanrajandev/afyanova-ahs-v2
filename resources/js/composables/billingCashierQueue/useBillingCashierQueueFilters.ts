@@ -4,7 +4,7 @@ import { reactive } from 'vue';
  * Filters for the billing Cashier Queue — matches
  * ListCashierQueueUseCase's filter shape 1:1
  * (app/Modules/Billing/Application/UseCases/ListCashierQueueUseCase.php): q,
- * status ('all' | 'in_consultation' | 'unpaid' | 'paid'), page, perPage.
+ * status ('all' | 'unpaid' | 'paid'), page, perPage.
  *
  * Initial values are read from the URL query string so a refresh, a
  * bookmarked link, or the browser back button lands back on the same
@@ -26,7 +26,7 @@ export function useBillingCashierQueueFilters() {
 
     return reactive({
         q: readParam(params, 'q'),
-        status: (readParam(params, 'status') || 'all') as 'all' | 'in_consultation' | 'unpaid' | 'paid',
+        status: (readParam(params, 'status') || 'all') as 'all' | 'unpaid' | 'paid',
         page: Number.isFinite(page) && page > 0 ? page : 1,
         perPage: Number.isFinite(perPage) && perPage > 0 ? perPage : 20,
     });

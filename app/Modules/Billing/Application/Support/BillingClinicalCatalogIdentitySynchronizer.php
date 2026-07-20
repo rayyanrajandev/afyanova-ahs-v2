@@ -91,7 +91,7 @@ class BillingClinicalCatalogIdentitySynchronizer
         $payload['clinical_catalog_item_id'] = $clinicalCatalogItemId;
         $payload['service_code'] = $this->normalizeCode($catalogItem->code);
         $payload['service_name'] = trim((string) $catalogItem->name);
-        $payload['service_type'] = $this->serviceTypeForCatalogType((string) $catalogItem->catalog_type)
+        $payload['service_type'] = ClinicalCatalogType::tryFrom((string) $catalogItem->catalog_type)?->defaultBillingServiceType()
             ?? ($payload['service_type'] ?? null);
 
         if (($payload['unit'] ?? null) === null || trim((string) $payload['unit']) === '') {
@@ -123,17 +123,6 @@ class BillingClinicalCatalogIdentitySynchronizer
         }
 
         return $payload;
-    }
-
-    private function serviceTypeForCatalogType(string $catalogType): ?string
-    {
-        return match ($catalogType) {
-            ClinicalCatalogType::LAB_TEST->value => 'laboratory',
-            ClinicalCatalogType::RADIOLOGY_PROCEDURE->value => 'radiology',
-            ClinicalCatalogType::THEATRE_PROCEDURE->value => 'theatre',
-            ClinicalCatalogType::FORMULARY_ITEM->value => 'pharmacy',
-            default => null,
-        };
     }
 
     private function normalizeCode(mixed $value): ?string

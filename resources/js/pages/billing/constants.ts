@@ -12,6 +12,7 @@ export const billingPaymentPayerTypeOptions = [
 export const billingPaymentMethodOptions = [
     { value: 'cash', label: 'Cash' },
     { value: 'mobile_money', label: 'Mobile Money' },
+    { value: 'lipa_namba', label: 'Lipa Namba' },
     { value: 'card', label: 'Card' },
     { value: 'bank_transfer', label: 'Bank Transfer' },
     { value: 'insurance_claim', label: 'Insurance Claim' },
@@ -22,6 +23,7 @@ export const billingPaymentMethodOptions = [
 
 export const billingPaymentMethodsRequiringReference = new Set([
     'mobile_money',
+    'lipa_namba',
     'card',
     'bank_transfer',
     'insurance_claim',

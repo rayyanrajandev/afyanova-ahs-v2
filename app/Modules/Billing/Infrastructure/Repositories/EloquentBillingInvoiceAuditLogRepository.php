@@ -58,6 +58,20 @@ class EloquentBillingInvoiceAuditLogRepository implements BillingInvoiceAuditLog
         return $this->toPagedResult($paginator);
     }
 
+    public function listByBillingInvoiceIds(array $billingInvoiceIds): array
+    {
+        if ($billingInvoiceIds === []) {
+            return [];
+        }
+
+        return BillingInvoiceAuditLogModel::query()
+            ->whereIn('billing_invoice_id', $billingInvoiceIds)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(static fn (BillingInvoiceAuditLogModel $log): array => $log->toArray())
+            ->all();
+    }
+
     private function toPagedResult(LengthAwarePaginator $paginator): array
     {
         return [

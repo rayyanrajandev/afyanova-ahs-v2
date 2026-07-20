@@ -21,6 +21,7 @@ class UpdateServiceRequestStatusRequest extends FormRequest
         return [
             'status' => ['required', Rule::in(['in_progress', 'completed', 'cancelled'])],
             'statusReason' => ['nullable', 'string', 'max:500'],
+            'linkedOrderNumber' => ['nullable', 'string', 'max:80'],
         ];
     }
 
@@ -32,6 +33,13 @@ class UpdateServiceRequestStatusRequest extends FormRequest
 
             if (in_array($status, ['completed', 'cancelled'], true) && $reason === '') {
                 $validator->errors()->add('statusReason', 'A reason is required when closing or cancelling a direct service ticket.');
+            }
+
+            if ($status === 'completed') {
+                $linkedNumber = trim((string) $this->input('linkedOrderNumber', ''));
+                if ($linkedNumber === '') {
+                    $validator->errors()->add('linkedOrderNumber', 'A destination order number is required when closing a direct service ticket.');
+                }
             }
         });
     }

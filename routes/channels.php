@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Billing\Application\Services\BillingQueueChannelAuthorizer;
 use App\Modules\PatientFlow\Application\Services\PatientFlowBoardChannelAuthorizer;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -19,4 +20,14 @@ Broadcast::channel(
 Broadcast::channel(
     'notifications.{userId}',
     fn ($user, int $userId): bool => $user->id === $userId,
+);
+
+// Billing cashier queue live updates — one facility-scoped private channel,
+// separate from patient-flow since billing invoice/payment activity isn't
+// one of that event's triggers. Authorization logic lives in
+// BillingQueueChannelAuthorizer (directly unit-tested there) rather than
+// inline here, since the test suite forces BROADCAST_CONNECTION=null.
+Broadcast::channel(
+    'billing-queue.{facilityId}',
+    fn ($user, string $facilityId): bool => app(BillingQueueChannelAuthorizer::class)->authorize($user, $facilityId),
 );

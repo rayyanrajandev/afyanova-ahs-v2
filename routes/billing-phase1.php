@@ -7,6 +7,7 @@ use App\Modules\Billing\Presentation\Http\Controllers\BillingDailyCloseControlle
 use App\Modules\Billing\Presentation\Http\Controllers\BillingDiscountController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingRefundController;
+use App\Modules\Billing\Presentation\Http\Controllers\BillingPatientWorkspaceController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingRoutingController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingWriteOffController;
 use App\Modules\Billing\Presentation\Http\Controllers\CashBillingController;
@@ -261,4 +262,15 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
             ->middleware('can:billing.payments.read')
             ->name('billing-sms.log');
     });
+
+    // Patient Billing Workspace
+    Route::get('billing/{patientId}/workspace', BillingPatientWorkspaceController::class)
+        ->middleware('can:billing.invoices.read')
+        ->name('billing.workspace.api');
+    Route::get('billing/{patientId}/payments', [BillingPatientWorkspaceController::class, 'payments'])
+        ->middleware('can:billing.invoices.read')
+        ->name('billing.workspace.payments');
+    Route::get('billing/{patientId}/audit-logs', [BillingPatientWorkspaceController::class, 'auditLogs'])
+        ->middleware('can:billing.invoices.read')
+        ->name('billing.workspace.audit-logs');
 });

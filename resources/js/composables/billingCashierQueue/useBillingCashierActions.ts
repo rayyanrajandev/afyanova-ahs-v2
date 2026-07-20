@@ -24,14 +24,28 @@ type PaymentResponse = {
  * (instant balance updates, the undo toast, draft-payment localStorage) stays
  * in billing/IndexV2.vue — that's page-local presentation state, not a data
  * concern this composable should own.
+ *
+ * Shared by both billing/IndexV2.vue (queryKey 'billing-cashier-patient') and
+ * billing/workspace/Workspace.vue + its tabs (queryKeys
+ * 'billing-patient-workspace', 'billing-patient-payments',
+ * 'billing-patient-audit-logs') — invalidate() must cover every one of these
+ * or a mutation succeeds server-side but its caller's own screen goes stale
+ * until a full page reload starts a fresh query. (Found: this function only
+ * invalidated the two IndexV2-era keys, so every workspace action —
+ * recordPayment, reversePayment, issueInvoice, charge capture — silently
+ * failed to refresh the workspace, payments tab, or audit tab.)
  */
 export function useBillingCashierActions() {
     const queryClient = useQueryClient();
 
     function invalidate(patientId: string | null) {
         void queryClient.invalidateQueries({ queryKey: ['billing-cashier-queue'] });
+        void queryClient.invalidateQueries({ queryKey: ['billing-cashier-queue-status-counts'] });
         if (patientId) {
             void queryClient.invalidateQueries({ queryKey: ['billing-cashier-patient', patientId] });
+            void queryClient.invalidateQueries({ queryKey: ['billing-patient-workspace', patientId] });
+            void queryClient.invalidateQueries({ queryKey: ['billing-patient-payments', patientId] });
+            void queryClient.invalidateQueries({ queryKey: ['billing-patient-audit-logs', patientId] });
         }
     }
 

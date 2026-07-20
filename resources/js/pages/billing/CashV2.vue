@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { refDebounced, useDebounceFn, useMediaQuery } from '@vueuse/core';
 import { computed, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -41,6 +41,13 @@ import type { BreadcrumbItem } from '@/types';
  * group) already supports recording charges/payments and converting to an
  * invoice or voiding/refunding an account — none of that had any UI before
  * this rebuild.
+ *
+ * Header/stat-tile/Tabs-wrapped-sticky-header structure matches
+ * encounters/List.vue and billing/List.vue: `<Tabs>` wraps the whole page,
+ * title/description on the left, right-aligned Button+Link pairs for
+ * cross-module nav (BillingModuleNav's tab-strip removed) plus the page's
+ * own actions, and a plain (not custom-pill-styled) TabsList both here and
+ * on the account-detail panel's Charges/Payments tabs.
  */
 const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
 
@@ -346,40 +353,56 @@ const { scrollContainerHeight } = useStickyScrollContainer();
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div ref="scrollContainer" class="flex flex-col overflow-x-hidden overflow-y-auto rounded-lg" :style="{ height: scrollContainerHeight }">
-            <div class="sticky top-0 z-10 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
-                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="flex min-w-0 items-center gap-2">
-                        <h1 class="text-lg font-bold tracking-tight md:text-xl">Cash payments</h1>
-                        <Badge v-if="pagination" variant="secondary">{{ pagination.total }} accounts</Badge>
+            <Tabs :model-value="filters.status" class="contents" @update:model-value="setStatus">
+                <div class="sticky top-0 z-10 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-lg font-bold tracking-tight md:text-xl">Cash payments</h1>
+                            <p class="text-xs text-muted-foreground">Walk-in cash accounts — charge, collect payment, and convert to invoice.</p>
+                        </div>
+                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                            <Badge v-if="pagination" variant="secondary">{{ pagination.total }} accounts</Badge>
+                            <Button variant="outline" size="sm" class="h-8 gap-1.5" as-child>
+                                <Link href="/billing">
+                                    <AppIcon name="receipt" class="size-3.5" />
+                                    Invoices
+                                </Link>
+                            </Button>
+                            <Button variant="outline" size="sm" class="h-8 gap-1.5" as-child>
+                                <Link href="/billing-refunds">
+                                    <AppIcon name="undo-2" class="size-3.5" />
+                                    Refunds
+                                </Link>
+                            </Button>
+                            <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="newAccountSheetOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                New cash account
+                            </Button>
+                            <Button variant="ghost" size="sm" class="h-8 w-8 p-0" :disabled="listLoading" title="Refresh" @click="refreshList">
+                                <AppIcon :name="listLoading ? 'loader-circle' : 'refresh-cw'" class="size-3.5" :class="listLoading ? 'animate-spin' : ''" />
+                            </Button>
+                            <Button v-if="hasActiveFilters" size="sm" variant="outline" class="h-8 gap-1.5" @click="clearAllFilters">
+                                Clear filters
+                            </Button>
+                        </div>
                     </div>
-                    <div class="flex flex-shrink-0 items-center gap-2">
-                        <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="newAccountSheetOpen = true">
-                            <AppIcon name="plus" class="size-3.5" />
-                            New cash account
-                        </Button>
-                        <Button variant="ghost" size="sm" class="h-8 w-8 p-0" :disabled="listLoading" title="Refresh" @click="refreshList">
-                            <AppIcon :name="listLoading ? 'loader-circle' : 'refresh-cw'" class="size-3.5" :class="listLoading ? 'animate-spin' : ''" />
-                        </Button>
-                    </div>
-                </div>
 
-                <div class="mt-3 grid grid-cols-3 gap-2">
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Active</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.active ?? '—' }}</p>
+                    <div class="mt-3 grid grid-cols-3 gap-2">
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Active</p>
+                            <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.active ?? '—' }}</p>
+                        </div>
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Settled</p>
+                            <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.settled ?? '—' }}</p>
+                        </div>
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Suspended</p>
+                            <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.suspended ?? '—' }}</p>
+                        </div>
                     </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Settled</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.settled ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Suspended</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.suspended ?? '—' }}</p>
-                    </div>
-                </div>
 
-                <Tabs :model-value="filters.status" class="mt-3" @update:model-value="setStatus">
-                    <TabsList class="grid w-full grid-cols-4">
+                    <TabsList class="mt-3 flex w-full flex-wrap justify-start gap-1">
                         <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
                             All
                             <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.all ?? '—' }}</Badge>
@@ -397,53 +420,48 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.suspended ?? '—' }}</Badge>
                         </TabsTrigger>
                     </TabsList>
-                </Tabs>
 
-                <div class="mt-3 flex flex-wrap items-center gap-2">
-                    <div class="relative min-w-0 flex-1">
-                        <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                        <Input v-model="searchInputRaw" placeholder="Search accounts by patient name, MRN, or phone…" class="h-9 pl-9" @keyup.enter="submitSearchNow" />
-                    </div>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger as-child>
-                            <Button variant="outline" size="sm" class="h-9 gap-1.5">
-                                <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                View
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-48">
-                            <DropdownMenuItem @click="setPerPage(10)">10 per page</DropdownMenuItem>
-                            <DropdownMenuItem @click="setPerPage(20)">20 per page</DropdownMenuItem>
-                            <DropdownMenuItem @click="setPerPage(50)">50 per page</DropdownMenuItem>
-                            <DropdownMenuItem @click="compactRows = true">Compact rows</DropdownMenuItem>
-                            <DropdownMenuItem @click="compactRows = false">Comfortable rows</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button v-if="hasActiveFilters" size="sm" variant="ghost" class="h-9 gap-1.5 text-xs" @click="clearAllFilters">
-                        <AppIcon name="x" class="size-3.5" />
-                        Clear filters
-                    </Button>
-                </div>
-            </div>
-
-            <div class="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-6 md:px-6">
-                <div v-if="listError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
-                    <div class="flex items-start gap-2.5">
-                        <AppIcon name="alert-triangle" class="mt-0.5 size-4 shrink-0 text-destructive" />
-                        <div class="min-w-0">
-                            <p class="text-sm font-medium text-destructive">Unable to load cash accounts</p>
-                            <p class="mt-1 text-xs break-all text-muted-foreground">{{ listError }}</p>
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                        <div class="relative min-w-0 flex-1">
+                            <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input v-model="searchInputRaw" placeholder="Search accounts by patient name, MRN, or phone…" class="h-9 pl-9" @keyup.enter="submitSearchNow" />
                         </div>
-                        <Button variant="ghost" size="sm" class="ml-auto h-7 shrink-0 px-2" @click="refreshList">
-                            <AppIcon name="refresh-cw" class="mr-1 size-3" />
-                            Retry
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button variant="outline" size="sm" class="h-9 gap-1.5">
+                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                    View
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-48">
+                                <DropdownMenuItem @click="setPerPage(10)">10 per page</DropdownMenuItem>
+                                <DropdownMenuItem @click="setPerPage(20)">20 per page</DropdownMenuItem>
+                                <DropdownMenuItem @click="setPerPage(50)">50 per page</DropdownMenuItem>
+                                <DropdownMenuItem @click="compactRows = true">Compact rows</DropdownMenuItem>
+                                <DropdownMenuItem @click="compactRows = false">Comfortable rows</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 
-                <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
-                    <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-                        <!-- Left: accounts list -->
+                <div class="space-y-4 px-4 pb-6 md:px-6">
+                    <div v-if="listError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+                        <div class="flex items-start gap-2.5">
+                            <AppIcon name="alert-triangle" class="mt-0.5 size-4 shrink-0 text-destructive" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-destructive">Unable to load cash accounts</p>
+                                <p class="mt-1 text-xs break-all text-muted-foreground">{{ listError }}</p>
+                            </div>
+                            <Button variant="ghost" size="sm" class="ml-auto h-7 shrink-0 px-2" @click="refreshList">
+                                <AppIcon name="refresh-cw" class="mr-1 size-3" />
+                                Retry
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+                        <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+                            <!-- Left: accounts list -->
                         <div
                             class="flex min-h-0 flex-col border-b md:flex md:border-r md:border-b-0"
                             :class="[selectedAccountId ? 'md:w-96' : 'md:flex-1', isMobile && mobileView === 'detail' ? 'hidden' : '']"
@@ -541,14 +559,14 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </div>
 
                             <Tabs default-value="charges" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                                <TabsList class="mx-4 mt-2 grid h-9 w-full grid-cols-2 gap-1 bg-muted/40 p-1">
-                                    <TabsTrigger value="charges" class="gap-1.5">
+                                <TabsList class="mx-4 mt-2 flex w-full flex-wrap justify-start gap-1">
+                                    <TabsTrigger value="charges" class="inline-flex items-center gap-1.5">
                                         Charges
-                                        <Badge v-if="accountCharges.length > 0" variant="secondary" class="ml-1 h-4.5 px-1.5 text-[10px]">{{ accountCharges.length }}</Badge>
+                                        <Badge v-if="accountCharges.length > 0" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ accountCharges.length }}</Badge>
                                     </TabsTrigger>
-                                    <TabsTrigger value="payments" class="gap-1.5">
+                                    <TabsTrigger value="payments" class="inline-flex items-center gap-1.5">
                                         Payments
-                                        <Badge v-if="accountPayments.length > 0" variant="secondary" class="ml-1 h-4.5 px-1.5 text-[10px]">{{ accountPayments.length }}</Badge>
+                                        <Badge v-if="accountPayments.length > 0" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ accountPayments.length }}</Badge>
                                     </TabsTrigger>
                                 </TabsList>
 
@@ -618,6 +636,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </div>
                 </div>
             </div>
+            </Tabs>
         </div>
 
         <!-- New cash account sheet -->
@@ -703,6 +722,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 <SelectItem value="cash">Cash</SelectItem>
                                 <SelectItem value="card">Card</SelectItem>
                                 <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                                <SelectItem value="lipa_namba">Lipa Namba</SelectItem>
                                 <SelectItem value="check">Check</SelectItem>
                             </SelectContent>
                         </Select>

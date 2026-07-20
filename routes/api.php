@@ -944,7 +944,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:billing.invoices.read')
         ->name('billing-invoices.status-counts');
     Route::get('billing-invoices/charge-capture-candidates', [BillingInvoiceController::class, 'chargeCaptureCandidates'])
-        ->middleware('can:billing.invoices.create')
+        ->middleware('can:billing.invoices.read')
         ->name('billing-invoices.charge-capture-candidates');
     Route::get('billing-invoices/financial-controls/summary', [BillingInvoiceController::class, 'financialControlsSummary'])
         ->middleware('can:billing.financial-controls.read')

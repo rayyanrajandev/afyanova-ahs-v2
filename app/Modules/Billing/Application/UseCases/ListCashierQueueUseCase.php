@@ -2,7 +2,6 @@
 
 namespace App\Modules\Billing\Application\UseCases;
 
-use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
@@ -106,12 +105,6 @@ class ListCashierQueueUseCase
      */
     private function applyStatusFilter(EloquentBuilder $query, ?string $status): void
     {
-        if ($status === 'in_consultation') {
-            $query->whereExists(fn (QueryBuilder $q) => $this->inConsultationExists($q));
-
-            return;
-        }
-
         if ($status === 'unpaid') {
             $query->whereExists(fn (QueryBuilder $q) => $this->unpaidInvoiceExists($q));
 
@@ -137,16 +130,7 @@ class ListCashierQueueUseCase
             $outer->orWhereExists(fn (QueryBuilder $q) => $this->pharmacyUnbilledExists($q));
             $outer->orWhereExists(fn (QueryBuilder $q) => $this->radiologyUnbilledExists($q));
             $outer->orWhereExists(fn (QueryBuilder $q) => $this->theatreUnbilledExists($q));
-            $outer->orWhereExists(fn (QueryBuilder $q) => $this->inConsultationExists($q));
         });
-    }
-
-    private function inConsultationExists(QueryBuilder $query): void
-    {
-        $query->select(\DB::raw(1))
-            ->from('appointments')
-            ->whereColumn('appointments.patient_id', 'patients.id')
-            ->where('appointments.status', 'in_consultation');
     }
 
     private function unpaidInvoiceExists(QueryBuilder $query): void
@@ -241,17 +225,7 @@ class ListCashierQueueUseCase
         // Batch fetch unbilled service counts per patient
         $unbilledCounts = $this->countUnbilledServices($patientIds);
 
-        // Batch fetch patients currently in consultation
-        $inConsultationPatientIds = AppointmentModel::query()
-            ->select('patient_id')
-            ->whereIn('patient_id', $patientIds)
-            ->where('status', 'in_consultation')
-            ->pluck('patient_id')
-            ->unique()
-            ->toArray();
-        $inConsultationSet = array_flip($inConsultationPatientIds);
-
-        return $patients->map(function (PatientModel $patient) use ($invoicesByPatient, $unbilledCounts, $status, $inConsultationSet) {
+        return $patients->map(function (PatientModel $patient) use ($invoicesByPatient, $unbilledCounts, $status) {
             $invoices = $invoicesByPatient->get($patient->id, collect());
             $unpaidInvoices = $invoices->filter(fn ($inv) => $status !== 'paid' && (float) ($inv->balance_amount ?? 0) > 0);
             $paidInvoices = $invoices->filter(fn ($inv) => $status !== 'unpaid' && (float) ($inv->balance_amount ?? 0) <= 0);
@@ -259,7 +233,6 @@ class ListCashierQueueUseCase
             $totalUnpaid = $unpaidInvoices->sum('balance_amount');
             $totalPaid = $paidInvoices->sum('paid_amount');
             $unbilledCount = $unbilledCounts[$patient->id] ?? 0;
-            $isInConsultation = isset($inConsultationSet[$patient->id]);
 
             return [
                 'patientId' => $patient->id,
@@ -271,8 +244,7 @@ class ListCashierQueueUseCase
                 'paidInvoiceCount' => $paidInvoices->count(),
                 'totalPaidAmount' => (float) $totalPaid,
                 'unbilledServiceCount' => $unbilledCount,
-                'inConsultation' => $isInConsultation,
-                'summaryLabel' => $this->buildSummaryLabel($unpaidInvoices->count(), $totalUnpaid, $unbilledCount, $isInConsultation),
+                'summaryLabel' => $this->buildSummaryLabel($unpaidInvoices->count(), $totalUnpaid, $unbilledCount),
             ];
         });
     }
@@ -346,13 +318,9 @@ class ListCashierQueueUseCase
         return $counts;
     }
 
-    private function buildSummaryLabel(int $unpaidCount, float $totalUnpaid, int $unbilledCount, bool $inConsultation): string
+    private function buildSummaryLabel(int $unpaidCount, float $totalUnpaid, int $unbilledCount): string
     {
         $parts = [];
-
-        if ($inConsultation) {
-            $parts[] = 'In consultation';
-        }
 
         if ($unpaidCount > 0) {
             $parts[] = "{$unpaidCount} unpaid invoice" . ($unpaidCount === 1 ? '' : 's') . ' (' . number_format($totalUnpaid, 0) . ')';
@@ -363,6 +331,11 @@ class ListCashierQueueUseCase
         }
 
         return implode(' · ', $parts) ?: 'No pending charges';
+    }
+
+    private function normalizeBoolean($value): bool
+    {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
     }
 
     private function normalizeNullableString($value): ?string

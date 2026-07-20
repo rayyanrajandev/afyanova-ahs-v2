@@ -57,7 +57,7 @@ const BADGE_HREF_MAP: Record<string, string> = {
     '/laboratory-orders': 'laboratory',
     '/radiology-orders': 'radiology',
     '/pharmacy-orders': 'pharmacy',
-    '/billing-invoices': 'billing-invoices',
+    '/billing': 'billing-invoices',
 };
 
 const BADGE_CLASS_MAP: Record<string, string> = {

@@ -18,7 +18,7 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
-import BillingModuleNav from '@/pages/billing/invoices/components/BillingModuleNav.vue';
+import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import { type BreadcrumbItem } from '@/types';
 
 type Pagination = { currentPage: number; perPage: number; total: number; lastPage: number };

@@ -26,7 +26,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { generateRequestKey } from '@/lib/idempotency';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
-import BillingModuleNav from '@/pages/billing/invoices/components/BillingModuleNav.vue';
+import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import { type BreadcrumbItem } from '@/types';
 
 type DailyCloseRecord = {

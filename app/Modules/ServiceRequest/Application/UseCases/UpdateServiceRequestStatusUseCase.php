@@ -8,6 +8,7 @@ use App\Modules\ServiceRequest\Application\Exceptions\ServiceRequestStatusTransi
 use App\Modules\ServiceRequest\Application\Services\ServiceRequestDepartmentScope;
 use App\Modules\ServiceRequest\Domain\Events\ServiceRequestStatusChanged;
 use App\Modules\ServiceRequest\Domain\Repositories\ServiceRequestRepositoryInterface;
+use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestServiceType;
 use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -25,6 +26,7 @@ class UpdateServiceRequestStatusUseCase
         ServiceRequestDepartmentScope $scope,
         ?int $actorId = null,
         ?string $statusReason = null,
+        ?string $linkedOrderNumber = null,
     ): ?array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
@@ -50,13 +52,29 @@ class UpdateServiceRequestStatusUseCase
         $normalizedStatusReason = is_string($statusReason) ? trim($statusReason) : null;
         $normalizedStatusReason = $normalizedStatusReason === '' ? null : $normalizedStatusReason;
 
+        // Derived from the ticket's own service_type, never trusted from the
+        // caller — CreateLaboratoryOrderUseCase/CreatePharmacyOrderUseCase/
+        // CreateRadiologyOrderUseCase/CreateTheatreProcedureUseCase all
+        // derive the same value from ServiceRequestServiceType when they
+        // auto-complete a ticket by creating its destination order, so a
+        // manual completion here must match exactly (theatre doesn't follow
+        // the "{serviceType}_order" pattern the other three do).
+        $normalizedLinkedOrderType = ServiceRequestServiceType::tryFrom((string) ($existing['service_type'] ?? ''))?->linkedOrderType();
+        $normalizedLinkedOrderNumber = is_string($linkedOrderNumber) ? trim($linkedOrderNumber) : null;
+        $normalizedLinkedOrderNumber = $normalizedLinkedOrderNumber === '' ? null : $normalizedLinkedOrderNumber;
+
+        $existingLinkedOrderId = $existing['linked_order_id'] ?? null;
+        $existingLinkedOrderNumber = $existing['linked_order_number'] ?? null;
+        $hasExistingLink = ! empty($existingLinkedOrderId) || ! empty($existingLinkedOrderNumber);
+        $hasNewLink = $normalizedLinkedOrderNumber !== null;
+
         if (
             $newStatus === ServiceRequestStatus::COMPLETED->value
-            && empty($existing['linked_order_id'])
-            && empty($existing['linked_order_number'])
+            && ! $hasExistingLink
+            && ! $hasNewLink
         ) {
             throw new ServiceRequestStatusTransitionException(
-                'Create or link the destination work record before closing this direct service ticket.',
+                'Provide a destination order number or link a work record before closing this direct service ticket.',
             );
         }
 
@@ -72,7 +90,16 @@ class UpdateServiceRequestStatusUseCase
             $payload['status_reason'] = $normalizedStatusReason;
         }
 
-        $updated = DB::transaction(function () use ($id, $payload, $actorId, $previousStatus, $newStatus, $normalizedStatusReason, $existing): ?array {
+        if ($newStatus === ServiceRequestStatus::COMPLETED->value && $hasNewLink) {
+            $payload['linked_order_type'] = $normalizedLinkedOrderType;
+            $payload['linked_order_number'] = $normalizedLinkedOrderNumber;
+        }
+
+        $resolvedLinkedOrderType = $normalizedLinkedOrderType ?? ($existing['linked_order_type'] ?? null);
+        $resolvedLinkedOrderNumber = $normalizedLinkedOrderNumber ?? ($existing['linked_order_number'] ?? null);
+        $resolvedLinkedOrderId = $existingLinkedOrderId;
+
+        $updated = DB::transaction(function () use ($id, $payload, $actorId, $previousStatus, $newStatus, $normalizedStatusReason, $resolvedLinkedOrderType, $resolvedLinkedOrderNumber, $resolvedLinkedOrderId): ?array {
             $updated = $this->serviceRequestRepository->update($id, $payload);
             if ($updated === null) {
                 return null;
@@ -80,9 +107,9 @@ class UpdateServiceRequestStatusUseCase
 
             $metadata = array_filter([
                 'statusReason' => $normalizedStatusReason,
-                'linkedOrderType' => $existing['linked_order_type'] ?? null,
-                'linkedOrderId' => $existing['linked_order_id'] ?? null,
-                'linkedOrderNumber' => $existing['linked_order_number'] ?? null,
+                'linkedOrderType' => $resolvedLinkedOrderType,
+                'linkedOrderId' => $resolvedLinkedOrderId,
+                'linkedOrderNumber' => $resolvedLinkedOrderNumber,
             ], static fn (mixed $value): bool => $value !== null && $value !== '');
 
             $this->appendServiceRequestAuditEvent->execute(

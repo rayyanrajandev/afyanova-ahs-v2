@@ -6,31 +6,21 @@ use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryI
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
-use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Modules\Platform\Domain\ValueObjects\ClinicalSourceKind;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
-use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use App\Modules\Staff\Infrastructure\Models\ClinicalSpecialtyModel;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileSpecialtyModel;
 use App\Modules\Staff\Infrastructure\Models\StaffRegulatoryProfileModel;
-use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 
 class ListBillingChargeCaptureCandidatesUseCase
 {
-    private const INVOICE_SOURCE_KINDS = [
-        'appointment_consultation',
-        'laboratory_order',
-        'pharmacy_order',
-        'radiology_order',
-        'theatre_procedure',
-    ];
-
     public function __construct(
         private readonly BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
         private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
@@ -76,10 +66,7 @@ class ListBillingChargeCaptureCandidatesUseCase
         $invoicedSources = $this->invoicedSourceIndex($patientId);
         $candidates = array_merge(
             $this->consultationCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
-            $this->laboratoryCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
-            $this->radiologyCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
-            $this->pharmacyCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
-            $this->theatreCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
+            $this->orderCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
         );
 
         usort(
@@ -189,7 +176,7 @@ class ListBillingChargeCaptureCandidatesUseCase
      * @param  array<string, array<string, mixed>>  $invoicedSources
      * @return array<int, array<string, mixed>>
      */
-    private function laboratoryCandidates(
+    private function orderCandidates(
         string $patientId,
         ?string $encounterId,
         ?string $appointmentId,
@@ -197,43 +184,85 @@ class ListBillingChargeCaptureCandidatesUseCase
         string $currencyCode,
         array $invoicedSources,
     ): array {
-        $query = LaboratoryOrderModel::query()
+        $candidates = [];
+
+        foreach (ClinicalSourceKind::orderKinds() as $kind) {
+            $candidates = array_merge($candidates, $this->candidatesForKind(
+                $kind, $patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources,
+            ));
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $invoicedSources
+     * @return array<int, array<string, mixed>>
+     */
+    private function candidatesForKind(
+        ClinicalSourceKind $kind,
+        string $patientId,
+        ?string $encounterId,
+        ?string $appointmentId,
+        ?string $admissionId,
+        string $currencyCode,
+        array $invoicedSources,
+    ): array {
+        $modelClass = $kind->modelClass();
+        $catalogFk = $kind->catalogFk();
+
+        $query = $modelClass::query()
             ->where('patient_id', $patientId)
-            ->whereNull('entered_in_error_at')
-            ->where(function (Builder $builder): void {
-                $builder->where('status', 'completed')
-                    ->orWhereNotNull('resulted_at');
-            });
+            ->whereNull('entered_in_error_at');
+
+        match ($kind) {
+            ClinicalSourceKind::LABORATORY_ORDER => $query->where(function (Builder $builder): void {
+                $builder->where('status', 'completed')->orWhereNotNull('resulted_at');
+            }),
+            ClinicalSourceKind::RADIOLOGY_ORDER => $query->where(function (Builder $builder): void {
+                $builder->where('status', 'completed')->orWhereNotNull('completed_at');
+            }),
+            ClinicalSourceKind::PHARMACY_ORDER => $query->where(function (Builder $builder): void {
+                $builder->whereIn('status', ['dispensed', 'partially_dispensed'])->orWhere('quantity_dispensed', '>', 0);
+            }),
+            ClinicalSourceKind::THEATRE_PROCEDURE => $query->where(function (Builder $builder): void {
+                $builder->where('status', 'completed')->orWhereNotNull('completed_at');
+            }),
+        };
 
         $this->applyClinicalContextFilters($query, $encounterId, $appointmentId, $admissionId);
         $this->applyPlatformScopeIfEnabled($query);
 
-        $orders = $query
-            ->orderByDesc('resulted_at')
-            ->orderByDesc('ordered_at')
-            ->limit(100)
-            ->get();
+        match ($kind) {
+            ClinicalSourceKind::LABORATORY_ORDER => $query->orderByDesc('resulted_at')->orderByDesc('ordered_at'),
+            ClinicalSourceKind::RADIOLOGY_ORDER => $query->orderByDesc('completed_at')->orderByDesc('ordered_at'),
+            ClinicalSourceKind::PHARMACY_ORDER => $query->orderByDesc('dispensed_at')->orderByDesc('ordered_at'),
+            ClinicalSourceKind::THEATRE_PROCEDURE => $query->orderByDesc('completed_at')->orderByDesc('scheduled_at'),
+        };
 
-        $catalogItems = $this->clinicalCatalogIndex($orders->pluck('lab_test_catalog_item_id')->all());
+        $orders = $query->limit(100)->get();
+        $catalogItems = $this->clinicalCatalogIndex($orders->pluck($catalogFk)->all());
 
         return $orders
-            ->map(function (LaboratoryOrderModel $order) use ($catalogItems, $currencyCode, $invoicedSources): array {
-                $catalogItem = $catalogItems[(string) $order->lab_test_catalog_item_id] ?? null;
+            ->map(function (mixed $order) use ($kind, $catalogFk, $catalogItems, $currencyCode, $invoicedSources): array {
+                $catalogItem = $catalogItems[(string) $order->{$catalogFk}] ?? null;
+
+                [$serviceCode, $serviceName, $serviceType, $performedAt, $quantity, $unit] = $this->extractCandidateFields($order, $kind, $catalogItem);
 
                 return $this->buildCandidate(
-                    sourceKind: 'laboratory_order',
+                    sourceKind: $kind->value,
                     sourceId: (string) $order->id,
                     patientId: (string) $order->patient_id,
                     appointmentId: $this->normalizeNullableUuid($order->appointment_id),
                     admissionId: $this->normalizeNullableUuid($order->admission_id),
-                    sourceNumber: $order->order_number,
-                    serviceCode: $this->resolveServiceCode($order->test_code, $catalogItem),
-                    serviceName: $this->resolveServiceName($order->test_name, $catalogItem),
-                    serviceType: 'laboratory',
+                    sourceNumber: $order->order_number ?? $order->procedure_number ?? null,
+                    serviceCode: $serviceCode,
+                    serviceName: $serviceName,
+                    serviceType: $serviceType,
                     sourceStatus: $order->status,
-                    performedAt: $this->dateTimeString($order->resulted_at ?? $order->updated_at ?? $order->ordered_at),
-                    quantity: 1,
-                    unit: $this->resolveUnit('test', $catalogItem),
+                    performedAt: $performedAt,
+                    quantity: $quantity,
+                    unit: $unit,
                     currencyCode: $currencyCode,
                     invoicedSources: $invoicedSources,
                 );
@@ -242,177 +271,50 @@ class ListBillingChargeCaptureCandidatesUseCase
     }
 
     /**
-     * @param  array<string, array<string, mixed>>  $invoicedSources
-     * @return array<int, array<string, mixed>>
+     * @return array{mixed, mixed, string, ?string, float, string}
      */
-    private function radiologyCandidates(
-        string $patientId,
-        ?string $encounterId,
-        ?string $appointmentId,
-        ?string $admissionId,
-        string $currencyCode,
-        array $invoicedSources,
-    ): array {
-        $query = RadiologyOrderModel::query()
-            ->where('patient_id', $patientId)
-            ->whereNull('entered_in_error_at')
-            ->where(function (Builder $builder): void {
-                $builder->where('status', 'completed')
-                    ->orWhereNotNull('completed_at');
-            });
-
-        $this->applyClinicalContextFilters($query, $encounterId, $appointmentId, $admissionId);
-        $this->applyPlatformScopeIfEnabled($query);
-
-        $orders = $query
-            ->orderByDesc('completed_at')
-            ->orderByDesc('ordered_at')
-            ->limit(100)
-            ->get();
-
-        $catalogItems = $this->clinicalCatalogIndex($orders->pluck('radiology_procedure_catalog_item_id')->all());
-
-        return $orders
-            ->map(function (RadiologyOrderModel $order) use ($catalogItems, $currencyCode, $invoicedSources): array {
-                $catalogItem = $catalogItems[(string) $order->radiology_procedure_catalog_item_id] ?? null;
-
-                return $this->buildCandidate(
-                    sourceKind: 'radiology_order',
-                    sourceId: (string) $order->id,
-                    patientId: (string) $order->patient_id,
-                    appointmentId: $this->normalizeNullableUuid($order->appointment_id),
-                    admissionId: $this->normalizeNullableUuid($order->admission_id),
-                    sourceNumber: $order->order_number,
-                    serviceCode: $this->resolveServiceCode($order->procedure_code, $catalogItem, $order->modality),
-                    serviceName: $this->resolveServiceName($order->study_description, $catalogItem),
-                    serviceType: 'radiology',
-                    sourceStatus: $order->status,
-                    performedAt: $this->dateTimeString($order->completed_at ?? $order->updated_at ?? $order->ordered_at),
-                    quantity: 1,
-                    unit: $this->resolveUnit('study', $catalogItem),
-                    currencyCode: $currencyCode,
-                    invoicedSources: $invoicedSources,
-                );
-            })
-            ->all();
-    }
-
-    /**
-     * @param  array<string, array<string, mixed>>  $invoicedSources
-     * @return array<int, array<string, mixed>>
-     */
-    private function pharmacyCandidates(
-        string $patientId,
-        ?string $encounterId,
-        ?string $appointmentId,
-        ?string $admissionId,
-        string $currencyCode,
-        array $invoicedSources,
-    ): array {
-        $query = PharmacyOrderModel::query()
-            ->where('patient_id', $patientId)
-            ->whereNull('entered_in_error_at')
-            ->where(function (Builder $builder): void {
-                $builder->whereIn('status', ['dispensed', 'partially_dispensed'])
-                    ->orWhere('quantity_dispensed', '>', 0);
-            });
-
-        $this->applyClinicalContextFilters($query, $encounterId, $appointmentId, $admissionId);
-        $this->applyPlatformScopeIfEnabled($query);
-
-        $orders = $query
-            ->orderByDesc('dispensed_at')
-            ->orderByDesc('ordered_at')
-            ->limit(100)
-            ->get();
-
-        $catalogItems = $this->clinicalCatalogIndex($orders->pluck('approved_medicine_catalog_item_id')->all());
-
-        return $orders
-            ->map(function (PharmacyOrderModel $order) use ($catalogItems, $currencyCode, $invoicedSources): array {
-                $catalogItem = $catalogItems[(string) $order->approved_medicine_catalog_item_id] ?? null;
-                $dispensedCode = $order->substitution_made
-                    ? ($order->substituted_medication_code ?: $order->medication_code)
-                    : $order->medication_code;
-                $dispensedName = $order->substitution_made
-                    ? ($order->substituted_medication_name ?: $order->medication_name)
-                    : $order->medication_name;
-
-                return $this->buildCandidate(
-                    sourceKind: 'pharmacy_order',
-                    sourceId: (string) $order->id,
-                    patientId: (string) $order->patient_id,
-                    appointmentId: $this->normalizeNullableUuid($order->appointment_id),
-                    admissionId: $this->normalizeNullableUuid($order->admission_id),
-                    sourceNumber: $order->order_number,
-                    serviceCode: $this->resolveServiceCode($dispensedCode, $catalogItem),
-                    serviceName: $this->resolveServiceName($dispensedName, $catalogItem),
-                    serviceType: 'pharmacy',
-                    sourceStatus: $order->status,
-                    performedAt: $this->dateTimeString($order->dispensed_at ?? $order->updated_at ?? $order->ordered_at),
-                    quantity: max((float) ($order->quantity_dispensed ?? 0), 1),
-                    unit: $this->resolvePharmacyBillableUnit($order, $catalogItem),
-                    currencyCode: $currencyCode,
-                    invoicedSources: $invoicedSources,
-                );
-            })
-            ->all();
-    }
-
-    /**
-     * @param  array<string, array<string, mixed>>  $invoicedSources
-     * @return array<int, array<string, mixed>>
-     */
-    private function theatreCandidates(
-        string $patientId,
-        ?string $encounterId,
-        ?string $appointmentId,
-        ?string $admissionId,
-        string $currencyCode,
-        array $invoicedSources,
-    ): array {
-        $query = TheatreProcedureModel::query()
-            ->where('patient_id', $patientId)
-            ->whereNull('entered_in_error_at')
-            ->where(function (Builder $builder): void {
-                $builder->where('status', 'completed')
-                    ->orWhereNotNull('completed_at');
-            });
-
-        $this->applyClinicalContextFilters($query, $encounterId, $appointmentId, $admissionId);
-        $this->applyPlatformScopeIfEnabled($query);
-
-        $procedures = $query
-            ->orderByDesc('completed_at')
-            ->orderByDesc('scheduled_at')
-            ->limit(100)
-            ->get();
-
-        $catalogItems = $this->clinicalCatalogIndex($procedures->pluck('theatre_procedure_catalog_item_id')->all());
-
-        return $procedures
-            ->map(function (TheatreProcedureModel $procedure) use ($catalogItems, $currencyCode, $invoicedSources): array {
-                $catalogItem = $catalogItems[(string) $procedure->theatre_procedure_catalog_item_id] ?? null;
-
-                return $this->buildCandidate(
-                    sourceKind: 'theatre_procedure',
-                    sourceId: (string) $procedure->id,
-                    patientId: (string) $procedure->patient_id,
-                    appointmentId: $this->normalizeNullableUuid($procedure->appointment_id),
-                    admissionId: $this->normalizeNullableUuid($procedure->admission_id),
-                    sourceNumber: $procedure->procedure_number,
-                    serviceCode: $this->resolveServiceCode(null, $catalogItem, $procedure->procedure_type),
-                    serviceName: $this->resolveServiceName($procedure->procedure_name ?: $procedure->procedure_type, $catalogItem),
-                    serviceType: 'theatre',
-                    sourceStatus: $procedure->status,
-                    performedAt: $this->dateTimeString($procedure->completed_at ?? $procedure->updated_at ?? $procedure->scheduled_at),
-                    quantity: 1,
-                    unit: $this->resolveUnit('procedure', $catalogItem),
-                    currencyCode: $currencyCode,
-                    invoicedSources: $invoicedSources,
-                );
-            })
-            ->all();
+    private function extractCandidateFields(mixed $order, ClinicalSourceKind $kind, ?array $catalogItem): array
+    {
+        return match ($kind) {
+            ClinicalSourceKind::LABORATORY_ORDER => [
+                $this->resolveServiceCode($order->test_code, $catalogItem),
+                $this->resolveServiceName($order->test_name, $catalogItem),
+                'laboratory',
+                $this->dateTimeString($order->resulted_at ?? $order->updated_at ?? $order->ordered_at),
+                1,
+                $this->resolveUnit('test', $catalogItem),
+            ],
+            ClinicalSourceKind::RADIOLOGY_ORDER => [
+                $this->resolveServiceCode($order->procedure_code, $catalogItem, $order->modality),
+                $this->resolveServiceName($order->study_description, $catalogItem),
+                'radiology',
+                $this->dateTimeString($order->completed_at ?? $order->updated_at ?? $order->ordered_at),
+                1,
+                $this->resolveUnit('study', $catalogItem),
+            ],
+            ClinicalSourceKind::PHARMACY_ORDER => [
+                $this->resolveServiceCode(
+                    $order->substitution_made ? ($order->substituted_medication_code ?: $order->medication_code) : $order->medication_code,
+                    $catalogItem,
+                ),
+                $this->resolveServiceName(
+                    $order->substitution_made ? ($order->substituted_medication_name ?: $order->medication_name) : $order->medication_name,
+                    $catalogItem,
+                ),
+                'pharmacy',
+                $this->dateTimeString($order->dispensed_at ?? $order->updated_at ?? $order->ordered_at),
+                max((float) ($order->quantity_dispensed ?? 0), 1),
+                $this->resolvePharmacyBillableUnit($order, $catalogItem),
+            ],
+            ClinicalSourceKind::THEATRE_PROCEDURE => [
+                $this->resolveServiceCode(null, $catalogItem, $order->procedure_type),
+                $this->resolveServiceName($order->procedure_name ?: $order->procedure_type, $catalogItem),
+                'theatre',
+                $this->dateTimeString($order->completed_at ?? $order->updated_at ?? $order->scheduled_at),
+                1,
+                $this->resolveUnit('procedure', $catalogItem),
+            ],
+        };
     }
 
     /**
@@ -595,7 +497,7 @@ class ListBillingChargeCaptureCandidatesUseCase
 
     private function isValidSourceRef(string $kind, string $id): bool
     {
-        return in_array($kind, self::INVOICE_SOURCE_KINDS, true) && $id !== '';
+        return ClinicalSourceKind::fromWorkflowKind($kind) !== null && $id !== '';
     }
 
     private function sourceKey(string $kind, string $id): string
@@ -955,7 +857,7 @@ class ListBillingChargeCaptureCandidatesUseCase
         return $catalogUnit !== '' ? $catalogUnit : $fallbackUnit;
     }
 
-    private function resolvePharmacyBillableUnit(PharmacyOrderModel $order, ?array $clinicalCatalogItem): string
+    private function resolvePharmacyBillableUnit(mixed $order, ?array $clinicalCatalogItem): string
     {
         foreach ([
             $order->dispensed_unit,

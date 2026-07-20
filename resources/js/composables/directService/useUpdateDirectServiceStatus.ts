@@ -19,6 +19,7 @@ export type UpdateDirectServiceStatusPayload = {
     requestId: string;
     status: DirectServiceStatusTarget;
     statusReason?: string | null;
+    linkedOrderNumber?: string | null;
 };
 
 type UpdateDirectServiceStatusResponse = { data: DirectServiceRequest };
@@ -30,9 +31,9 @@ export function useUpdateDirectServiceStatus(): UseMutationReturnType<
     unknown
 > {
     return useMutation({
-        mutationFn: async ({ requestId, status, statusReason }): Promise<DirectServiceRequest> => {
+        mutationFn: async ({ requestId, status, statusReason, linkedOrderNumber }): Promise<DirectServiceRequest> => {
             const response = await apiPatch<UpdateDirectServiceStatusResponse>(`/service-requests/${requestId}/status`, {
-                body: { status, statusReason: statusReason ?? null },
+                body: { status, statusReason: statusReason ?? null, linkedOrderNumber: linkedOrderNumber ?? null },
             });
             return response.data;
         },

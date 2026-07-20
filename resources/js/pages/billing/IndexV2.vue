@@ -52,6 +52,7 @@ import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { billingPaymentMethodOptions } from './constants';
 import { formatEnumLabel } from '@/lib/labels';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
@@ -117,7 +118,7 @@ const directPatientIdentity = ref<{ patientNumber: string; patientName: string; 
 const selectedIdentity = computed(() => {
     if (selectedQueueEntry.value) return selectedQueueEntry.value;
     if (!selectedPatientId.value || !directPatientIdentity.value) return null;
-    return { patientId: selectedPatientId.value, inConsultation: false, ...directPatientIdentity.value };
+    return { patientId: selectedPatientId.value, ...directPatientIdentity.value };
 });
 
 const patientInvoicesQuery = useBillingPatientInvoices(selectedPatientId);
@@ -247,7 +248,7 @@ function selectPatient(entry: CashierQueueEntry): void {
  * Deep-link entry point from patientChartModuleHref('/billing-invoices',
  * ..., { focusInvoiceId }) — the Patient Chart's Billing tab links straight
  * to one invoice. The cashier queue only lists patients with pending
- * payment/unbilled/in-consultation activity, so a fully-paid patient's
+ * payment/unbilled activity, so a fully-paid patient's
  * invoice history may never appear there; this loads that patient's
  * invoices directly instead of requiring queue selection.
  */
@@ -667,14 +668,12 @@ function invoiceStatusLabel(status: string): string {
 }
 
 function queueStatusDotClass(entry: CashierQueueEntry): string {
-    if (entry.inConsultation) return 'bg-blue-500';
     if (entry.unpaidInvoiceCount > 0) return 'bg-destructive';
     if (entry.unbilledServiceCount > 0) return 'bg-amber-500';
     return 'bg-emerald-500';
 }
 
 function queueStatusTitle(entry: CashierQueueEntry): string {
-    if (entry.inConsultation) return 'In consultation';
     if (entry.unpaidInvoiceCount > 0) return 'Has unpaid invoices';
     if (entry.unbilledServiceCount > 0) return 'Has unbilled services';
     return 'Fully paid';
@@ -755,30 +754,11 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </div>
                 </div>
 
-                <div class="mt-3 grid grid-cols-3 gap-2">
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">In Consultation</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.inConsultation ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Unpaid</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.unpaid ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Fully Paid</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.paid ?? '—' }}</p>
-                    </div>
-                </div>
-
                 <Tabs :model-value="filters.status" class="mt-3" @update:model-value="setStatus">
-                    <TabsList class="grid w-full grid-cols-4">
+                    <TabsList class="grid w-full grid-cols-3">
                         <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
                             All
                             <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.all ?? '—' }}</Badge>
-                        </TabsTrigger>
-                        <TabsTrigger value="in_consultation" class="inline-flex items-center gap-1.5">
-                            In consultation
-                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.inConsultation ?? '—' }}</Badge>
                         </TabsTrigger>
                         <TabsTrigger value="unpaid" class="inline-flex items-center gap-1.5">
                             Unpaid
@@ -868,9 +848,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         <template #title>
                                             <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                                 <span class="truncate text-sm font-medium transition-colors hover:text-primary">{{ entry.patientName }}</span>
-                                                <Badge v-if="entry.inConsultation" variant="default" class="h-4.5 bg-blue-500 px-1.5 text-[10px] leading-none font-normal text-white">
-                                                    In consultation
-                                                </Badge>
                                             </div>
                                         </template>
                                         <template #meta>
@@ -1113,11 +1090,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <Select v-model="paymentMethod">
                             <SelectTrigger class="mt-1"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="cash">Cash</SelectItem>
-                                <SelectItem value="card">Card</SelectItem>
-                                <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                                <SelectItem value="insurance">Insurance</SelectItem>
+                                <SelectItem v-for="opt in billingPaymentMethodOptions" :key="opt.value" :value="opt.value">
+                                    {{ opt.label }}
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -1165,11 +1140,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <Select v-model="bulkPaymentMethod">
                             <SelectTrigger class="mt-1"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="cash">Cash</SelectItem>
-                                <SelectItem value="card">Card</SelectItem>
-                                <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                                <SelectItem value="insurance">Insurance</SelectItem>
+                                <SelectItem v-for="opt in billingPaymentMethodOptions" :key="opt.value" :value="opt.value">
+                                    {{ opt.label }}
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                     </div>

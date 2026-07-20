@@ -14,7 +14,7 @@ interface ModuleLink {
 }
 
 const moduleLinks = [
-    { value: 'invoices', label: 'Invoices', href: '/billing-invoices', icon: 'receipt', permission: 'billing.invoices.read' },
+    { value: 'invoices', label: 'Invoices', href: '/billing', icon: 'receipt', permission: 'billing.invoices.read' },
     { value: 'cash', label: 'Cash payments', href: '/billing-cash', icon: 'banknote', permission: 'billing.cash-accounts.read' },
     { value: 'refunds', label: 'Refunds', href: '/billing-refunds', icon: 'undo-2', permission: 'billing.refunds.read' },
 ] as const satisfies ModuleLink[];
@@ -30,7 +30,10 @@ const url = computed(() => page.url);
 
 function isActive(value: string): boolean {
     const u = url.value;
-    if (value === 'invoices') return u.startsWith('/billing-invoices');
+    // '/billing' is segment-matched (exact, or '/billing/...') so it doesn't
+    // also light up for '/billing-cash' or '/billing-refunds'. '/billing-invoices'
+    // (the pre-cutover master-detail page) still counts as the Invoices tab.
+    if (value === 'invoices') return u === '/billing' || u.startsWith('/billing/') || u.startsWith('/billing-invoices');
     if (value === 'cash') return u.startsWith('/billing-cash');
     if (value === 'refunds') return u.startsWith('/billing-refunds');
     return false;

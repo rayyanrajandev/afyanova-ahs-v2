@@ -271,7 +271,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
     },
     {
         title: 'Invoices & billing',
-        href: '/billing-invoices',
+        href: '/billing',
         iconName: 'receipt',
         section: 'billing',
         subGroup: 'invoicing',

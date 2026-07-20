@@ -30,6 +30,7 @@ class RecordBillingInvoicePaymentRequest extends FormRequest
             'paymentMethod' => ['required', 'string', Rule::in([
                 'cash',
                 'mobile_money',
+                'lipa_namba',
                 'card',
                 'bank_transfer',
                 'insurance_claim',

@@ -96,7 +96,7 @@ const sideVariantClass = computed(() => {
       data-slot="sheet-content"
       :data-sheet-variant="props.variant"
       :class="cn(
-        'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 outline-hidden',
+        'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:pointer-events-none fixed z-50 flex flex-col shadow-lg data-[state=closed]:duration-300 data-[state=open]:duration-500 outline-hidden',
         side === 'right'
           && 'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0',
         side === 'left'
