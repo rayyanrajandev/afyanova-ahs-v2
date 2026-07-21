@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 
-const BASE = 'https://afyanova-ahs-v2.test';
+const BASE = 'http://127.0.0.1:8000';
 
 async function main() {
   const browser = await chromium.launch({ headless: true });
@@ -60,9 +60,8 @@ async function main() {
   // Inventory item
   const inv = await page.request.post(`${BASE}/api/v1/inventory-procurement/items`, {
     headers, data: {
-      clinicalCatalogItemId: catId,
       itemCode: `D422-INV-${ts}`, itemName: `D422 Tube ${ts}`,
-      category: 'consumable', unit: 'piece',
+      category: 'medical_consumable', unit: 'piece',
       defaultWarehouseId: whId, defaultSupplierId: supId,
     }
   });
@@ -133,7 +132,7 @@ async function main() {
   
   // Create patient + encounter
   const pat = await page.request.post(`${BASE}/api/v1/patients`, {
-    headers, data: { firstName: 'Debug', lastName: `Enc${ts}`, gender: 'female', dateOfBirth: '1990-01-01', phone: `+255700${ts}99`, countryCode: 'TZ', region: 'Dar es Salaam', district: 'Kinondoni' }
+    headers, data: { firstName: 'Debug', lastName: `Enc${ts}`, gender: 'female', dateOfBirth: '1990-01-01', phone: `+255700${ts}99`, countryCode: 'TZ', region: 'Dar es Salaam', district: 'Kinondoni', addressLine: 'Test Street 1' }
   });
   const patId = (await pat.json()).data.id;
   
