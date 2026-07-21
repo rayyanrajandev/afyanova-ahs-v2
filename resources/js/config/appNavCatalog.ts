@@ -333,6 +333,15 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Configure percentage/fixed/waiver discount policies',
     },
     {
+        title: 'Consultation Mappings',
+        href: '/billing-consultation-mappings',
+        iconName: 'file-text',
+        section: 'billing',
+        subGroup: 'rates',
+        permissionPrefixes: ['billing.consultation-mappings.'],
+        helpNote: 'Map clinician tier + department to a priced service catalog item for consultation auto-billing',
+    },
+    {
         title: 'Daily revenue close',
         href: '/billing-daily-close',
         iconName: 'receipt',

@@ -132,6 +132,7 @@ class AppServiceProvider extends ServiceProvider
                     || (bool) $user->hasPermissionTo('emergency.triage.create')
                     || (bool) $user->hasPermissionTo('emergency.triage.update')
                     || (bool) $user->hasPermissionTo('emergency.triage.update-status')
+                    || (bool) $user->hasPermissionTo('billing.consultation-mappings.manage')
                 );
         });
 

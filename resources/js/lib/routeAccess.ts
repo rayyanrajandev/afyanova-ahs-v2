@@ -159,6 +159,10 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['billing.discounts.read'],
     },
     {
+        pathPrefix: '/billing-consultation-mappings',
+        requiredPermissions: ['billing.consultation-mappings.read'],
+    },
+    {
         pathPrefix: '/billing-financial-reports',
         requiredPermissions: ['billing.financial-controls.read'],
     },

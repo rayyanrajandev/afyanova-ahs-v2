@@ -37,6 +37,8 @@ return [
             'billing.payments.read',
             'billing.insurance.read',
             'billing.insurance.manage',
+            'billing.consultation-mappings.read',
+            'billing.consultation-mappings.manage',
         ],
 
         // Rollout-ready Billing permission set for phased RBAC hardening.

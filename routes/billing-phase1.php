@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Http\Middleware\ResolvePlatformScopeContext;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingDailyCloseController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingDiscountController;
+use App\Modules\Billing\Presentation\Http\Controllers\ConsultationMappingController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingRefundController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingPatientWorkspaceController;
@@ -58,6 +59,22 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         Route::get('{policyId}', [BillingDiscountController::class, 'getPolicy'])
             ->middleware('can:billing.discounts.read')
             ->name('discounts.get-policy');
+    });
+
+    // Consultation Mappings (clinician tier + department -> billing service catalog item)
+    Route::prefix('consultation-mappings')->group(function () {
+        Route::get('/', [ConsultationMappingController::class, 'index'])
+            ->middleware('can:billing.consultation-mappings.read')
+            ->name('consultation-mappings.index');
+        Route::post('/', [ConsultationMappingController::class, 'store'])
+            ->middleware('can:billing.consultation-mappings.manage')
+            ->name('consultation-mappings.store');
+        Route::patch('{mappingId}', [ConsultationMappingController::class, 'update'])
+            ->middleware('can:billing.consultation-mappings.manage')
+            ->name('consultation-mappings.update');
+        Route::delete('{mappingId}', [ConsultationMappingController::class, 'destroy'])
+            ->middleware('can:billing.consultation-mappings.manage')
+            ->name('consultation-mappings.destroy');
     });
 
     // Apply discounts

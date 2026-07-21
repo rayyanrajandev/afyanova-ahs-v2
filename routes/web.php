@@ -445,14 +445,18 @@ Route::get('billing-payer-contracts', function () {
 })->middleware(['auth', 'verified', 'can:billing.payer-contracts.read', 'facility.entitlement:billing.payer_contracts'])->name('billing-payer-contracts.page');
 
 Route::get('billing-service-catalog', function () {
-    return Inertia::render('billing/ServiceCatalog');
+    return Inertia::render('billing/ServiceCatalogV2');
 })->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.page');
 
 Route::get('billing-service-catalog/{id}/prices', function (string $id) {
-    return Inertia::render('billing/ServicePriceWorkspace', [
+    return Inertia::render('billing/ServicePriceWorkspaceV2', [
         'itemId' => $id,
     ]);
 })->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.prices.page');
+
+Route::get('billing-consultation-mappings', function () {
+    return Inertia::render('billing/ConsultationMappings');
+})->middleware(['auth', 'verified', 'can:billing.consultation-mappings.read', 'facility.entitlement:billing.service_catalog'])->name('billing-consultation-mappings.page');
 
 Route::get('staff', function () {
     return Inertia::render('staff/Index');

@@ -69,6 +69,7 @@ class EnsureMappedFacilitySubscriptionEntitlement
         'billing-corporate-accounts.' => ['billing.payer_contracts'],
         'billing-corporate-runs.' => ['billing.payer_contracts'],
         'billing-service-catalog.' => ['billing.service_catalog'],
+        'consultation-mappings.' => ['billing.service_catalog'],
         'billing-payer-contracts.' => ['billing.payer_contracts'],
         'cash-billing.' => ['billing.cash_accounts'],
         'discounts.' => ['billing.discounts_refunds'],
