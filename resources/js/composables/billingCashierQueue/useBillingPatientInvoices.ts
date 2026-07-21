@@ -23,7 +23,7 @@ export type BillingInvoice = {
     invoiceDate: string;
     paymentDueAt: string | null;
     notes?: string | null;
-    lineItems: BillingInvoiceLineItem[];
+    lineItems: BillingInvoiceLineItem[] | null;
 };
 
 export type ChargeCaptureCandidate = {

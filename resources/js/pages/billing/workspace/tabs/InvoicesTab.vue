@@ -126,12 +126,12 @@ function handlePaymentComplete(): void {
                 </div>
             </div>
 
-            <div v-if="invoice.lineItems?.length > 0" class="mt-2 space-y-1">
-                <div v-for="(item, idx) in invoice.lineItems.slice(0, 3)" :key="idx" class="flex items-center justify-between text-xs text-muted-foreground">
+            <div v-if="(invoice.lineItems ?? []).length > 0" class="mt-2 space-y-1">
+                <div v-for="(item, idx) in (invoice.lineItems ?? []).slice(0, 3)" :key="idx" class="flex items-center justify-between text-xs text-muted-foreground">
                     <span class="truncate">{{ item.description }}</span>
                     <span class="tabular-nums">{{ formatMoney(item.unitPrice * item.quantity, invoice.currencyCode) }}</span>
                 </div>
-                <p v-if="invoice.lineItems.length > 3" class="text-xs text-muted-foreground">+{{ invoice.lineItems.length - 3 }} more items</p>
+                <p v-if="(invoice.lineItems ?? []).length > 3" class="text-xs text-muted-foreground">+{{ (invoice.lineItems ?? []).length - 3 }} more items</p>
             </div>
 
             <div class="mt-2 flex flex-wrap items-center gap-2">

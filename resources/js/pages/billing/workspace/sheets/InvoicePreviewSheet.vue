@@ -49,6 +49,10 @@ function lineItemTotal(item: { quantity: number; unitPrice: number }): number {
     return item.quantity * item.unitPrice;
 }
 
+// The backend column is nullable — a missing invoice.lineItems means the
+// same thing as an empty one ("no line items were recorded").
+const lineItems = computed(() => props.invoice.lineItems ?? []);
+
 const totalRows = computed(() => [
     ['Subtotal', formatMoney(props.invoice.subtotalAmount, props.invoice.currencyCode)],
     ['Discount', formatMoney(props.invoice.discountAmount, props.invoice.currencyCode)],
@@ -76,7 +80,7 @@ const totalRows = computed(() => [
             <div class="flex-1 space-y-4 overflow-y-auto p-4">
                 <div>
                     <h3 class="mb-2 text-xs font-medium text-muted-foreground">Line items</h3>
-                    <div v-if="invoice.lineItems.length === 0" class="rounded-lg border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
+                    <div v-if="lineItems.length === 0" class="rounded-lg border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
                         No line items were recorded for this invoice.
                     </div>
                     <div v-else class="overflow-hidden rounded-lg border">
@@ -90,7 +94,7 @@ const totalRows = computed(() => [
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
-                                <tr v-for="(item, idx) in invoice.lineItems" :key="idx">
+                                <tr v-for="(item, idx) in lineItems" :key="idx">
                                     <td class="px-3 py-2 align-top">
                                         <p class="font-medium">{{ item.description }}</p>
                                         <p v-if="item.serviceCode" class="text-xs text-muted-foreground">Code: {{ item.serviceCode }}</p>

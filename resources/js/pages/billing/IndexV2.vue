@@ -322,7 +322,7 @@ function printReceipt(invoice: BillingInvoice, paidAmount: number, paymentMethod
     const facilityName = document.querySelector('meta[name="app-name"]')?.getAttribute('content') ?? 'Health Facility';
     const now = new Date().toLocaleString('en-TZ', { dateStyle: 'medium', timeStyle: 'short' });
 
-    const lineItemsHtml = invoice.lineItems
+    const lineItemsHtml = (invoice.lineItems ?? [])
         .map(
             (item) => `
         <tr>
@@ -993,12 +993,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                 </div>
                                             </div>
 
-                                            <div v-if="invoice.lineItems?.length > 0" class="mt-2 space-y-1">
-                                                <div v-for="(item, idx) in invoice.lineItems.slice(0, 3)" :key="idx" class="flex items-center justify-between text-xs text-muted-foreground">
+                                            <div v-if="(invoice.lineItems ?? []).length > 0" class="mt-2 space-y-1">
+                                                <div v-for="(item, idx) in (invoice.lineItems ?? []).slice(0, 3)" :key="idx" class="flex items-center justify-between text-xs text-muted-foreground">
                                                     <span class="truncate">{{ item.description }}</span>
                                                     <span class="tabular-nums">{{ formatMoney(item.unitPrice * item.quantity, invoice.currencyCode) }}</span>
                                                 </div>
-                                                <p v-if="invoice.lineItems.length > 3" class="text-xs text-muted-foreground">+{{ invoice.lineItems.length - 3 }} more items</p>
+                                                <p v-if="(invoice.lineItems ?? []).length > 3" class="text-xs text-muted-foreground">+{{ (invoice.lineItems ?? []).length - 3 }} more items</p>
                                             </div>
 
                                             <div class="mt-2 flex gap-2">
