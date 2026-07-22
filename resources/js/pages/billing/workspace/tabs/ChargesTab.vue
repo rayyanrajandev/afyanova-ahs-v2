@@ -35,7 +35,7 @@ function buildLineItem(candidate: ChargeCaptureCandidate): Record<string, unknow
     return {
         ...candidate.suggestedLineItem,
         sourceWorkflowKind: candidate.sourceWorkflowKind,
-        sourceWorkflowId: candidate.id,
+        sourceWorkflowId: candidate.sourceWorkflowId,
         sourceWorkflowLabel: candidate.sourceWorkflowLabel,
     };
 }

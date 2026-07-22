@@ -12,6 +12,22 @@ class StoreBillingInvoiceRequest extends FormRequest
         return $this->user() !== null;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $lineItems = $this->input('lineItems');
+        if (! is_array($lineItems)) {
+            return;
+        }
+
+        $this->merge([
+            'lineItems' => array_map(function (array $item): array {
+                return array_map(function (mixed $value): mixed {
+                    return $value === '' ? null : $value;
+                }, $item);
+            }, $lineItems),
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
