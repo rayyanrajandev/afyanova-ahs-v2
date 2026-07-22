@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query';
 import { Head, Link } from '@inertiajs/vue3';
+import { useQuery } from '@tanstack/vue-query';
 import { computed, nextTick, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLifecycleDialog.vue';
+import LaboratoryOrderDetailSheet from '@/components/laboratoryOrders/LaboratoryOrderDetailSheet.vue';
+import PatientChartOrdersDomainSection from '@/components/patient-chart/PatientChartOrdersDomainSection.vue';
+import VitalsEditSheet from '@/components/patient-chart/VitalsEditSheet.vue';
+import PatientEditSheet from '@/components/patients/PatientEditSheet.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,44 +22,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import AppLayout from '@/layouts/AppLayout.vue';
-import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLifecycleDialog.vue';
-import LaboratoryOrderDetailSheet from '@/components/laboratoryOrders/LaboratoryOrderDetailSheet.vue';
-import PatientChartOrdersDomainSection from '@/components/patient-chart/PatientChartOrdersDomainSection.vue';
-import PatientEditSheet from '@/components/patients/PatientEditSheet.vue';
-import { apiGet } from '@/lib/apiClient';
-import { formatEnumLabel } from '@/lib/labels';
-import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
-import { usePatientMedicalRecords } from '@/composables/patientChart/usePatientMedicalRecords';
-import { usePatientAppointments } from '@/composables/patientChart/usePatientAppointments';
-import { usePatientEncounters } from '@/composables/patientChart/usePatientEncounters';
-import { usePatientChartOrderStream } from '@/composables/patientChart/usePatientChartOrderStream';
-import { usePatientBillingInvoices } from '@/composables/patientChart/usePatientBillingInvoices';
-import { usePatientAllergies } from '@/composables/patientChart/usePatientAllergies';
-import { usePatientAllergyDialog } from '@/composables/patientChart/usePatientAllergyDialog';
-import { usePatientMedicationProfile } from '@/composables/patientChart/usePatientMedicationProfile';
-import { usePatientMedicationProfileDialog } from '@/composables/patientChart/usePatientMedicationProfileDialog';
-import { usePatientMedicationReconciliation } from '@/composables/patientChart/usePatientMedicationReconciliation';
-import { useVisitScope } from '@/composables/patientChart/useVisitScope';
-import { usePatientChartOrderLifecycle } from '@/composables/patientChart/usePatientChartOrderLifecycle';
+import { Textarea } from '@/components/ui/textarea';
 import { useLaboratoryOrder } from '@/composables/laboratoryOrders/useLaboratoryOrder';
-import { usePatientInsuranceRecords } from '@/composables/patientChart/usePatientInsuranceRecords';
-import { usePatientInsuranceDialog } from '@/composables/patientChart/usePatientInsuranceDialog';
-import { exportPatientAuditLogsCsv, usePatientAuditLogs } from '@/composables/patientChart/usePatientAuditLogs';
-import {
-    formatDate,
-    formatDateTime,
-    formatMoney,
-    timelineCategoryLabel,
-    truncatePlainText,
-    usePatientChartTimeline,
-    workflowStatusVariant,
-    appointmentStatusVariant,
-} from '@/composables/patientChart/usePatientChartTimeline';
 import {
     appointmentPrimaryActionHref,
     appointmentPrimaryActionIcon,
@@ -77,14 +48,13 @@ import {
     theatreCurrentPriority,
     theatreCurrentRecency,
 } from '@/composables/patientChart/patientChartCurrentCare';
+import { patientChartModuleHref } from '@/composables/patientChart/patientChartModuleHref';
 import {
     laboratoryOrderCardViewModel,
     pharmacyOrderCardViewModel,
     radiologyOrderCardViewModel,
     theatreProcedureCardViewModel,
 } from '@/composables/patientChart/patientChartOrderCardViewModel';
-import { patientChartModuleHref } from '@/composables/patientChart/patientChartModuleHref';
-import { usePatientVitals } from '@/composables/patientChart/usePatientVitals';
 import type {
     PatientChartLaboratoryOrder,
     PatientChartLaboratoryOrderStatusCounts,
@@ -95,9 +65,39 @@ import type {
     PatientChartTheatreProcedure,
     PatientChartTheatreProcedureStatusCounts,
 } from '@/composables/patientChart/patientChartOrderTypes';
-import { type BreadcrumbItem } from '@/types';
-import VitalsEditSheet from '@/components/patient-chart/VitalsEditSheet.vue';
+import { usePatientAllergies } from '@/composables/patientChart/usePatientAllergies';
+import { usePatientAllergyDialog } from '@/composables/patientChart/usePatientAllergyDialog';
+import { usePatientAppointments } from '@/composables/patientChart/usePatientAppointments';
+import { exportPatientAuditLogsCsv, usePatientAuditLogs } from '@/composables/patientChart/usePatientAuditLogs';
+import { usePatientBillingInvoices } from '@/composables/patientChart/usePatientBillingInvoices';
+import { usePatientChartOrderLifecycle } from '@/composables/patientChart/usePatientChartOrderLifecycle';
+import { usePatientChartOrderStream } from '@/composables/patientChart/usePatientChartOrderStream';
+import {
+    appointmentStatusVariant,
+    formatDate,
+    formatDateTime,
+    formatMoney,
+    timelineCategoryLabel,
+    truncatePlainText,
+    usePatientChartTimeline,
+    workflowStatusVariant,
+} from '@/composables/patientChart/usePatientChartTimeline';
+import { usePatientEncounters } from '@/composables/patientChart/usePatientEncounters';
+import { usePatientInsuranceDialog } from '@/composables/patientChart/usePatientInsuranceDialog';
+import { usePatientInsuranceRecords } from '@/composables/patientChart/usePatientInsuranceRecords';
+import { usePatientMedicalRecords } from '@/composables/patientChart/usePatientMedicalRecords';
+import { usePatientMedicationProfile } from '@/composables/patientChart/usePatientMedicationProfile';
+import { usePatientMedicationProfileDialog } from '@/composables/patientChart/usePatientMedicationProfileDialog';
+import { usePatientMedicationReconciliation } from '@/composables/patientChart/usePatientMedicationReconciliation';
+import { usePatientVitals } from '@/composables/patientChart/usePatientVitals';
+import { useVisitScope } from '@/composables/patientChart/useVisitScope';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { apiGet } from '@/lib/apiClient';
+import { formatEnumLabel } from '@/lib/labels';
 import { vitalsDisplayRows, vitalsSummaryLine } from '@/lib/vitalsDisplay';
+import { type BreadcrumbItem } from '@/types';
 
 /**
  * Full Patient Chart rebuild (reports/patient-chart-rebuild-plan.md):

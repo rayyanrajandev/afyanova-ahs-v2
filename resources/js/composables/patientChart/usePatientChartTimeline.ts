@@ -1,8 +1,13 @@
 import { computed, type ComputedRef, type Ref } from 'vue';
-import { formatEnumLabel } from '@/lib/labels';
-import type { PatientChartAppointment } from '@/composables/patientChart/usePatientAppointments';
-import type { PatientChartMedicalRecord } from '@/composables/patientChart/usePatientMedicalRecords';
-import type { PatientChartBillingInvoice } from '@/composables/patientChart/usePatientBillingInvoices';
+import {
+    activeVisitStatuses,
+    appointmentDetailsHref as sharedAppointmentDetailsHref,
+    appointmentPrimaryActionHref,
+    appointmentPrimaryActionIcon,
+    appointmentPrimaryActionLabel,
+} from '@/composables/patientChart/patientChartAppointmentAction';
+import { currentCareNextActionHref, serviceTimelineActionLabel } from '@/composables/patientChart/patientChartCurrentCare';
+import { patientChartModuleHref } from '@/composables/patientChart/patientChartModuleHref';
 import type {
     PatientChartLaboratoryOrder,
     PatientChartLaboratoryOrderStatusCounts,
@@ -13,16 +18,11 @@ import type {
     PatientChartTheatreProcedure,
     PatientChartTheatreProcedureStatusCounts,
 } from '@/composables/patientChart/patientChartOrderTypes';
+import type { PatientChartAppointment } from '@/composables/patientChart/usePatientAppointments';
+import type { PatientChartBillingInvoice } from '@/composables/patientChart/usePatientBillingInvoices';
 import type { PatientChartBillingInvoiceStatusCounts } from '@/composables/patientChart/usePatientBillingInvoices';
-import { patientChartModuleHref } from '@/composables/patientChart/patientChartModuleHref';
-import { currentCareNextActionHref, serviceTimelineActionLabel } from '@/composables/patientChart/patientChartCurrentCare';
-import {
-    activeVisitStatuses,
-    appointmentDetailsHref as sharedAppointmentDetailsHref,
-    appointmentPrimaryActionHref,
-    appointmentPrimaryActionIcon,
-    appointmentPrimaryActionLabel,
-} from '@/composables/patientChart/patientChartAppointmentAction';
+import type { PatientChartMedicalRecord } from '@/composables/patientChart/usePatientMedicalRecords';
+import { formatEnumLabel } from '@/lib/labels';
 
 export type ChartTimelineEventCategory =
     | 'visit'

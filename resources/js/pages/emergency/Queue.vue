@@ -2,8 +2,14 @@
 import { Head } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
-import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import EmergencyCaseCreateSheet from '@/components/emergency/EmergencyCaseCreateSheet.vue';
+import EmergencyCaseTransfersPanel from '@/components/emergency/EmergencyCaseTransfersPanel.vue';
+import EmergencyStatusDialog, { type EmergencyStatusTarget } from '@/components/emergency/EmergencyStatusDialog.vue';
+import EmergencyTriageSheet from '@/components/emergency/EmergencyTriageSheet.vue';
+import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
+import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
+import ElapsedTimeBadge from '@/components/shared/ElapsedTimeBadge.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,21 +18,15 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
-import EmergencyCaseCreateSheet from '@/components/emergency/EmergencyCaseCreateSheet.vue';
-import EmergencyCaseTransfersPanel from '@/components/emergency/EmergencyCaseTransfersPanel.vue';
-import EmergencyStatusDialog, { type EmergencyStatusTarget } from '@/components/emergency/EmergencyStatusDialog.vue';
-import EmergencyTriageSheet from '@/components/emergency/EmergencyTriageSheet.vue';
-import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
-import ElapsedTimeBadge from '@/components/shared/ElapsedTimeBadge.vue';
 import { useEmergencyCaseAuditLog } from '@/composables/emergency/useEmergencyCaseAuditLog';
 import { useEmergencyCaseFilters } from '@/composables/emergency/useEmergencyCaseFilters';
 import { useEmergencyCasePatientDirectory } from '@/composables/emergency/useEmergencyCasePatientDirectory';
-import { useEmergencyCaseStatusCounts } from '@/composables/emergency/useEmergencyCaseStatusCounts';
 import { useEmergencyCases, type EmergencyCase } from '@/composables/emergency/useEmergencyCases';
+import { useEmergencyCaseStatusCounts } from '@/composables/emergency/useEmergencyCaseStatusCounts';
 import { type EmergencyCaseStatusTarget } from '@/composables/emergency/useUpdateEmergencyCaseStatus';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
+import AppLayout from '@/layouts/AppLayout.vue';
 import { notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
@@ -182,6 +182,22 @@ function formatDateTime(value: string | null): string {
 
 function goToPage(page: number): void {
     filters.page = page;
+}
+
+function linkedAppointmentHref(item: EmergencyCase): string {
+    const params = new URLSearchParams({
+        focusAppointmentId: item.appointmentId ?? '',
+        from: 'emergency-triage',
+    });
+
+    if (item.status === 'triaged' || item.status === 'in_treatment') {
+        params.set('status', 'waiting_provider');
+        params.set('view', 'clinical');
+        params.set('focusAction', 'consultation');
+        params.set('detailsTab', 'workflow');
+    }
+
+    return `/appointments?${params.toString()}`;
 }
 
 /** Matches the legacy queue row's exact button gating — see this file's own docblock. */
@@ -452,8 +468,8 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         </div>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-3">
-                                        <a v-if="item.appointmentId" :href="`/appointments/${item.appointmentId}`" class="text-xs font-medium text-primary hover:underline">
-                                            View linked appointment
+                                        <a v-if="item.appointmentId" :href="linkedAppointmentHref(item)" class="text-xs font-medium text-primary hover:underline">
+                                            {{ item.status === 'triaged' || item.status === 'in_treatment' ? 'Open consultation' : 'View linked appointment' }}
                                         </a>
                                         <a v-if="item.admissionId" :href="`/admissions/${item.admissionId}`" class="text-xs font-medium text-primary hover:underline">
                                             View linked admission
