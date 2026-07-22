@@ -95,7 +95,7 @@ const ws = useSupplyChainPageApi();
                 <div class="grid gap-2">
                     <Label for="lt-supplier">Supplier</Label>
                     <Select :model-value="ws.toSelectValue(ws.leadTimeForm.supplierId)" @update:model-value="ws.leadTimeForm.supplierId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                        <SelectTrigger class="w-full">
+                        <SelectTrigger id="lt-supplier" class="w-full">
                             <SelectValue placeholder="— Select —">
                                 {{ ws.supplierLabel(ws.leadTimeForm.supplierId) }}
                             </SelectValue>
@@ -110,7 +110,7 @@ const ws = useSupplyChainPageApi();
                 <div class="grid gap-2">
                     <Label for="lt-item">Item (optional)</Label>
                     <Select :model-value="ws.toSelectValue(ws.leadTimeForm.itemId)" @update:model-value="ws.leadTimeForm.itemId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                        <SelectTrigger>
+                        <SelectTrigger id="lt-item">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

@@ -111,7 +111,7 @@ function updateMsdSubmitImmediately(value: boolean | 'indeterminate') {
                     <div class="grid gap-2">
                         <Label for="cl-payer-type">Payer Type</Label>
                         <Select :model-value="ws.toSelectValue(ws.claimLinkForm.payerType)" @update:model-value="ws.claimLinkForm.payerType = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                            <SelectTrigger>
+                            <SelectTrigger id="cl-payer-type">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

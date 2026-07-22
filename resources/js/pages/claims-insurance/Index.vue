@@ -2317,7 +2317,7 @@ onMounted(async () => {
                                             <div class="grid gap-2">
                                                 <Label for="claims-per-page-view">Results per page</Label>
                                                 <Select :model-value="String(searchForm.perPage)" @update:model-value="searchForm.perPage = Number($event)">
-                                                    <SelectTrigger class="w-full">
+                                                    <SelectTrigger id="claims-per-page-view" class="w-full">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -3005,7 +3005,7 @@ onMounted(async () => {
                                             <div v-else class="grid gap-2">
                                                 <Label for="claims-create-payer-type">Payer type</Label>
                                                 <Select v-model="createForm.payerType">
-                                                    <SelectTrigger :disabled="createSubmitting">
+                                                    <SelectTrigger id="claims-create-payer-type" :disabled="createSubmitting">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -3121,7 +3121,7 @@ onMounted(async () => {
                             <div class="grid gap-2">
                                 <Label for="claims-filter-payer-sheet">Payer Type</Label>
                                 <Select v-model="advancedFiltersDraft.payerType">
-                                    <SelectTrigger class="w-full">
+                                    <SelectTrigger id="claims-filter-payer-sheet" class="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -3135,7 +3135,7 @@ onMounted(async () => {
                             <div class="grid gap-2">
                                 <Label for="claims-filter-reconciliation-sheet">Reconciliation Status</Label>
                                 <Select v-model="advancedFiltersDraft.reconciliationStatus">
-                                    <SelectTrigger class="w-full">
+                                    <SelectTrigger id="claims-filter-reconciliation-sheet" class="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -3149,7 +3149,7 @@ onMounted(async () => {
                             <div class="grid gap-2">
                                 <Label for="claims-filter-exception-sheet">Exception Status</Label>
                                 <Select v-model="advancedFiltersDraft.reconciliationExceptionStatus">
-                                    <SelectTrigger class="w-full">
+                                    <SelectTrigger id="claims-filter-exception-sheet" class="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -3199,7 +3199,7 @@ onMounted(async () => {
                                 <div class="grid gap-2">
                                     <Label for="claims-filter-payer-mobile">Payer Type</Label>
                                     <Select v-model="advancedFiltersDraft.payerType">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="claims-filter-payer-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -3213,7 +3213,7 @@ onMounted(async () => {
                                 <div class="grid gap-2">
                                     <Label for="claims-filter-reconciliation-mobile">Reconciliation Status</Label>
                                     <Select v-model="advancedFiltersDraft.reconciliationStatus">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="claims-filter-reconciliation-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -3227,7 +3227,7 @@ onMounted(async () => {
                                 <div class="grid gap-2">
                                     <Label for="claims-filter-exception-mobile">Exception Status</Label>
                                     <Select v-model="advancedFiltersDraft.reconciliationExceptionStatus">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="claims-filter-exception-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -3743,7 +3743,7 @@ onMounted(async () => {
                                                 <div class="grid gap-1">
                                                     <Label for="claims-details-audit-action">Action</Label>
                                                     <Select v-model="detailsAuditFilters.action">
-                                                        <SelectTrigger>
+                                                        <SelectTrigger id="claims-details-audit-action">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -3761,7 +3761,7 @@ onMounted(async () => {
                                                 <div class="grid gap-1">
                                                     <Label for="claims-details-audit-actor-type">Actor type</Label>
                                                     <Select v-model="detailsAuditFilters.actorType">
-                                                        <SelectTrigger>
+                                                        <SelectTrigger id="claims-details-audit-actor-type">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -3784,7 +3784,7 @@ onMounted(async () => {
                                                 <div class="grid gap-1">
                                                     <Label for="claims-details-audit-per-page">Rows per page</Label>
                                                     <Select :model-value="String(detailsAuditFilters.perPage)" @update:model-value="detailsAuditFilters.perPage = Number($event)">
-                                                        <SelectTrigger>
+                                                        <SelectTrigger id="claims-details-audit-per-page">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>

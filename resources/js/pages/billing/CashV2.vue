@@ -717,7 +717,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <div>
                         <Label for="pay-method">Payment method</Label>
                         <Select v-model="paymentMethod">
-                            <SelectTrigger class="mt-1"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="pay-method" class="mt-1"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="cash">Cash</SelectItem>
                                 <SelectItem value="card">Card</SelectItem>

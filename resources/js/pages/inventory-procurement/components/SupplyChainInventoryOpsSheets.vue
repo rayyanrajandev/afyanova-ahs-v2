@@ -58,8 +58,8 @@ const ws = useSupplyChainPageApi();
                         :error-message="ws.fieldError(ws.itemCreateErrors, 'category')"
                     >
                         <Select :model-value="ws.itemCreateForm.category || undefined" @update:model-value="ws.itemCreateForm.category = String($event ?? '')">
-                            <SelectTrigger class="w-full" :disabled="ws.itemCreateSubmitting">
-                                <SelectValue placeholder="Select category first" />
+                            <SelectTrigger id="inv-item-category" class="w-full" :disabled="ws.itemCreateSubmitting">
+                                                            <SelectValue placeholder="Select category first" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem v-for="cat in ws.itemCategoryOptions" :key="cat.value" :value="cat.value">{{ cat.label }}</SelectItem>
@@ -206,7 +206,7 @@ const ws = useSupplyChainPageApi();
                     <div v-if="ws.selectedCreateCategory?.supportsStorageFields" class="grid gap-2 sm:col-span-2">
                         <Label for="inv-item-storage">Storage Conditions</Label>
                         <Select :model-value="ws.toSelectValue(ws.itemCreateForm.storageConditions)" @update:model-value="ws.itemCreateForm.storageConditions = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                            <SelectTrigger class="w-full" :disabled="ws.itemCreateSubmitting">
+                            <SelectTrigger id="inv-item-storage" class="w-full" :disabled="ws.itemCreateSubmitting">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -235,7 +235,7 @@ const ws = useSupplyChainPageApi();
                     <div v-if="ws.itemCreateForm.isControlledSubstance" class="grid gap-2">
                         <Label for="inv-item-schedule">Schedule</Label>
                         <Select :model-value="ws.toSelectValue(ws.itemCreateForm.controlledSubstanceSchedule)" @update:model-value="ws.itemCreateForm.controlledSubstanceSchedule = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                            <SelectTrigger class="w-full" :disabled="ws.itemCreateSubmitting">
+                            <SelectTrigger id="inv-item-schedule" class="w-full" :disabled="ws.itemCreateSubmitting">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -256,7 +256,7 @@ const ws = useSupplyChainPageApi();
                     <div v-if="!ws.selectedCreateCategory || ws.selectedCreateCategory.supportsClinicalClassification" class="grid gap-2">
                         <Label for="inv-item-ven">VEN Classification</Label>
                         <Select :model-value="ws.itemCreateForm.venClassification || undefined" @update:model-value="ws.itemCreateForm.venClassification = String($event ?? '')">
-                            <SelectTrigger class="w-full" :disabled="ws.itemCreateSubmitting">
+                            <SelectTrigger id="inv-item-ven" class="w-full" :disabled="ws.itemCreateSubmitting">
                                 <SelectValue placeholder="Select VEN classification" />
                             </SelectTrigger>
                             <SelectContent>
@@ -268,7 +268,7 @@ const ws = useSupplyChainPageApi();
                     <div v-if="!ws.selectedCreateCategory || ws.selectedCreateCategory.supportsClinicalClassification" class="grid gap-2">
                         <Label for="inv-item-abc">ABC Classification</Label>
                         <Select :model-value="ws.itemCreateForm.abcClassification || undefined" @update:model-value="ws.itemCreateForm.abcClassification = String($event ?? '')">
-                            <SelectTrigger class="w-full" :disabled="ws.itemCreateSubmitting">
+                            <SelectTrigger id="inv-item-abc" class="w-full" :disabled="ws.itemCreateSubmitting">
                                 <SelectValue placeholder="Select ABC classification" />
                             </SelectTrigger>
                             <SelectContent>
@@ -469,7 +469,7 @@ const ws = useSupplyChainPageApi();
                                 :error-message="ws.fieldError(ws.stockMovementErrors, 'category')"
                             >
                                 <Select :model-value="ws.toSelectValue(ws.stockMovementForm.category)" @update:model-value="ws.stockMovementForm.category = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                    <SelectTrigger class="w-full" :disabled="ws.stockMovementSubmitting">
+                                    <SelectTrigger id="inv-movement-category" class="w-full" :disabled="ws.stockMovementSubmitting">
                                         <SelectValue placeholder="Select category first" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -638,7 +638,7 @@ const ws = useSupplyChainPageApi();
                         <div v-if="!ws.stockMovementOpeningBalanceMode" class="grid gap-2">
                             <Label for="inv-movement-source-supplier">Supplier (Source) <span class="text-xs font-normal text-muted-foreground">optional</span></Label>
                             <Select :model-value="ws.toSelectValue(ws.stockMovementForm.sourceSupplierId)" @update:model-value="ws.stockMovementForm.sourceSupplierId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger class="w-full" :disabled="ws.stockMovementSubmitting">
+                                <SelectTrigger id="inv-movement-source-supplier" class="w-full" :disabled="ws.stockMovementSubmitting">
                                     <SelectValue placeholder="— Select supplier —">
                                         {{ ws.supplierLabel(ws.stockMovementForm.sourceSupplierId) }}
                                     </SelectValue>
@@ -655,7 +655,7 @@ const ws = useSupplyChainPageApi();
                         <div class="grid gap-2" :class="ws.stockMovementOpeningBalanceMode ? 'sm:col-span-2' : ''">
                             <Label for="inv-movement-dest-warehouse">{{ ws.stockMovementOpeningBalanceMode ? 'Counted Into - Warehouse' : 'Stored In - Warehouse (Destination)' }} <span class="text-xs font-normal text-muted-foreground">optional</span></Label>
                             <Select :model-value="ws.toSelectValue(ws.stockMovementForm.destinationWarehouseId)" @update:model-value="ws.stockMovementForm.destinationWarehouseId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger class="w-full" :disabled="ws.stockMovementSubmitting">
+                                <SelectTrigger id="inv-movement-dest-warehouse" class="w-full" :disabled="ws.stockMovementSubmitting">
                                     <SelectValue placeholder="— Select warehouse —">
                                         {{ ws.warehouseLabel(ws.stockMovementForm.destinationWarehouseId) }}
                                     </SelectValue>
@@ -676,7 +676,7 @@ const ws = useSupplyChainPageApi();
                         <div class="grid gap-2">
                             <Label for="inv-movement-src-warehouse-issue">Issued From — Warehouse (Source) <span class="text-xs font-normal text-muted-foreground">optional</span></Label>
                             <Select :model-value="ws.toSelectValue(ws.stockMovementForm.sourceWarehouseId)" @update:model-value="ws.stockMovementForm.sourceWarehouseId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger class="w-full" :disabled="ws.stockMovementSubmitting">
+                                <SelectTrigger id="inv-movement-src-warehouse-issue" class="w-full" :disabled="ws.stockMovementSubmitting">
                                     <SelectValue placeholder="— Select warehouse —">
                                         {{ ws.warehouseLabel(ws.stockMovementForm.sourceWarehouseId) }}
                                     </SelectValue>
@@ -693,7 +693,7 @@ const ws = useSupplyChainPageApi();
                         <div class="grid gap-2">
                             <Label for="inv-movement-dest-dept">Issued To — Department (Destination) <span class="text-xs font-normal text-muted-foreground">optional</span></Label>
                             <Select :model-value="ws.toSelectValue(ws.stockMovementForm.destinationDepartmentId)" @update:model-value="ws.stockMovementForm.destinationDepartmentId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger class="w-full" :disabled="ws.stockMovementSubmitting">
+                                <SelectTrigger id="inv-movement-dest-dept" class="w-full" :disabled="ws.stockMovementSubmitting">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -712,7 +712,7 @@ const ws = useSupplyChainPageApi();
                         <div class="grid gap-2">
                             <Label for="inv-movement-src-warehouse-transfer">Transfer From — Warehouse (Source) <span class="text-xs font-normal text-muted-foreground">optional</span></Label>
                             <Select :model-value="ws.toSelectValue(ws.stockMovementForm.sourceWarehouseId)" @update:model-value="ws.stockMovementForm.sourceWarehouseId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger class="w-full" :disabled="ws.stockMovementSubmitting">
+                                <SelectTrigger id="inv-movement-src-warehouse-transfer" class="w-full" :disabled="ws.stockMovementSubmitting">
                                     <SelectValue placeholder="— Select warehouse —">
                                         {{ ws.warehouseLabel(ws.stockMovementForm.sourceWarehouseId) }}
                                     </SelectValue>
@@ -729,7 +729,7 @@ const ws = useSupplyChainPageApi();
                         <div class="grid gap-2">
                             <Label for="inv-movement-dest-warehouse-transfer">Transfer To — Warehouse (Destination) <span class="text-xs font-normal text-muted-foreground">optional</span></Label>
                             <Select :model-value="ws.toSelectValue(ws.stockMovementForm.destinationWarehouseId)" @update:model-value="ws.stockMovementForm.destinationWarehouseId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger class="w-full" :disabled="ws.stockMovementSubmitting">
+                                <SelectTrigger id="inv-movement-dest-warehouse-transfer" class="w-full" :disabled="ws.stockMovementSubmitting">
                                     <SelectValue placeholder="— Select warehouse —">
                                         {{ ws.warehouseLabel(ws.stockMovementForm.destinationWarehouseId) }}
                                     </SelectValue>
@@ -749,7 +749,7 @@ const ws = useSupplyChainPageApi();
                         <div class="grid gap-2 sm:col-span-2">
                             <Label for="inv-movement-batch-id">Batch *</Label>
                             <Select :model-value="ws.toSelectValue(ws.stockMovementForm.batchId)" @update:model-value="ws.stockMovementForm.batchId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger class="w-full" :disabled="ws.stockMovementSubmitting || ws.stockMovementBatchesLoading">
+                                <SelectTrigger id="inv-movement-batch-id" class="w-full" :disabled="ws.stockMovementSubmitting || ws.stockMovementBatchesLoading">
                                     <SelectValue placeholder="— Select batch —">
                                         {{ ws.selectedStockMovementBatch ? ws.batchOptionLabel(ws.selectedStockMovementBatch) : '' }}
                                     </SelectValue>
@@ -814,7 +814,7 @@ const ws = useSupplyChainPageApi();
                             </Label>
                             <template v-if="ws.stockMovementOpeningBalanceMode">
                                 <Select v-model="ws.stockMovementForm.reasonCode" :disabled="ws.stockMovementSubmitting">
-                                    <SelectTrigger class="w-full">
+                                    <SelectTrigger id="inv-movement-reason" class="w-full">
                                         <SelectValue placeholder="Select a reason" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -927,7 +927,7 @@ const ws = useSupplyChainPageApi();
                         Correction Reason *
                     </Label>
                     <Select v-model="ws.stockMovementCorrectionForm.reasonCode" :disabled="ws.stockMovementCorrectionSubmitting">
-                        <SelectTrigger class="w-full">
+                        <SelectTrigger id="inv-correction-reason" class="w-full">
                             <SelectValue placeholder="Select a reason" />
                         </SelectTrigger>
                         <SelectContent>
@@ -997,7 +997,7 @@ const ws = useSupplyChainPageApi();
                 <div v-if="ws.stockReconciliationUsesBatchTracking" class="grid gap-2">
                     <Label for="inv-reconcile-batch-id">Batch *</Label>
                     <Select :model-value="ws.toSelectValue(ws.stockReconciliationForm.batchId)" @update:model-value="ws.stockReconciliationForm.batchId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                        <SelectTrigger class="w-full" :disabled="ws.stockReconciliationSubmitting || ws.stockReconciliationBatchesLoading">
+                        <SelectTrigger id="inv-reconcile-batch-id" class="w-full" :disabled="ws.stockReconciliationSubmitting || ws.stockReconciliationBatchesLoading">
                             <SelectValue placeholder="— Select batch —">
                                 {{ ws.selectedStockReconciliationBatch ? ws.batchOptionLabel(ws.selectedStockReconciliationBatch) : '' }}
                             </SelectValue>

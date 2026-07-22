@@ -560,7 +560,7 @@ onMounted(async () => {
                                                     <div class="grid gap-2">
                                                         <Label for="catalog-status-popover">Status</Label>
                                                         <Select v-model="filters.status">
-                                                            <SelectTrigger class="w-full">
+                                                            <SelectTrigger id="catalog-status-popover" class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -576,7 +576,7 @@ onMounted(async () => {
                                                             v-if="specialties.length > 0"
                                                             v-model="filters.specialtyId"
                                                         >
-                                                            <SelectTrigger class="w-full">
+                                                            <SelectTrigger id="catalog-specialty-popover" class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -610,7 +610,7 @@ onMounted(async () => {
                                                     <div class="grid gap-2">
                                                         <Label for="catalog-per-page-popover">Per page</Label>
                                                         <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                                            <SelectTrigger class="w-full">
+                                                            <SelectTrigger id="catalog-per-page-popover" class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -875,7 +875,7 @@ onMounted(async () => {
                                         v-if="specialties.length > 0"
                                         v-model="createForm.specialtyId"
                                     >
-                                        <SelectTrigger :disabled="createLoading || specialtyLoading">
+                                        <SelectTrigger id="create-specialty-id" :disabled="createLoading || specialtyLoading">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -974,7 +974,7 @@ onMounted(async () => {
                             v-if="specialties.length > 0"
                             v-model="editForm.specialtyId"
                         >
-                            <SelectTrigger :disabled="editLoading || specialtyLoading">
+                            <SelectTrigger id="edit-specialty-id" :disabled="editLoading || specialtyLoading">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

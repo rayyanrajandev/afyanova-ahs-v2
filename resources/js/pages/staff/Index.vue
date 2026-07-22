@@ -2610,7 +2610,7 @@ onMounted(refreshPage);
                                             <div class="grid gap-2">
                                                 <Label for="staff-employment-popover-modern">Employment Type</Label>
                                                 <Select v-model="searchForm.employmentType">
-                                                    <SelectTrigger class="w-full">
+                                                    <SelectTrigger id="staff-employment-popover-modern" class="w-full">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -2625,7 +2625,7 @@ onMounted(refreshPage);
                                             <div class="grid gap-2">
                                                 <Label for="staff-per-page-popover-modern">Rows per page</Label>
                                                 <Select v-model="searchForm.perPage">
-                                                    <SelectTrigger class="w-full">
+                                                    <SelectTrigger id="staff-per-page-popover-modern" class="w-full">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -2638,7 +2638,7 @@ onMounted(refreshPage);
                                             <div class="grid gap-2">
                                                 <Label for="staff-density-popover-modern">Row density</Label>
                                                 <Select v-model="queueDensityValue">
-                                                    <SelectTrigger class="w-full">
+                                                    <SelectTrigger id="staff-density-popover-modern" class="w-full">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -2945,7 +2945,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="staff-employment-type-sheet">Employment type</Label>
                                     <Select v-model="createForm.employmentType">
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="staff-employment-type-sheet" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -3145,7 +3145,7 @@ onMounted(refreshPage);
                         <div class="grid gap-2">
                             <Label for="staff-doc-meta-type">Document Type</Label>
                             <Select v-model="documentMetadataForm.documentType">
-                                <SelectTrigger>
+                                <SelectTrigger id="staff-doc-meta-type">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -3205,7 +3205,7 @@ onMounted(refreshPage);
                         <div class="grid gap-2">
                             <Label for="staff-doc-verification-status">Verification Status</Label>
                             <Select v-model="documentVerificationStatus">
-                                <SelectTrigger>
+                                <SelectTrigger id="staff-doc-verification-status">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -4041,7 +4041,7 @@ onMounted(refreshPage);
                                                             <div class="grid gap-1.5">
                                                                 <Label for="staff-audit-actor-type" class="text-xs">Actor Type</Label>
                                                                 <Select v-model="detailsAuditFilters.actorType">
-                                                                    <SelectTrigger class="h-8 text-xs">
+                                                                    <SelectTrigger id="staff-audit-actor-type" class="h-8 text-xs">
                                                                         <SelectValue />
                                                                     </SelectTrigger>
                                                                     <SelectContent>
@@ -4273,7 +4273,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="staff-search-employment-mobile">Employment</Label>
                                     <Select v-model="searchForm.employmentType">
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="staff-search-employment-mobile" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -4288,7 +4288,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="staff-search-per-page-mobile">Results per page</Label>
                                     <Select v-model="searchForm.perPage">
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="staff-search-per-page-mobile" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -4301,7 +4301,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="staff-search-density-mobile">Row density</Label>
                                     <Select v-model="queueDensityValue">
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="staff-search-density-mobile" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>

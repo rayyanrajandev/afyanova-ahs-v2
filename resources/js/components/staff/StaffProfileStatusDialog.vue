@@ -190,7 +190,7 @@ async function saveStatus(): Promise<void> {
                 <div class="grid gap-2">
                     <Label for="staff-status-target">Status</Label>
                     <Select v-model="form.status">
-                        <SelectTrigger>
+                        <SelectTrigger id="staff-status-target">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

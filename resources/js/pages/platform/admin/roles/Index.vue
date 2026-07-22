@@ -1119,7 +1119,7 @@ onMounted(refreshPage);
                                                 <div class="grid gap-2">
                                                     <Label for="rbac-search-status">Status</Label>
                                                     <Select v-model="searchForm.status">
-                                                        <SelectTrigger class="w-full">
+                                                        <SelectTrigger id="rbac-search-status" class="w-full">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -1132,7 +1132,7 @@ onMounted(refreshPage);
                                                 <div class="grid gap-2">
                                                     <Label for="rbac-search-per-page">Per page</Label>
                                                     <Select :model-value="String(searchForm.perPage)" @update:model-value="searchForm.perPage = Number($event)">
-                                                        <SelectTrigger class="w-full">
+                                                        <SelectTrigger id="rbac-search-per-page" class="w-full">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -1145,7 +1145,7 @@ onMounted(refreshPage);
                                                 <div class="grid gap-2">
                                                     <Label for="rbac-search-density">Row density</Label>
                                                     <Select v-model="queueDensityValue">
-                                                        <SelectTrigger class="w-full">
+                                                        <SelectTrigger id="rbac-search-density" class="w-full">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -1158,7 +1158,7 @@ onMounted(refreshPage);
                                                     <div class="grid gap-2">
                                                         <Label for="rbac-search-sort-by">Sort by</Label>
                                                         <Select v-model="searchForm.sortBy">
-                                                            <SelectTrigger class="w-full">
+                                                            <SelectTrigger id="rbac-search-sort-by" class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1173,7 +1173,7 @@ onMounted(refreshPage);
                                                     <div class="grid gap-2">
                                                         <Label for="rbac-search-sort-dir">Sort direction</Label>
                                                         <Select v-model="searchForm.sortDir">
-                                                            <SelectTrigger class="w-full">
+                                                            <SelectTrigger id="rbac-search-sort-dir" class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1501,7 +1501,7 @@ onMounted(refreshPage);
                                                     <div class="grid gap-2">
                                                         <Label for="role-details-status">Status</Label>
                                                         <Select v-model="detailsForm.status">
-                                                            <SelectTrigger :disabled="!canManageRoles">
+                                                            <SelectTrigger id="role-details-status" :disabled="!canManageRoles">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1729,7 +1729,7 @@ onMounted(refreshPage);
                                                         <div class="space-y-1.5">
                                                             <Label for="rbac-audit-actor-type" class="text-xs">Actor type</Label>
                                                             <Select v-model="detailsAuditFilters.actorType">
-                                                                <SelectTrigger class="mt-0">
+                                                                <SelectTrigger id="rbac-audit-actor-type" class="mt-0">
                                                                     <SelectValue />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
@@ -1746,7 +1746,7 @@ onMounted(refreshPage);
                                                         <div class="space-y-1.5">
                                                             <Label for="rbac-audit-per-page" class="text-xs">Per page</Label>
                                                             <Select :model-value="String(detailsAuditFilters.perPage)" @update:model-value="detailsAuditFilters.perPage = Number($event)">
-                                                                <SelectTrigger class="mt-0">
+                                                                <SelectTrigger id="rbac-audit-per-page" class="mt-0">
                                                                     <SelectValue />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
@@ -1935,7 +1935,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="rbac-search-status-mobile">Status</Label>
                                     <Select v-model="searchForm.status">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="rbac-search-status-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1948,7 +1948,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="rbac-search-per-page-mobile">Results per page</Label>
                                     <Select :model-value="String(searchForm.perPage)" @update:model-value="searchForm.perPage = Number($event)">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="rbac-search-per-page-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1961,7 +1961,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="rbac-search-density-mobile">Row density</Label>
                                     <Select v-model="queueDensityValue">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="rbac-search-density-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1977,7 +1977,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="rbac-search-sort-by-mobile">Sort by</Label>
                                     <Select v-model="searchForm.sortBy">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="rbac-search-sort-by-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1992,7 +1992,7 @@ onMounted(refreshPage);
                                 <div class="grid gap-2">
                                     <Label for="rbac-search-sort-dir-mobile">Sort direction</Label>
                                     <Select v-model="searchForm.sortDir">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="rbac-search-sort-dir-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>

@@ -1002,7 +1002,7 @@ onMounted(async () => {
                                                 <div class="grid gap-2">
                                                     <Label for="approval-cases-status">Status</Label>
                                                     <Select v-model="filters.status">
-                                                        <SelectTrigger>
+                                                        <SelectTrigger id="approval-cases-status">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -1016,7 +1016,7 @@ onMounted(async () => {
                                                 <div class="grid gap-2">
                                                     <Label for="approval-cases-action-type">Action type</Label>
                                                     <Select v-model="filters.actionType">
-                                                        <SelectTrigger>
+                                                        <SelectTrigger id="approval-cases-action-type">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -1055,7 +1055,7 @@ onMounted(async () => {
                                                     <div class="grid gap-2">
                                                         <Label for="approval-cases-sort-by">Sort by</Label>
                                                         <Select v-model="filters.sortBy">
-                                                            <SelectTrigger>
+                                                            <SelectTrigger id="approval-cases-sort-by">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1072,7 +1072,7 @@ onMounted(async () => {
                                                     <div class="grid gap-2">
                                                         <Label for="approval-cases-sort-dir">Sort direction</Label>
                                                         <Select v-model="filters.sortDir">
-                                                            <SelectTrigger>
+                                                            <SelectTrigger id="approval-cases-sort-dir">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1086,7 +1086,7 @@ onMounted(async () => {
                                                     <div class="grid gap-2">
                                                         <Label for="approval-cases-per-page">Per page</Label>
                                                         <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                                            <SelectTrigger>
+                                                            <SelectTrigger id="approval-cases-per-page">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1100,7 +1100,7 @@ onMounted(async () => {
                                                     <div class="grid gap-2">
                                                         <Label for="approval-cases-density">Row density</Label>
                                                         <Select>
-                                                            <SelectTrigger>
+                                                            <SelectTrigger id="approval-cases-density">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1398,7 +1398,7 @@ onMounted(async () => {
                                                     <div class="grid gap-1.5">
                                                         <Label for="details-status">Status</Label>
                                                         <Select v-model="statusForm.status">
-                                                            <SelectTrigger>
+                                                            <SelectTrigger id="details-status">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1443,7 +1443,7 @@ onMounted(async () => {
                                                     <div class="grid gap-1.5">
                                                         <Label for="details-decision">Decision</Label>
                                                         <Select v-model="decisionForm.decision">
-                                                            <SelectTrigger>
+                                                            <SelectTrigger id="details-decision">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -1539,7 +1539,7 @@ onMounted(async () => {
                                                     <Input v-model="auditFilters.q" placeholder="Search action" class="md:col-span-2" />
                                                     <Input v-model="auditFilters.action" placeholder="Action exact match" />
                                                     <Select v-model="auditFilters.actorType">
-                                                        <SelectTrigger>
+                                                        <SelectTrigger id="details-comment">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>

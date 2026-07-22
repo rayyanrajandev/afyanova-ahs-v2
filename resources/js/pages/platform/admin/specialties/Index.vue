@@ -1062,7 +1062,7 @@ onMounted(refreshPage);
                                                         <div class="grid gap-2">
                                                             <Label for="specialty-per-page-popover">Rows per page</Label>
                                                             <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                                                <SelectTrigger class="w-full">
+                                                                <SelectTrigger id="specialty-per-page-popover" class="w-full">
                                                                     <SelectValue />
                                                                 </SelectTrigger>
                                                                 <SelectContent>

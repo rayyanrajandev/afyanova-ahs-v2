@@ -390,7 +390,7 @@ onMounted(() => {
                                     <div class="grid gap-2">
                                         <Label for="wh-status-popover">Status</Label>
                                         <Select :model-value="toSelectValue(filters.status)" @update:model-value="filters.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="wh-status-popover" class="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                             <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
                                             <SelectItem value="active">Active</SelectItem>
@@ -405,7 +405,7 @@ onMounted(() => {
                                     <div class="grid gap-2">
                                         <Label for="wh-per-page-popover">Per page</Label>
                                         <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="wh-per-page-popover" class="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                             <SelectItem value="20">20</SelectItem>
                                             <SelectItem value="50">50</SelectItem>

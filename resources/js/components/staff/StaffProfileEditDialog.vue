@@ -322,7 +322,7 @@ async function saveProfile(): Promise<void> {
                 <div class="grid gap-2">
                     <Label for="staff-edit-employment-type">Employment Type</Label>
                     <Select v-model="form.employmentType">
-                        <SelectTrigger class="w-full">
+                        <SelectTrigger id="staff-edit-employment-type" class="w-full">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

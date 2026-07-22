@@ -4661,7 +4661,7 @@ onMounted(async () => {
                                             <div class="grid gap-2">
                                                 <Label for="theatre-status-popover">Status</Label>
                                                 <Select v-model="searchForm.status">
-                                                    <SelectTrigger class="w-full">
+                                                    <SelectTrigger id="theatre-status-popover" class="w-full">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -5484,7 +5484,7 @@ onMounted(async () => {
             </DrawerHeader>
             <div class="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">
                 <div class="grid gap-2"><Label for="theatre-q-drawer">Search</Label><Input id="theatre-q-drawer" v-model="searchForm.q" placeholder="Procedure number, type, room..." @keyup.enter="submitSearch" /></div>
-                <div class="grid gap-2"><Label for="theatre-status-drawer">Status</Label><Select v-model="searchForm.status"><SelectTrigger class="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">All</SelectItem><SelectItem v-for="o in statusOptions" :key="o" :value="o">{{ formatEnumLabel(o) }}</SelectItem></SelectContent></Select></div>
+                <div class="grid gap-2"><Label for="theatre-status-drawer">Status</Label><Select v-model="searchForm.status"><SelectTrigger id="theatre-status-drawer" class="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">All</SelectItem><SelectItem v-for="o in statusOptions" :key="o" :value="o">{{ formatEnumLabel(o) }}</SelectItem></SelectContent></Select></div>
             </div>
             <DrawerFooter class="gap-2">
                 <Button class="gap-1.5" :disabled="queueLoading" @click="submitSearch(); mobileFiltersDrawerOpen = false"><AppIcon name="search" class="size-3.5" />Search</Button>
@@ -6331,7 +6331,7 @@ onMounted(async () => {
                             <div class="grid gap-2">
                                 <Label for="resource-filter-type">Type</Label>
                                 <Select v-model="detailsResourceFilters.resourceType">
-                                    <SelectTrigger>
+                                    <SelectTrigger id="resource-filter-type">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -6343,7 +6343,7 @@ onMounted(async () => {
                             <div class="grid gap-2">
                                 <Label for="resource-filter-status">Status</Label>
                                 <Select v-model="detailsResourceFilters.status">
-                                    <SelectTrigger>
+                                    <SelectTrigger id="resource-filter-status">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -6355,7 +6355,7 @@ onMounted(async () => {
                             <div class="grid gap-2">
                                 <Label for="resource-filter-per-page">Rows Per Page</Label>
                                 <Select :model-value="String(detailsResourceFilters.perPage)" @update:model-value="detailsResourceFilters.perPage = Number($event)">
-                                    <SelectTrigger>
+                                    <SelectTrigger id="resource-filter-per-page">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -6419,7 +6419,7 @@ onMounted(async () => {
                                 <div class="grid gap-1">
                                     <Label for="resource-create-type">Resource Type</Label>
                                     <Select v-model="resourceCreateForm.resourceType">
-                                        <SelectTrigger :disabled="resourceCreateSubmitting">
+                                        <SelectTrigger id="resource-create-type" :disabled="resourceCreateSubmitting">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -6517,7 +6517,7 @@ onMounted(async () => {
                                 <div class="grid gap-2">
                                     <Label for="theatre-details-audit-actor-type">Actor Type</Label>
                                     <Select v-model="detailsAuditFilters.actorType">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="theatre-details-audit-actor-type">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -6540,7 +6540,7 @@ onMounted(async () => {
                                 <div class="grid gap-2">
                                     <Label for="theatre-details-audit-per-page">Rows Per Page</Label>
                                     <Select :model-value="String(detailsAuditFilters.perPage)" @update:model-value="detailsAuditFilters.perPage = Number($event)">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="theatre-details-audit-per-page">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -6667,7 +6667,7 @@ onMounted(async () => {
                                 <div class="grid gap-2">
                                     <Label for="resource-audit-actor-type">Actor Type</Label>
                                     <Select v-model="resourceAuditFilters.actorType">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="resource-audit-actor-type">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -6690,7 +6690,7 @@ onMounted(async () => {
                                 <div class="grid gap-2">
                                     <Label for="resource-audit-per-page">Rows Per Page</Label>
                                     <Select :model-value="String(resourceAuditFilters.perPage)" @update:model-value="resourceAuditFilters.perPage = Number($event)">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="resource-audit-per-page">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>

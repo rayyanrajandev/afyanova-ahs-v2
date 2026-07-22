@@ -17,14 +17,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetFooter,
-    SheetHeader,
-    SheetTitle,
-} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -36,12 +28,20 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import AppLayout from '@/layouts/AppLayout.vue';
-import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import AppLayout from '@/layouts/AppLayout.vue';
 import { formatEnumLabel } from '@/lib/labels';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import type { BreadcrumbItem } from '@/types';
 
 const { scope: platformScope } = usePlatformAccess();
@@ -1548,7 +1548,7 @@ watch(showPaymentDialog, (open) => {
                     <div>
                         <Label for="paymentMethod">Payment Method</Label>
                         <Select v-model="paymentMethod">
-                            <SelectTrigger class="mt-1">
+                            <SelectTrigger id="paymentMethod" class="mt-1">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1612,7 +1612,7 @@ watch(showPaymentDialog, (open) => {
                     <div>
                         <Label for="bulkPaymentMethod">Payment Method</Label>
                         <Select v-model="bulkPaymentMethod">
-                            <SelectTrigger class="mt-1">
+                            <SelectTrigger id="bulkPaymentMethod" class="mt-1">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

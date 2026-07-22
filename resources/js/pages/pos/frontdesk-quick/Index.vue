@@ -466,7 +466,7 @@ function statusVariant(status: string | null | undefined): 'default' | 'secondar
                                     <PosFilterField :xl-span="3">
                                         <Label for="fq-kind">Type</Label>
                                         <Select v-model="activeKindFilter">
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="fq-kind"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="all">All types</SelectItem>
                                                 <SelectItem v-for="kind in availableKinds" :key="kind" :value="kind">

@@ -576,7 +576,7 @@ onMounted(() => {
                                     <div class="grid gap-1">
                                         <Label for="item-audit-actor-type">Actor Type</Label>
                                         <Select :model-value="toSelectValue(auditFilters.actorType)" @update:model-value="auditFilters.actorType = fromSelectValue(String($event ?? EMPTY))">
-                                            <SelectTrigger>
+                                            <SelectTrigger id="item-audit-actor-type">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -601,7 +601,7 @@ onMounted(() => {
                                     <div class="grid gap-1">
                                         <Label for="item-audit-per-page">Rows Per Page</Label>
                                         <Select :model-value="String(auditFilters.perPage)" @update:model-value="auditFilters.perPage = Number($event)">
-                                            <SelectTrigger>
+                                            <SelectTrigger id="item-audit-per-page">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>

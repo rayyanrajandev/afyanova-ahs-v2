@@ -4797,7 +4797,7 @@ onMounted(() => {
                                 <div class="grid gap-2">
                                     <Label for="mr-status-sheet">Status</Label>
                                     <Select v-model="selectedRecordStatusFilter">
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="mr-status-sheet" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -4812,7 +4812,7 @@ onMounted(() => {
                                 <div class="grid gap-2">
                                     <Label for="mr-record-type-sheet">Record type</Label>
                                     <Select v-model="selectedRecordTypeFilter">
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="mr-record-type-sheet" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -5406,8 +5406,8 @@ onMounted(() => {
                                             <p v-else-if="detailsVersions.length === 0" class="text-sm text-muted-foreground">No version snapshots yet.</p>
                                             <div v-else class="space-y-3">
                                                 <div class="grid gap-3 sm:grid-cols-2">
-                                                    <div class="grid gap-1.5"><Label for="medical-record-diff-target-version" class="text-xs">Target version</Label><Select v-model="detailsSelectedVersionId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="version in detailsVersions" :key="'version-target-' + version.id" :value="version.id">{{ versionLabel(version) }}</SelectItem></SelectContent></Select></div>
-                                                    <div class="grid gap-1.5"><Label for="medical-record-diff-base-version" class="text-xs">Base version</Label><Select v-model="selectedDetailsAgainstVersionId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem :value="PREVIOUS_VERSION_DIFF_VALUE">Previous (default)</SelectItem><SelectItem v-for="version in detailsVersions" :key="'version-base-' + version.id" :value="version.id">{{ versionLabel(version) }}</SelectItem></SelectContent></Select></div>
+                                                    <div class="grid gap-1.5"><Label for="medical-record-diff-target-version" class="text-xs">Target version</Label><Select v-model="detailsSelectedVersionId"><SelectTrigger id="medical-record-diff-target-version"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="version in detailsVersions" :key="'version-target-' + version.id" :value="version.id">{{ versionLabel(version) }}</SelectItem></SelectContent></Select></div>
+                                                    <div class="grid gap-1.5"><Label for="medical-record-diff-base-version" class="text-xs">Base version</Label><Select v-model="selectedDetailsAgainstVersionId"><SelectTrigger id="medical-record-diff-base-version"><SelectValue /></SelectTrigger><SelectContent><SelectItem :value="PREVIOUS_VERSION_DIFF_VALUE">Previous (default)</SelectItem><SelectItem v-for="version in detailsVersions" :key="'version-base-' + version.id" :value="version.id">{{ versionLabel(version) }}</SelectItem></SelectContent></Select></div>
                                                 </div>
                                                 <div class="flex items-center gap-3">
                                                     <Button size="sm" variant="outline" :disabled="detailsVersionDiffLoading || !detailsSelectedVersionId" @click="applyDetailsVersionDiff">{{ detailsVersionDiffLoading ? 'Comparing...' : 'Compare' }}</Button>
@@ -5700,7 +5700,7 @@ onMounted(() => {
                                                         for="medical-record-audit-action"
                                                         >Action</Label
                                                     >
-                                                    <Select v-model=" detailsAuditFilters.action "><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
+                                                    <Select v-model=" detailsAuditFilters.action "><SelectTrigger id="medical-record-audit-action"><SelectValue /></SelectTrigger><SelectContent>
                                                         <SelectItem
                                                             value=""
                                                         >
@@ -5721,7 +5721,7 @@ onMounted(() => {
                                                         for="medical-record-audit-actor-type"
                                                         >Actor Type</Label
                                                     >
-                                                    <Select v-model=" detailsAuditFilters.actorType "><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
+                                                    <Select v-model=" detailsAuditFilters.actorType "><SelectTrigger id="medical-record-audit-actor-type"><SelectValue /></SelectTrigger><SelectContent>
                                                         <SelectItem
                                                             v-for="option in auditActorTypeOptions"
                                                             :key="`medical-record-audit-actor-type-${option.value || 'all'}`"
@@ -5779,7 +5779,7 @@ onMounted(() => {
                                                         for="medical-record-audit-per-page"
                                                         >Rows Per Page</Label
                                                     >
-                                                    <Select :model-value="String( detailsAuditFilters.perPage )" @update:model-value=" detailsAuditFilters.perPage  = Number($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
+                                                    <Select :model-value="String( detailsAuditFilters.perPage )" @update:model-value=" detailsAuditFilters.perPage  = Number($event)"><SelectTrigger id="medical-record-audit-per-page"><SelectValue /></SelectTrigger><SelectContent>
                                                         <SelectItem value="10">10</SelectItem>
                                                         <SelectItem value="20">20</SelectItem>
                                                         <SelectItem value="50">50</SelectItem>

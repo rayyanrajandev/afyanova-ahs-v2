@@ -1676,7 +1676,7 @@ onBeforeUnmount(() => {
                                                 <div class="grid gap-2">
                                                     <Label for="credentialing-staff-per-page">Rows per page</Label>
                                                     <Select v-model="staffFilters.perPage">
-                                                        <SelectTrigger class="w-full">
+                                                        <SelectTrigger id="credentialing-staff-per-page" class="w-full">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -1689,7 +1689,7 @@ onBeforeUnmount(() => {
                                                 <div class="grid gap-2">
                                                     <Label for="credentialing-staff-density">Row density</Label>
                                                     <Select v-model="queueDensityValue">
-                                                        <SelectTrigger class="w-full">
+                                                        <SelectTrigger id="credentialing-staff-density" class="w-full">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -2207,7 +2207,7 @@ onBeforeUnmount(() => {
                                         <div class="grid gap-2">
                                             <Label for="profile-regulator">Primary regulator</Label>
                                             <Select v-model="profileForm.primaryRegulatorCode">
-                                                <SelectTrigger class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
+                                                <SelectTrigger id="profile-regulator" class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2238,7 +2238,7 @@ onBeforeUnmount(() => {
                                         <div class="grid gap-2">
                                             <Label for="profile-authority">Practice authority</Label>
                                             <Select v-model="profileForm.practiceAuthorityLevel">
-                                                <SelectTrigger class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
+                                                <SelectTrigger id="profile-authority" class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2250,7 +2250,7 @@ onBeforeUnmount(() => {
                                         <div class="grid gap-2">
                                             <Label for="profile-supervision">Supervision level</Label>
                                             <Select v-model="profileForm.supervisionLevel">
-                                                <SelectTrigger class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
+                                                <SelectTrigger id="profile-supervision" class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2262,7 +2262,7 @@ onBeforeUnmount(() => {
                                         <div class="grid gap-2">
                                             <Label for="profile-good-standing">Good standing</Label>
                                             <Select v-model="profileForm.goodStandingStatus">
-                                                <SelectTrigger class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
+                                                <SelectTrigger id="profile-good-standing" class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2320,7 +2320,7 @@ onBeforeUnmount(() => {
                                         :model-value="toOptionalSelectValue(registrationFilters.regulatorCode)"
                                         @update:model-value="(value) => (registrationFilters.regulatorCode = fromOptionalSelectValue(value))"
                                     >
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="profile-notes" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -2562,7 +2562,7 @@ onBeforeUnmount(() => {
                                             :model-value="toOptionalSelectValue(auditFilters.actorType)"
                                             @update:model-value="(value) => (auditFilters.actorType = fromOptionalSelectValue(value))"
                                         >
-                                            <SelectTrigger class="w-full">
+                                            <SelectTrigger id="credentialing-alert-clinical-only" class="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -2650,7 +2650,7 @@ onBeforeUnmount(() => {
                         <div class="grid gap-2">
                             <Label for="registration-regulator">Regulator</Label>
                             <Select v-model="registrationForm.regulatorCode">
-                                <SelectTrigger class="w-full">
+                                <SelectTrigger id="registration-regulator" class="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -2681,7 +2681,7 @@ onBeforeUnmount(() => {
                         <div class="grid gap-2">
                             <Label for="registration-status">Registration status</Label>
                             <Select v-model="registrationForm.registrationStatus">
-                                <SelectTrigger class="w-full">
+                                <SelectTrigger id="registration-status" class="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -2692,7 +2692,7 @@ onBeforeUnmount(() => {
                         <div class="grid gap-2">
                             <Label for="license-status">License status</Label>
                             <Select v-model="registrationForm.licenseStatus">
-                                <SelectTrigger class="w-full">
+                                <SelectTrigger id="license-status" class="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -2769,7 +2769,7 @@ onBeforeUnmount(() => {
                     <div class="grid gap-2">
                         <Label for="verification-status">Verification status</Label>
                         <Select v-model="verificationForm.verificationStatus">
-                            <SelectTrigger class="w-full">
+                            <SelectTrigger id="verification-status" class="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

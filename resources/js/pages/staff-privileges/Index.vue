@@ -2163,7 +2163,7 @@ onBeforeUnmount(() => {
                                                 <div class="grid gap-2">
                                                     <Label for="staff-queue-per-page">Rows per page</Label>
                                                     <Select v-model="staffFilters.perPage">
-                                                        <SelectTrigger class="w-full">
+                                                        <SelectTrigger id="staff-queue-per-page" class="w-full">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -2176,7 +2176,7 @@ onBeforeUnmount(() => {
                                                 <div class="grid gap-2">
                                                     <Label for="staff-queue-density">Row density</Label>
                                                     <Select v-model="queueDensityValue">
-                                                        <SelectTrigger class="w-full">
+                                                        <SelectTrigger id="staff-queue-density" class="w-full">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -2684,7 +2684,7 @@ onBeforeUnmount(() => {
                                         <div class="grid gap-2">
                                             <Label for="grant-status-popover">Status</Label>
                                             <Select v-model="grantFilters.status">
-                                                <SelectTrigger class="w-full">
+                                                <SelectTrigger id="grant-status-popover" class="w-full">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2701,7 +2701,7 @@ onBeforeUnmount(() => {
                                         <div class="grid gap-2">
                                             <Label for="grant-facility-popover">Facility</Label>
                                             <Select v-model="grantFilters.facilityId">
-                                                <SelectTrigger class="w-full">
+                                                <SelectTrigger id="grant-facility-popover" class="w-full">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2713,7 +2713,7 @@ onBeforeUnmount(() => {
                                         <div class="grid gap-2">
                                             <Label for="grant-specialty-popover">Specialty</Label>
                                             <Select v-model="grantFilters.specialtyId">
-                                                <SelectTrigger class="w-full">
+                                                <SelectTrigger id="grant-specialty-popover" class="w-full">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2976,12 +2976,12 @@ onBeforeUnmount(() => {
                         <AlertDescription>No governed privilege templates are available in the current scope, so manual privilege entry is enabled.</AlertDescription>
                     </Alert>
                     <div class="grid gap-3 md:grid-cols-2">
-                        <div class="grid gap-2"><Label for="create-facility">Facility</Label><Select v-if="facilityOptions.length" v-model="createForm.facilityId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Select facility</SelectItem><SelectItem v-for="row in facilityOptions" :key="`cf-${row.id}`" :value="row.id">{{ row.label }}</SelectItem></SelectContent></Select><Input v-else id="create-facility" v-model="createForm.facilityId" placeholder="Facility UUID" /><p v-if="createErrors.facilityId" class="text-xs text-destructive">{{ createErrors.facilityId[0] }}</p></div>
+                        <div class="grid gap-2"><Label for="create-facility">Facility</Label><Select v-if="facilityOptions.length" v-model="createForm.facilityId"><SelectTrigger id="create-facility"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Select facility</SelectItem><SelectItem v-for="row in facilityOptions" :key="`cf-${row.id}`" :value="row.id">{{ row.label }}</SelectItem></SelectContent></Select><Input v-else id="create-facility" v-model="createForm.facilityId" placeholder="Facility UUID" /><p v-if="createErrors.facilityId" class="text-xs text-destructive">{{ createErrors.facilityId[0] }}</p></div>
                         <template v-if="privilegeCatalogOptions.length > 0">
                             <div class="grid gap-2">
                                 <Label for="create-privilege-catalog">Privilege Template</Label>
                                 <Select v-model="createForm.privilegeCatalogId">
-                                    <SelectTrigger>
+                                    <SelectTrigger id="create-privilege-catalog">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -3019,7 +3019,7 @@ onBeforeUnmount(() => {
                             </div>
                         </template>
                         <template v-else>
-                            <div class="grid gap-2"><Label for="create-specialty">Specialty</Label><Select v-if="specialtyOptions.length" v-model="createForm.specialtyId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Select specialty</SelectItem><SelectItem v-for="row in specialtyOptions" :key="`cs-${row.id}`" :value="row.id">{{ row.label }}</SelectItem></SelectContent></Select><Input v-else id="create-specialty" v-model="createForm.specialtyId" placeholder="Specialty UUID" /><p v-if="createErrors.specialtyId" class="text-xs text-destructive">{{ createErrors.specialtyId[0] }}</p></div>
+                            <div class="grid gap-2"><Label for="create-specialty">Specialty</Label><Select v-if="specialtyOptions.length" v-model="createForm.specialtyId"><SelectTrigger id="create-specialty"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Select specialty</SelectItem><SelectItem v-for="row in specialtyOptions" :key="`cs-${row.id}`" :value="row.id">{{ row.label }}</SelectItem></SelectContent></Select><Input v-else id="create-specialty" v-model="createForm.specialtyId" placeholder="Specialty UUID" /><p v-if="createErrors.specialtyId" class="text-xs text-destructive">{{ createErrors.specialtyId[0] }}</p></div>
                             <div class="grid gap-2"><Label for="create-code">Privilege Code</Label><Input id="create-code" v-model="createForm.privilegeCode" /><p v-if="createErrors.privilegeCode" class="text-xs text-destructive">{{ createErrors.privilegeCode[0] }}</p></div>
                             <div class="grid gap-2 md:col-span-2"><Label for="create-name">Privilege Name</Label><Input id="create-name" v-model="createForm.privilegeName" /><p v-if="createErrors.privilegeName" class="text-xs text-destructive">{{ createErrors.privilegeName[0] }}</p></div>
                         </template>
@@ -3055,8 +3055,8 @@ onBeforeUnmount(() => {
                 <DialogContent size="2xl">
                     <DialogHeader><DialogTitle>Edit Privilege Grant</DialogTitle><DialogDescription>{{ selectedStaff ? `${staffDisplayName(selectedStaff)} - ${selectedStaff.employeeNumber || selectedStaff.id}` : '' }}</DialogDescription></DialogHeader>
                     <div class="grid gap-3 md:grid-cols-2">
-                        <div class="grid gap-2"><Label for="edit-facility">Facility</Label><Select v-if="facilityOptions.length" v-model="editForm.facilityId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Select facility</SelectItem><SelectItem v-for="row in facilityOptions" :key="`ef-${row.id}`" :value="row.id">{{ row.label }}</SelectItem></SelectContent></Select><Input v-else id="edit-facility" v-model="editForm.facilityId" placeholder="Facility UUID" /><p v-if="editErrors.facilityId" class="text-xs text-destructive">{{ editErrors.facilityId[0] }}</p></div>
-                        <div class="grid gap-2"><Label for="edit-specialty">Specialty</Label><Select v-if="specialtyOptions.length" v-model="editForm.specialtyId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Select specialty</SelectItem><SelectItem v-for="row in specialtyOptions" :key="`es-${row.id}`" :value="row.id">{{ row.label }}</SelectItem></SelectContent></Select><Input v-else id="edit-specialty" v-model="editForm.specialtyId" placeholder="Specialty UUID" /><p v-if="editErrors.specialtyId" class="text-xs text-destructive">{{ editErrors.specialtyId[0] }}</p></div>
+                        <div class="grid gap-2"><Label for="edit-facility">Facility</Label><Select v-if="facilityOptions.length" v-model="editForm.facilityId"><SelectTrigger id="edit-facility"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Select facility</SelectItem><SelectItem v-for="row in facilityOptions" :key="`ef-${row.id}`" :value="row.id">{{ row.label }}</SelectItem></SelectContent></Select><Input v-else id="edit-facility" v-model="editForm.facilityId" placeholder="Facility UUID" /><p v-if="editErrors.facilityId" class="text-xs text-destructive">{{ editErrors.facilityId[0] }}</p></div>
+                        <div class="grid gap-2"><Label for="edit-specialty">Specialty</Label><Select v-if="specialtyOptions.length" v-model="editForm.specialtyId"><SelectTrigger id="edit-specialty"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Select specialty</SelectItem><SelectItem v-for="row in specialtyOptions" :key="`es-${row.id}`" :value="row.id">{{ row.label }}</SelectItem></SelectContent></Select><Input v-else id="edit-specialty" v-model="editForm.specialtyId" placeholder="Specialty UUID" /><p v-if="editErrors.specialtyId" class="text-xs text-destructive">{{ editErrors.specialtyId[0] }}</p></div>
                         <div class="grid gap-2"><Label for="edit-code">Privilege Code</Label><Input id="edit-code" v-model="editForm.privilegeCode" /><p v-if="editErrors.privilegeCode" class="text-xs text-destructive">{{ editErrors.privilegeCode[0] }}</p></div>
                         <div class="grid gap-2"><Label for="edit-name">Privilege Name</Label><Input id="edit-name" v-model="editForm.privilegeName" /><p v-if="editErrors.privilegeName" class="text-xs text-destructive">{{ editErrors.privilegeName[0] }}</p></div>
                         <div class="grid gap-2"><Label for="edit-granted">Granted At</Label><Input id="edit-granted" v-model="editForm.grantedAt" type="date" /><p v-if="editErrors.grantedAt" class="text-xs text-destructive">{{ editErrors.grantedAt[0] }}</p></div>
@@ -3076,7 +3076,7 @@ onBeforeUnmount(() => {
                         <div v-if="statusActionChoices.length > 1" class="grid gap-2">
                             <Label for="status-target">Action</Label>
                             <Select v-model="statusTarget">
-                                <SelectTrigger>
+                                <SelectTrigger id="status-target">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -3143,7 +3143,7 @@ onBeforeUnmount(() => {
                                     <div class="grid gap-2 md:grid-cols-3">
                                         <div class="md:col-span-3"><Label for="audit-q">Action Text</Label><Input id="audit-q" v-model="auditFilters.q" /></div>
                                         <div><Label for="audit-action">Action</Label><Input id="audit-action" v-model="auditFilters.action" /></div>
-                                        <div><Label for="audit-actor-type">Actor Type</Label><Select v-model="auditFilters.actorType"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">All actors</SelectItem><SelectItem value="user">User</SelectItem><SelectItem value="system">System</SelectItem></SelectContent></Select></div>
+                                        <div><Label for="audit-actor-type">Actor Type</Label><Select v-model="auditFilters.actorType"><SelectTrigger id="audit-actor-type"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">All actors</SelectItem><SelectItem value="user">User</SelectItem><SelectItem value="system">System</SelectItem></SelectContent></Select></div>
                                         <div><Label for="audit-actor-id">Actor ID</Label><Input id="audit-actor-id" v-model="auditFilters.actorId" /></div>
                                         <div><Label for="audit-from">From</Label><Input id="audit-from" v-model="auditFilters.from" type="datetime-local" /></div>
                                         <div><Label for="audit-to">To</Label><Input id="audit-to" v-model="auditFilters.to" type="datetime-local" /></div>

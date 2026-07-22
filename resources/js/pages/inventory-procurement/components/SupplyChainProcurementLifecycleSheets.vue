@@ -77,7 +77,7 @@ const ws = useSupplyChainPageApi();
                 <div class="grid gap-1.5">
                     <Label for="inv-place-order-supplier">Supplier</Label>
                     <Select :model-value="ws.toSelectValue(ws.placeOrderForm.supplierId)" @update:model-value="ws.placeOrderForm.supplierId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                        <SelectTrigger class="w-full">
+                        <SelectTrigger id="inv-place-order-supplier" class="w-full">
                             <SelectValue placeholder="— Not specified —">
                                 {{ ws.supplierLabel(ws.placeOrderForm.supplierId) }}
                             </SelectValue>
@@ -173,7 +173,7 @@ const ws = useSupplyChainPageApi();
                     <div class="grid gap-2">
                         <Label for="inv-receive-unit">Received Unit</Label>
                         <Select :model-value="(ws.receiveForm as any).receivedUnit || undefined" @update:model-value="(ws.receiveForm as any).receivedUnit = ($event ?? '')">
-                            <SelectTrigger class="w-full">
+                            <SelectTrigger id="inv-receive-unit" class="w-full">
                                 <SelectValue placeholder="Select unit" />
                             </SelectTrigger>
                             <SelectContent>
@@ -198,7 +198,7 @@ const ws = useSupplyChainPageApi();
                 <div class="grid gap-2">
                     <Label for="inv-receive-warehouse-id">Received Into — Warehouse <span class="text-xs font-normal text-muted-foreground">optional</span></Label>
                     <Select :model-value="ws.toSelectValue(ws.receiveForm.warehouseId)" @update:model-value="ws.receiveForm.warehouseId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                        <SelectTrigger class="w-full">
+                        <SelectTrigger id="inv-receive-warehouse-id" class="w-full">
                             <SelectValue placeholder="— Select warehouse —">
                                 {{ ws.warehouseLabel(ws.receiveForm.warehouseId) }}
                             </SelectValue>
@@ -394,7 +394,7 @@ const ws = useSupplyChainPageApi();
                             <div class="grid gap-1">
                                 <Label for="inv-details-audit-actor-type">Actor Type</Label>
                                 <Select :model-value="ws.toSelectValue(ws.detailsAuditFilters.actorType)" @update:model-value="ws.detailsAuditFilters.actorType = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                    <SelectTrigger>
+                                    <SelectTrigger id="inv-details-audit-actor-type">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -423,7 +423,7 @@ const ws = useSupplyChainPageApi();
                             <div class="grid gap-1">
                                 <Label for="inv-details-audit-per-page">Rows Per Page</Label>
                                 <Select :model-value="String(ws.detailsAuditFilters.perPage)" @update:model-value="ws.detailsAuditFilters.perPage = Number($event)">
-                                    <SelectTrigger>
+                                    <SelectTrigger id="inv-details-audit-per-page">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>

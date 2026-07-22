@@ -7201,7 +7201,7 @@ onMounted(() => {
                                         <span class="text-destructive">*</span>
                                     </Label>
                                     <Select v-model="registrationForm.gender">
-                                        <SelectTrigger class="h-10 w-full">
+                                        <SelectTrigger id="patient-form-gender" class="h-10 w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -7237,7 +7237,7 @@ onMounted(() => {
                                     <Select
                                         v-model="registrationForm.countryCode"
                                     >
-                                        <SelectTrigger class="h-10 w-full">
+                                        <SelectTrigger id="patient-form-countryCode" class="h-10 w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -10568,7 +10568,7 @@ onMounted(() => {
                                                                 detailsAuditActorTypeFilterValue
                                                             "
                                                         >
-                                                            <SelectTrigger
+                                                            <SelectTrigger id="patient-audit-actor-type"
                                                                 class="mt-0"
                                                             >
                                                                 <SelectValue />
@@ -10653,7 +10653,7 @@ onMounted(() => {
                                                                     )
                                                             "
                                                         >
-                                                            <SelectTrigger
+                                                            <SelectTrigger id="patient-audit-per-page"
                                                                 class="mt-0"
                                                             >
                                                                 <SelectValue />
@@ -11181,7 +11181,7 @@ onMounted(() => {
                                         Gender
                                     </Label>
                                     <Select v-model="editGenderSelectValue">
-                                        <SelectTrigger class="h-10 w-full">
+                                        <SelectTrigger id="patient-edit-gender" class="h-10 w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -11218,7 +11218,7 @@ onMounted(() => {
                                         Country
                                     </Label>
                                     <Select v-model="editForm.countryCode">
-                                        <SelectTrigger class="h-10 w-full">
+                                        <SelectTrigger id="patient-edit-countryCode" class="h-10 w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>

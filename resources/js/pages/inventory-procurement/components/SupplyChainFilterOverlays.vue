@@ -37,7 +37,7 @@ const ws = useSupplyChainPageApi();
                                 <div class="grid gap-2">
                                     <Label for="inv-proc-status-mobile">Status</Label>
                                     <Select :model-value="ws.toSelectValue(ws.procurementSearch.status)" @update:model-value="ws.procurementSearch.status = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="inv-proc-status-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -49,7 +49,7 @@ const ws = useSupplyChainPageApi();
                                 <div class="grid gap-2">
                                     <Label for="inv-proc-sort-mobile">Sort by</Label>
                                     <Select :model-value="ws.toSelectValue(ws.procurementSearch.sortBy)" @update:model-value="ws.procurementSearch.sortBy = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="inv-proc-sort-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -64,7 +64,7 @@ const ws = useSupplyChainPageApi();
                                 <div class="grid gap-2">
                                     <Label for="inv-proc-sort-dir-mobile">Sort direction</Label>
                                     <Select :model-value="ws.toSelectValue(ws.procurementSearch.sortDir)" @update:model-value="ws.procurementSearch.sortDir = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="inv-proc-sort-dir-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -76,7 +76,7 @@ const ws = useSupplyChainPageApi();
                                 <div class="grid gap-2">
                                     <Label for="inv-proc-per-page-mobile">Results per page</Label>
                                     <Select :model-value="String(ws.procurementSearch.perPage)" @update:model-value="ws.procurementSearch.perPage = Number($event)">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="inv-proc-per-page-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -125,7 +125,7 @@ const ws = useSupplyChainPageApi();
                                 <div class="grid gap-2">
                                     <Label for="inv-ledger-type-mobile">Movement Type</Label>
                                     <Select :model-value="ws.toSelectValue(ws.stockLedgerFilters.movementType)" @update:model-value="ws.stockLedgerFilters.movementType = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="inv-ledger-type-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -137,7 +137,7 @@ const ws = useSupplyChainPageApi();
                                 <div class="grid gap-2">
                                     <Label for="inv-ledger-source-mobile">Source</Label>
                                     <Select :model-value="ws.toSelectValue(ws.stockLedgerFilters.sourceKey)" @update:model-value="ws.stockLedgerFilters.sourceKey = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="inv-ledger-source-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -156,7 +156,7 @@ const ws = useSupplyChainPageApi();
                                 <div class="grid gap-2">
                                     <Label for="inv-ledger-per-page-mobile">Results per page</Label>
                                     <Select :model-value="String(ws.stockLedgerFilters.perPage)" @update:model-value="ws.stockLedgerFilters.perPage = Number($event)">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="inv-ledger-per-page-mobile">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>

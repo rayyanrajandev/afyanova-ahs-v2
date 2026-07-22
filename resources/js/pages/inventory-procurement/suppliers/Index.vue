@@ -454,7 +454,7 @@ onMounted(() => {
                                     <div class="grid gap-2">
                                         <Label for="sup-status-popover">Status</Label>
                                         <Select :model-value="toSelectValue(filters.status)" @update:model-value="filters.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="sup-status-popover" class="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                             <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
                                             <SelectItem value="active">Active</SelectItem>
@@ -465,7 +465,7 @@ onMounted(() => {
                                     <div class="grid gap-2">
                                         <Label for="sup-country-popover">Country</Label>
                                         <Select :model-value="toSelectValue(filters.countryCode)" @update:model-value="filters.countryCode = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="sup-country-popover" class="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                             <SelectItem :value="EMPTY_SELECT_VALUE">All countries</SelectItem>
                                             <SelectItem
@@ -481,7 +481,7 @@ onMounted(() => {
                                     <div class="grid gap-2">
                                         <Label for="sup-per-page-popover">Per page</Label>
                                         <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="sup-per-page-popover" class="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                             <SelectItem value="20">20</SelectItem>
                                             <SelectItem value="50">50</SelectItem>
@@ -712,7 +712,7 @@ onMounted(() => {
                                     <div class="grid gap-2 sm:col-span-2">
                                         <Label for="cs-country">Country</Label>
                                         <Select :model-value="toSelectValue(createForm.countryCode)" @update:model-value="createForm.countryCode = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                            <SelectTrigger class="w-full" :disabled="createLoading">
+                                            <SelectTrigger id="cs-country" class="w-full" :disabled="createLoading">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -809,7 +809,7 @@ onMounted(() => {
                                     <div class="grid gap-2 sm:col-span-2">
                                         <Label for="es-country">Country</Label>
                                         <Select :model-value="toSelectValue(editForm.countryCode)" @update:model-value="editForm.countryCode = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                            <SelectTrigger class="w-full" :disabled="editLoading">
+                                            <SelectTrigger id="es-country" class="w-full" :disabled="editLoading">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>

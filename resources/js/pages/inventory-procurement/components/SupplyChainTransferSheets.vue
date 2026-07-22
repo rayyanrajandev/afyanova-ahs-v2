@@ -39,7 +39,7 @@ function handleTransferReceiptVarianceTypeChange(line: { id: string }, value: st
                     <div class="grid gap-2">
                         <Label for="trf-source">Source Warehouse</Label>
                         <Select :model-value="ws.toSelectValue(ws.transferForm.sourceWarehouseId)" @update:model-value="ws.transferForm.sourceWarehouseId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                            <SelectTrigger class="w-full">
+                            <SelectTrigger id="trf-source" class="w-full">
                                 <SelectValue placeholder="— Select —">
                                     {{ ws.warehouseLabel(ws.transferForm.sourceWarehouseId) }}
                                 </SelectValue>
@@ -54,7 +54,7 @@ function handleTransferReceiptVarianceTypeChange(line: { id: string }, value: st
                     <div class="grid gap-2">
                         <Label for="trf-dest">Destination Warehouse</Label>
                         <Select :model-value="ws.toSelectValue(ws.transferForm.destinationWarehouseId)" @update:model-value="ws.transferForm.destinationWarehouseId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                            <SelectTrigger class="w-full">
+                            <SelectTrigger id="trf-dest" class="w-full">
                                 <SelectValue placeholder="— Select —">
                                     {{ ws.warehouseLabel(ws.transferForm.destinationWarehouseId) }}
                                 </SelectValue>
@@ -71,7 +71,7 @@ function handleTransferReceiptVarianceTypeChange(line: { id: string }, value: st
                     <div class="grid gap-2">
                         <Label for="trf-priority">Priority</Label>
                         <Select :model-value="ws.toSelectValue(ws.transferForm.priority)" @update:model-value="ws.transferForm.priority = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                            <SelectTrigger>
+                            <SelectTrigger id="trf-priority">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

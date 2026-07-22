@@ -5584,7 +5584,7 @@ watchDebounced(
                                         <div class="grid gap-2">
                                             <Label for="appt-per-page-view">Results per page</Label>
                                             <Select :model-value="searchForm.perPage" @update:model-value="val => { searchForm.perPage = val; submitSearch }">
-                                                <SelectTrigger class="w-full">
+                                                <SelectTrigger id="appt-per-page-view" class="w-full">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -6008,7 +6008,7 @@ watchDebounced(
                             <div class="grid gap-2">
                                 <Label for="appointments-per-page-mobile">Results per page</Label>
                                 <Select v-model="searchForm.perPage">
-                                    <SelectTrigger class="w-full">
+                                    <SelectTrigger id="appointments-per-page-mobile" class="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -8477,7 +8477,7 @@ watchDebounced(
                                 <div class="grid gap-2">
                                     <Label for="appointment-referral-type">Referral type</Label>
                                     <Select v-model="referralForm.referralType">
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="appointment-referral-type" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -8491,7 +8491,7 @@ watchDebounced(
                                 <div class="grid gap-2">
                                     <Label for="appointment-referral-priority">Priority</Label>
                                     <Select v-model="referralForm.priority">
-                                        <SelectTrigger class="w-full">
+                                        <SelectTrigger id="appointment-referral-priority" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
