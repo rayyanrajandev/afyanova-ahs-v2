@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -160,8 +161,11 @@ function openVersion(version: CatalogItem): void {
                 </div>
                 <div class="flex items-center gap-2">
                     <Badge variant="outline">{{ item.currencyCode || payerImpact.data.value?.currencyCode || 'TZS' }}</Badge>
-                    <Button as-child variant="outline" size="sm">
-                        <a href="/billing-payer-contracts">Open contracts</a>
+                    <Button as-child variant="outline" size="sm" class="gap-1.5">
+                        <a href="/billing-payer-contracts">
+                            <AppIcon name="shield-check" class="size-3.5" />
+                            Open contracts
+                        </a>
                     </Button>
                 </div>
             </div>
@@ -219,7 +223,10 @@ function openVersion(version: CatalogItem): void {
                         </div>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
-                        <Button v-if="String(version.id) !== itemId" variant="outline" size="sm" @click="openVersion(version)">View this version</Button>
+                        <Button v-if="String(version.id) !== itemId" variant="outline" size="sm" class="gap-1.5" @click="openVersion(version)">
+                            <AppIcon name="eye" class="size-3.5" />
+                            View this version
+                        </Button>
                         <Badge v-else variant="secondary">Viewing</Badge>
                     </div>
                 </div>

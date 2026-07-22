@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import TimePopoverField from '@/components/forms/TimePopoverField.vue';
@@ -212,7 +213,8 @@ async function submit(): Promise<void> {
 
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p class="text-xs text-muted-foreground">Keeps the current price auditable while preparing the next billing window.</p>
-            <Button :disabled="create.isPending.value || Boolean(windowValidationMessage)" @click="submit">
+            <Button class="gap-1.5" :disabled="create.isPending.value || Boolean(windowValidationMessage)" @click="submit">
+                <AppIcon :name="create.isPending.value ? 'loader-circle' : 'plus'" :class="create.isPending.value ? 'size-3.5 animate-spin' : 'size-3.5'" />
                 {{ create.isPending.value ? 'Creating version...' : 'Create new version' }}
             </Button>
         </div>

@@ -12,6 +12,7 @@ export function useServiceCatalogTypeCounts(filters: ServiceCatalogFilters): Use
                 q: filters.q.trim() || null,
                 departmentId: filters.departmentId.trim() || null,
                 lifecycle: filters.lifecycle || null,
+                linkage: filters.linkage || null,
             });
             return response.data ?? { total: 0 };
         },

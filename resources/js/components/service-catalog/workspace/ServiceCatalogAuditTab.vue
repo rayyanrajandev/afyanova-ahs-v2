@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import TimePopoverField from '@/components/forms/TimePopoverField.vue';
@@ -116,7 +117,8 @@ async function exportAuditLogs(): Promise<void> {
                         <CardTitle class="text-base">Audit timeline</CardTitle>
                         <CardDescription>Search lifecycle logs, then narrow only when you need deeper trace details.</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" :disabled="auditExporting" @click="exportAuditLogs">
+                    <Button variant="outline" size="sm" class="gap-1.5" :disabled="auditExporting" @click="exportAuditLogs">
+                        <AppIcon :name="auditExporting ? 'loader-circle' : 'download'" :class="auditExporting ? 'size-3.5 animate-spin' : 'size-3.5'" />
                         {{ auditExporting ? 'Preparing...' : 'Export CSV' }}
                     </Button>
                 </div>
@@ -162,8 +164,12 @@ async function exportAuditLogs(): Promise<void> {
                 <div class="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
                     <p class="text-xs text-muted-foreground">Export respects the current audit filters.</p>
                     <div class="flex flex-wrap items-center gap-2">
-                        <Button variant="outline" size="sm" :disabled="auditLogs.isFetching.value" @click="resetFilters">Reset</Button>
-                        <Button size="sm" :disabled="auditLogs.isFetching.value" @click="applyFilters">
+                        <Button variant="outline" size="sm" class="gap-1.5" :disabled="auditLogs.isFetching.value" @click="resetFilters">
+                            <AppIcon name="rotate-ccw" class="size-3.5" />
+                            Reset
+                        </Button>
+                        <Button size="sm" class="gap-1.5" :disabled="auditLogs.isFetching.value" @click="applyFilters">
+                            <AppIcon :name="auditLogs.isFetching.value ? 'loader-circle' : 'search'" :class="auditLogs.isFetching.value ? 'size-3.5 animate-spin' : 'size-3.5'" />
                             {{ auditLogs.isFetching.value ? 'Applying...' : 'Apply filters' }}
                         </Button>
                     </div>
@@ -192,17 +198,20 @@ async function exportAuditLogs(): Promise<void> {
         </div>
 
         <div class="flex items-center justify-between border-t pt-2">
-            <Button variant="outline" size="sm" :disabled="auditLogs.isFetching.value || (auditLogs.data.value?.meta?.currentPage ?? 1) <= 1" @click="goToPage((auditLogs.data.value?.meta?.currentPage ?? 1) - 1)">
+            <Button variant="outline" size="sm" class="gap-1.5" :disabled="auditLogs.isFetching.value || (auditLogs.data.value?.meta?.currentPage ?? 1) <= 1" @click="goToPage((auditLogs.data.value?.meta?.currentPage ?? 1) - 1)">
+                <AppIcon name="chevron-left" class="size-3.5" />
                 Previous
             </Button>
             <p class="text-xs text-muted-foreground">Page {{ auditLogs.data.value?.meta?.currentPage ?? 1 }} of {{ auditLogs.data.value?.meta?.lastPage ?? 1 }}</p>
             <Button
                 variant="outline"
                 size="sm"
+                class="gap-1.5"
                 :disabled="auditLogs.isFetching.value || !auditLogs.data.value?.meta || auditLogs.data.value.meta.currentPage >= auditLogs.data.value.meta.lastPage"
                 @click="goToPage((auditLogs.data.value?.meta?.currentPage ?? 1) + 1)"
             >
                 Next
+                <AppIcon name="chevron-right" class="size-3.5" />
             </Button>
         </div>
     </div>

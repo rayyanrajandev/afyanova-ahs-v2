@@ -28,9 +28,8 @@ async function loadSource(source: (typeof CLINICAL_CATALOG_SOURCES)[number]): Pr
 
 /**
  * Active lab/radiology/theatre/formulary definitions available to link a new
- * tariff to. Same 4-source fan-out as ServiceCatalog.vue's legacy
- * loadClinicalCatalogLookupItems() — kept as one query (not per-source)
- * since the create sheet always needs the combined list.
+ * tariff to — kept as one combined query (not per-source) since the create
+ * sheet always needs the full list.
  */
 export function useServiceCatalogClinicalCatalogOptions(): UseQueryReturnType<ClinicalCatalogLookupItem[], Error> {
     return useQuery({

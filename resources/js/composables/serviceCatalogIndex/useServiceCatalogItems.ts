@@ -11,6 +11,7 @@ function filterQuery(filters: ServiceCatalogFilters) {
         status: filters.status || null,
         departmentId: filters.departmentId.trim() || null,
         lifecycle: filters.lifecycle || null,
+        linkage: filters.linkage || null,
         sortBy: filters.sortBy,
         sortDir: filters.sortDir,
         perPage: filters.perPage,

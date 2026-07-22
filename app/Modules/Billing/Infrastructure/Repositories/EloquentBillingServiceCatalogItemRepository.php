@@ -393,7 +393,8 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?string $linkage = null,
     ): array {
         $sortBy = in_array(
             $sortBy,
@@ -447,6 +448,7 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
             ->when($department, fn (Builder $builder, string $requestedDepartment) => $this->applyDepartmentFilter($builder, $requestedDepartment))
             ->when($currencyCode, fn (Builder $builder, string $requestedCurrencyCode) => $builder->where('currency_code', $requestedCurrencyCode))
             ->when($lifecycle, fn (Builder $builder, string $requestedLifecycle) => $this->applyLifecycleFilter($builder, $requestedLifecycle))
+            ->when($linkage, fn (Builder $builder, string $requestedLinkage) => $this->applyLinkageFilter($builder, $requestedLinkage))
             ->orderBy($sortBy, $sortDirection);
 
         $paginator = $queryBuilder->paginate(
@@ -464,7 +466,8 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
         ?string $serviceType,
         ?string $department,
         ?string $currencyCode,
-        ?string $lifecycle
+        ?string $lifecycle,
+        ?string $linkage = null,
     ): array {
         $queryBuilder = BillingServiceCatalogItemModel::query();
         $this->applyPlatformScopeIfEnabled($queryBuilder);
@@ -484,7 +487,8 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
             ->when($serviceType, fn (Builder $builder, string $requestedServiceType) => $builder->where('service_type', $requestedServiceType))
             ->when($department, fn (Builder $builder, string $requestedDepartment) => $this->applyDepartmentFilter($builder, $requestedDepartment))
             ->when($currencyCode, fn (Builder $builder, string $requestedCurrencyCode) => $builder->where('currency_code', $requestedCurrencyCode))
-            ->when($lifecycle, fn (Builder $builder, string $requestedLifecycle) => $this->applyLifecycleFilter($builder, $requestedLifecycle));
+            ->when($lifecycle, fn (Builder $builder, string $requestedLifecycle) => $this->applyLifecycleFilter($builder, $requestedLifecycle))
+            ->when($linkage, fn (Builder $builder, string $requestedLinkage) => $this->applyLinkageFilter($builder, $requestedLinkage));
 
         $rows = $queryBuilder
             ->selectRaw('status, COUNT(*) as aggregate')
@@ -519,7 +523,8 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
         ?string $query,
         ?string $department,
         ?string $currencyCode,
-        ?string $lifecycle
+        ?string $lifecycle,
+        ?string $linkage = null,
     ): array {
         $queryBuilder = BillingServiceCatalogItemModel::query();
         $this->applyPlatformScopeIfEnabled($queryBuilder);
@@ -538,7 +543,8 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
             })
             ->when($department, fn (Builder $builder, string $requestedDepartment) => $this->applyDepartmentFilter($builder, $requestedDepartment))
             ->when($currencyCode, fn (Builder $builder, string $requestedCurrencyCode) => $builder->where('currency_code', $requestedCurrencyCode))
-            ->when($lifecycle, fn (Builder $builder, string $requestedLifecycle) => $this->applyLifecycleFilter($builder, $requestedLifecycle));
+            ->when($lifecycle, fn (Builder $builder, string $requestedLifecycle) => $this->applyLifecycleFilter($builder, $requestedLifecycle))
+            ->when($linkage, fn (Builder $builder, string $requestedLinkage) => $this->applyLinkageFilter($builder, $requestedLinkage));
 
         $rows = $queryBuilder
             ->selectRaw('service_type, COUNT(*) as aggregate')
@@ -651,6 +657,21 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
             '/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/',
             $value,
         ) === 1;
+    }
+
+    private function applyLinkageFilter(Builder $query, string $linkage): void
+    {
+        if (! $this->supportsClinicalCatalogLink()) {
+            return;
+        }
+
+        if ($linkage === 'clinical') {
+            $query->whereNotNull('clinical_catalog_item_id');
+
+            return;
+        }
+
+        $query->whereNull('clinical_catalog_item_id');
     }
 
     private function applyLifecycleFilter(Builder $query, string $lifecycle): void

@@ -53,6 +53,9 @@ class ListBillingServiceCatalogItemsUseCase
         $lifecycle = isset($filters['lifecycle']) ? strtolower(trim((string) $filters['lifecycle'])) : null;
         $lifecycle = in_array($lifecycle, ['effective', 'scheduled', 'expired', 'no_window'], true) ? $lifecycle : null;
 
+        $linkage = isset($filters['linkage']) ? strtolower(trim((string) $filters['linkage'])) : null;
+        $linkage = in_array($linkage, ['clinical', 'standalone'], true) ? $linkage : null;
+
         return $this->repository->search(
             query: $query,
             serviceType: $serviceType,
@@ -64,6 +67,7 @@ class ListBillingServiceCatalogItemsUseCase
             perPage: $perPage,
             sortBy: $sortBy,
             sortDirection: $sortDirection,
+            linkage: $linkage,
         );
     }
 }

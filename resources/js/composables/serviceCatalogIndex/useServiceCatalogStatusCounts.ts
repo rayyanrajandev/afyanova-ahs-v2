@@ -13,6 +13,7 @@ export function useServiceCatalogStatusCounts(filters: ServiceCatalogFilters): U
                 serviceType: filters.serviceType.trim() || null,
                 departmentId: filters.departmentId.trim() || null,
                 lifecycle: filters.lifecycle || null,
+                linkage: filters.linkage || null,
             });
             return response.data ?? { active: 0, inactive: 0, retired: 0, other: 0, total: 0 };
         },

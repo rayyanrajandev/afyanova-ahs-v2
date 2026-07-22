@@ -97,7 +97,8 @@ interface BillingServiceCatalogItemRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?string $linkage = null,
     ): array;
 
     public function statusCounts(
@@ -105,13 +106,15 @@ interface BillingServiceCatalogItemRepositoryInterface
         ?string $serviceType,
         ?string $department,
         ?string $currencyCode,
-        ?string $lifecycle
+        ?string $lifecycle,
+        ?string $linkage = null,
     ): array;
 
     public function serviceTypeCounts(
         ?string $query,
         ?string $department,
         ?string $currencyCode,
-        ?string $lifecycle
+        ?string $lifecycle,
+        ?string $linkage = null,
     ): array;
 }

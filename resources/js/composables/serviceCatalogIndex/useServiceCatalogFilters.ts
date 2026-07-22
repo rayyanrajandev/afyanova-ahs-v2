@@ -8,6 +8,7 @@ export function useServiceCatalogFilters() {
         status: '',
         departmentId: '',
         lifecycle: '',
+        linkage: '' as '' | 'clinical' | 'standalone',
         sortBy: 'serviceName',
         sortDir: 'asc' as 'asc' | 'desc',
         perPage: 50,

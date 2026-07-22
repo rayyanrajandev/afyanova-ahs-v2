@@ -4,7 +4,7 @@ import { apiGet } from '@/lib/apiClient';
 import { buildDepartmentOptions, type Department, type DepartmentListResponse } from '@/lib/billingServiceCatalog';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 
-/** GET /departments — same source ServiceCatalog.vue's legacy loadDepartments() used. */
+/** GET /departments */
 export function useServiceCatalogDepartmentOptions(): {
     departments: ComputedRef<Department[]>;
     optionsFor: (preferredServiceType?: string) => SearchableSelectOption[];

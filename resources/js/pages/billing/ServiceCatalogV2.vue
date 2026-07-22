@@ -94,6 +94,7 @@ const activeFilterChips = computed(() => {
         const labels: Record<string, string> = { effective: 'Effective now', scheduled: 'Scheduled', expired: 'Expired', no_window: 'No window' };
         chips.push(`Window: ${labels[filters.lifecycle] ?? filters.lifecycle}`);
     }
+    if (filters.linkage) chips.push(`Source: ${filters.linkage === 'clinical' ? 'Clinical catalog' : 'Standalone'}`);
     if (filters.sortBy !== 'serviceName') chips.push(`Sort: ${formatEnumLabel(filters.sortBy)}`);
     if (filters.sortDir !== 'asc') chips.push('Descending');
     return chips;
@@ -105,6 +106,7 @@ function resetFilters(): void {
     filters.status = '';
     filters.departmentId = '';
     filters.lifecycle = '';
+    filters.linkage = '';
     filters.sortBy = 'serviceName';
     filters.sortDir = 'asc';
     filters.page = 1;
@@ -113,6 +115,12 @@ function resetFilters(): void {
 const activeServiceTypeTab = computed(() => filters.serviceType || '__all__');
 function setActiveServiceTypeTab(value: string | number): void {
     filters.serviceType = value === '__all__' ? '' : String(value);
+    filters.page = 1;
+}
+
+const linkageFilterValue = computed(() => filters.linkage || 'all');
+function setLinkageFilter(value: string | number): void {
+    filters.linkage = value === 'all' ? '' : (String(value) as 'clinical' | 'standalone');
     filters.page = 1;
 }
 
@@ -206,6 +214,7 @@ function exportQuery(): Record<string, string | number | null> {
         status: filters.status || null,
         departmentId: filters.departmentId.trim() || null,
         lifecycle: filters.lifecycle || null,
+        linkage: filters.linkage || null,
         sortBy: filters.sortBy,
         sortDir: filters.sortDir,
     };
@@ -433,6 +442,14 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         trigger-class="w-56"
                         message-class="hidden"
                     />
+                    <Select :model-value="linkageFilterValue" @update:model-value="(value) => setLinkageFilter(String(value ?? 'all'))">
+                        <SelectTrigger class="h-9 w-44 bg-background"><SelectValue placeholder="All sources" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All sources</SelectItem>
+                            <SelectItem value="clinical">Clinical catalog</SelectItem>
+                            <SelectItem value="standalone">Standalone</SelectItem>
+                        </SelectContent>
+                    </Select>
                     <Select v-model="filters.sortBy">
                         <SelectTrigger class="h-9 w-44 bg-background"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -454,14 +471,21 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             <SelectItem value="desc">Descending</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" size="sm" class="h-9 gap-1.5" :disabled="catalogExporting" @click="exportCatalogItemsCsv">
-                        <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" :class="catalogExporting ? 'size-3.5 animate-spin' : 'size-3.5'" />
-                        Export
-                    </Button>
-                    <Button variant="outline" size="sm" class="h-9 gap-1.5" :disabled="catalogPrinting" @click="printCatalogItems">
-                        <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" :class="catalogPrinting ? 'size-3.5 animate-spin' : 'size-3.5'" />
-                        Print
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="ghost" size="sm" class="h-9 w-9 p-0" :disabled="catalogExporting || catalogPrinting">
+                                <AppIcon :name="catalogExporting || catalogPrinting ? 'loader-circle' : 'ellipsis-vertical'" :class="catalogExporting || catalogPrinting ? 'size-4 animate-spin' : 'size-4'" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-44">
+                            <DropdownMenuItem :disabled="catalogExporting" class="gap-2" @select="exportCatalogItemsCsv">
+                                <AppIcon name="download" class="size-4" />Export CSV
+                            </DropdownMenuItem>
+                            <DropdownMenuItem :disabled="catalogPrinting" class="gap-2" @select="printCatalogItems">
+                                <AppIcon name="printer" class="size-4" />Print
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button v-if="activeFilterChips.length > 0" variant="ghost" size="sm" class="h-9 gap-1.5 text-xs" @click="resetFilters">
                         <AppIcon name="x" class="size-3.5" />
                         Clear

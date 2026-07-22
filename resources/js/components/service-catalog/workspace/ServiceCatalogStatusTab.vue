@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -82,7 +83,10 @@ async function submit(): Promise<void> {
                     <p class="text-sm font-medium">Status</p>
                     <p class="text-xs text-muted-foreground">Pause, reactivate, or retire this service price with the right reason trail.</p>
                 </div>
-                <Button size="sm" variant="outline" @click="emit('openHistory')">Open history</Button>
+                <Button size="sm" variant="outline" class="gap-1.5" @click="emit('openHistory')">
+                    <AppIcon name="clock" class="size-3.5" />
+                    Open history
+                </Button>
             </div>
             <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 <div v-for="card in summaryCards" :key="card.key" class="rounded-lg border bg-muted/10 px-3 py-2.5">
@@ -118,7 +122,8 @@ async function submit(): Promise<void> {
 
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p class="text-xs text-muted-foreground">Use status changes for operational control, not for price edits.</p>
-            <Button v-if="canManage" :disabled="update.isPending.value" @click="submit">
+            <Button v-if="canManage" class="gap-1.5" :disabled="update.isPending.value" @click="submit">
+                <AppIcon :name="update.isPending.value ? 'loader-circle' : 'check'" :class="update.isPending.value ? 'size-3.5 animate-spin' : 'size-3.5'" />
                 {{ update.isPending.value ? 'Saving...' : 'Save status change' }}
             </Button>
         </div>
