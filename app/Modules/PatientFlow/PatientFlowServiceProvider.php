@@ -8,6 +8,7 @@ use App\Modules\PatientFlow\Application\Listeners\BroadcastPatientFlowBoardUpdat
 use App\Modules\PatientFlow\Application\Listeners\LogOrderCompletionForOrderingClinician;
 use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
+use App\Modules\ClinicalProcedure\Domain\Events\ClinicalProcedureOrderCompleted;
 use App\Modules\Reception\Domain\Events\AppointmentCheckedIn;
 use App\Modules\ServiceRequest\Domain\Events\ServiceRequestStatusChanged;
 use Illuminate\Support\Facades\Event;
@@ -33,6 +34,10 @@ class PatientFlowServiceProvider extends ServiceProvider
             RadiologyOrderCompleted::class,
             [LogOrderCompletionForOrderingClinician::class, 'handleRadiologyOrderCompleted'],
         );
+        Event::listen(
+            ClinicalProcedureOrderCompleted::class,
+            [LogOrderCompletionForOrderingClinician::class, 'handleClinicalProcedureOrderCompleted'],
+        );
 
         // Patient-Flow Board Phase 2/3 — translates 6 cross-module domain
         // events into the board's own single PatientFlowBoardUpdated
@@ -56,6 +61,10 @@ class PatientFlowServiceProvider extends ServiceProvider
         Event::listen(
             RadiologyOrderCompleted::class,
             [BroadcastPatientFlowBoardUpdate::class, 'handleRadiologyOrderCompleted'],
+        );
+        Event::listen(
+            ClinicalProcedureOrderCompleted::class,
+            [BroadcastPatientFlowBoardUpdate::class, 'handleClinicalProcedureOrderCompleted'],
         );
         Event::listen(
             ServiceRequestStatusChanged::class,

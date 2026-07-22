@@ -540,7 +540,7 @@ Route::get('platform/admin/clinical-catalogs/{catalog?}', function (?string $cat
     return Inertia::render('platform/admin/clinical-catalogs/Index', [
         'catalog' => $catalog,
     ]);
-})->where('catalog', 'lab-tests|radiology-procedures|theatre-procedures|formulary-items')
+})->where('catalog', 'lab-tests|radiology-procedures|theatre-procedures|clinical-procedures|formulary-items')
     ->middleware(['auth', 'verified', 'can:platform.clinical-catalog.read'])
     ->name('platform-admin-clinical-catalogs.page');
 
@@ -560,6 +560,10 @@ Route::get('radiology-orders/v2', function () {
 Route::get('radiology-orders/legacy', function () {
     return Inertia::render('radiology-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:radiology.orders.read', 'facility.entitlement:radiology.orders'])->name('radiology-orders.page.legacy');
+
+Route::get('clinical-procedure-orders', function () {
+    return Inertia::render('clinical-procedure-orders/IndexV2');
+})->middleware(['auth', 'verified', 'can:clinical-procedure.orders.read', 'facility.entitlement:clinical_procedure.orders'])->name('clinical-procedure-orders.page');
 
 // P0 of the Reception/Emergency/Admission/Bed-Management audit
 // follow-through: emergency/Queue.vue reached full parity with the legacy

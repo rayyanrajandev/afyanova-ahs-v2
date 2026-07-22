@@ -225,6 +225,9 @@ class ListBillingChargeCaptureCandidatesUseCase
             ClinicalSourceKind::PHARMACY_ORDER => $query->where(function (Builder $builder): void {
                 $builder->whereIn('status', ['dispensed', 'partially_dispensed'])->orWhere('quantity_dispensed', '>', 0);
             }),
+            ClinicalSourceKind::CLINICAL_PROCEDURE_ORDER => $query->where(function (Builder $builder): void {
+                $builder->where('status', 'completed')->orWhereNotNull('completed_at');
+            }),
             ClinicalSourceKind::THEATRE_PROCEDURE => $query->where(function (Builder $builder): void {
                 $builder->where('status', 'completed')->orWhereNotNull('completed_at');
             }),
@@ -237,6 +240,7 @@ class ListBillingChargeCaptureCandidatesUseCase
             ClinicalSourceKind::LABORATORY_ORDER => $query->orderByDesc('resulted_at')->orderByDesc('ordered_at'),
             ClinicalSourceKind::RADIOLOGY_ORDER => $query->orderByDesc('completed_at')->orderByDesc('ordered_at'),
             ClinicalSourceKind::PHARMACY_ORDER => $query->orderByDesc('dispensed_at')->orderByDesc('ordered_at'),
+            ClinicalSourceKind::CLINICAL_PROCEDURE_ORDER => $query->orderByDesc('completed_at')->orderByDesc('ordered_at'),
             ClinicalSourceKind::THEATRE_PROCEDURE => $query->orderByDesc('completed_at')->orderByDesc('scheduled_at'),
         };
 
@@ -305,6 +309,14 @@ class ListBillingChargeCaptureCandidatesUseCase
                 $this->dateTimeString($order->dispensed_at ?? $order->updated_at ?? $order->ordered_at),
                 max((float) ($order->quantity_dispensed ?? 0), 1),
                 $this->resolvePharmacyBillableUnit($order, $catalogItem),
+            ],
+            ClinicalSourceKind::CLINICAL_PROCEDURE_ORDER => [
+                $this->resolveServiceCode($order->procedure_code, $catalogItem, $order->procedure_setting),
+                $this->resolveServiceName($order->procedure_description, $catalogItem),
+                'procedure',
+                $this->dateTimeString($order->completed_at ?? $order->updated_at ?? $order->ordered_at),
+                1,
+                $this->resolveUnit('procedure', $catalogItem),
             ],
             ClinicalSourceKind::THEATRE_PROCEDURE => [
                 $this->resolveServiceCode(null, $catalogItem, $order->procedure_type),

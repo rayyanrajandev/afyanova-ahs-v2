@@ -27,7 +27,7 @@ return [
                 ],
                 [
                     'key' => 'orders.results.laboratory_radiology',
-                    'label' => 'Orders and results (laboratory/radiology)',
+                    'label' => 'Orders and results (laboratory/radiology/clinical procedure)',
                 ],
                 [
                     'key' => 'billing.claims.status',

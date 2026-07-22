@@ -7,6 +7,7 @@ use App\Modules\Laboratory\Domain\Events\LaboratoryOrderCompleted;
 use App\Modules\PatientFlow\Domain\Events\PatientFlowBoardUpdated;
 use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
+use App\Modules\ClinicalProcedure\Domain\Events\ClinicalProcedureOrderCompleted;
 use App\Modules\Reception\Domain\Events\AppointmentCheckedIn;
 use App\Modules\ServiceRequest\Domain\Events\ServiceRequestStatusChanged;
 
@@ -41,6 +42,11 @@ class BroadcastPatientFlowBoardUpdate
     }
 
     public function handleRadiologyOrderCompleted(RadiologyOrderCompleted $event): void
+    {
+        event(new PatientFlowBoardUpdated($event->facilityId));
+    }
+
+    public function handleClinicalProcedureOrderCompleted(ClinicalProcedureOrderCompleted $event): void
     {
         event(new PatientFlowBoardUpdated($event->facilityId));
     }

@@ -9,6 +9,7 @@ use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalSourceKind;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
@@ -469,6 +470,7 @@ class FrontdeskQuickCashierSupport
                 ClinicalSourceKind::LABORATORY_ORDER => $order->test_code ?? null,
                 ClinicalSourceKind::PHARMACY_ORDER => $order->medication_code ?? null,
                 ClinicalSourceKind::RADIOLOGY_ORDER => $order->procedure_code ?? null,
+                ClinicalSourceKind::CLINICAL_PROCEDURE_ORDER => $order->procedure_code ?? null,
                 default => null,
             },
         ];
@@ -518,6 +520,9 @@ class FrontdeskQuickCashierSupport
         }
         if ($order instanceof RadiologyOrderModel) {
             return [$order->study_description ?? $order->procedure_code];
+        }
+        if ($order instanceof ClinicalProcedureOrderModel) {
+            return [$order->procedure_description, $order->procedure_code];
         }
         if ($order instanceof TheatreProcedureModel) {
             return [$order->procedure_name, $order->procedure_type];

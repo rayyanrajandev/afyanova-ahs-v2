@@ -152,6 +152,50 @@ class ClinicalCurrentCare
     }
 
     /**
+     * @param array<string, mixed> $order
+     * @return array<string, mixed>
+     */
+    public static function clinicalProcedure(array $order): array
+    {
+        if (self::isDraft($order)) {
+            return self::baseFlags();
+        }
+
+        $status = self::normalize($order['status'] ?? null);
+        $reportSignal = self::radiologyReportSignal($order['report_summary'] ?? null);
+        $hasCriticalReport = $status === 'completed' && $reportSignal === 'critical';
+        $hasAbnormalReport = $status === 'completed' && $reportSignal === 'abnormal';
+        $isPending = in_array($status, ['ordered', 'scheduled', 'in_progress'], true);
+        $isRecentlyCompleted = $status === 'completed'
+            && self::isWithinDays($order['completed_at'] ?? $order['ordered_at'] ?? null, 14);
+        $requiresReview = $isPending || $hasCriticalReport || $hasAbnormalReport;
+
+        return [
+            'isCurrent' => $requiresReview || $isRecentlyCompleted,
+            'requiresReview' => $requiresReview,
+            'priorityRank' => self::radiologyPriorityRank($status, $hasCriticalReport, $hasAbnormalReport),
+            'isPending' => $isPending,
+            'hasCriticalReport' => $hasCriticalReport,
+            'hasAbnormalReport' => $hasAbnormalReport,
+            'isRecentlyCompleted' => $isRecentlyCompleted,
+            'workflowHint' => self::radiologyWorkflowHint(
+                $status,
+                $hasCriticalReport,
+                $hasAbnormalReport,
+                $isPending,
+                $isRecentlyCompleted,
+            ),
+            'nextAction' => self::radiologyNextAction(
+                $status,
+                $hasCriticalReport,
+                $hasAbnormalReport,
+                $isPending,
+                $isRecentlyCompleted,
+            ),
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $procedure
      * @return array<string, mixed>
      */

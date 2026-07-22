@@ -9,6 +9,7 @@ enum ClinicalCatalogType: string
     case LAB_TEST = 'lab_test';
     case RADIOLOGY_PROCEDURE = 'radiology_procedure';
     case THEATRE_PROCEDURE = 'theatre_procedure';
+    case CLINICAL_PROCEDURE = 'clinical_procedure';
     case FORMULARY_ITEM = 'formulary_item';
     case DIAGNOSIS_CODE = 'diagnosis_code';
 
@@ -26,6 +27,7 @@ enum ClinicalCatalogType: string
             self::LAB_TEST => 'laboratory',
             self::RADIOLOGY_PROCEDURE => 'radiology',
             self::THEATRE_PROCEDURE => 'theatre',
+            self::CLINICAL_PROCEDURE => 'procedure',
             self::FORMULARY_ITEM => 'pharmacy',
             self::DIAGNOSIS_CODE => null,
         };
@@ -34,7 +36,7 @@ enum ClinicalCatalogType: string
     public function supportsConsumptionRecipes(): bool
     {
         return match ($this) {
-            self::LAB_TEST, self::RADIOLOGY_PROCEDURE, self::THEATRE_PROCEDURE => true,
+            self::LAB_TEST, self::RADIOLOGY_PROCEDURE, self::THEATRE_PROCEDURE, self::CLINICAL_PROCEDURE => true,
             default => false,
         };
     }
@@ -57,6 +59,11 @@ enum ClinicalCatalogType: string
                 InventoryItemCategory::MEDICAL_CONSUMABLE->value,
                 InventoryItemCategory::PPE->value,
                 InventoryItemCategory::SURGICAL_INSTRUMENT->value,
+            ],
+            self::CLINICAL_PROCEDURE => [
+                InventoryItemCategory::MEDICAL_CONSUMABLE->value,
+                InventoryItemCategory::PPE->value,
+                InventoryItemCategory::OTHER->value,
             ],
             default => [],
         };

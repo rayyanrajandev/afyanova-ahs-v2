@@ -56,7 +56,7 @@ class ClinicalCatalogConsumptionRecipeService
         $catalogType = ClinicalCatalogType::tryFrom((string) $catalogItem->catalog_type);
         if ($catalogType === null || ! $catalogType->supportsConsumptionRecipes()) {
             throw ValidationException::withMessages([
-                'catalogItemId' => ['Consumables mapping is for lab tests, radiology, and theatre procedures. Medicines use the formulary-to-pharmaceutical inventory bridge instead.'],
+                'catalogItemId' => ['Consumables mapping is for lab tests, radiology, theatre, and clinical procedures. Medicines use the formulary-to-pharmaceutical inventory bridge instead.'],
             ]);
         }
 

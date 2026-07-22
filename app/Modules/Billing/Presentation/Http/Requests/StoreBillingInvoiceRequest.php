@@ -58,7 +58,7 @@ class StoreBillingInvoiceRequest extends FormRequest
             'lineItems.*.department' => ['nullable', 'string', 'max:120'],
             'lineItems.*.unit' => ['nullable', 'string', 'max:50'],
             'lineItems.*.notes' => ['nullable', 'string', 'max:500'],
-            'lineItems.*.sourceWorkflowKind' => ['nullable', 'string', 'in:appointment_consultation,laboratory_order,pharmacy_order,radiology_order,theatre_procedure'],
+            'lineItems.*.sourceWorkflowKind' => ['nullable', 'string', 'in:appointment_consultation,laboratory_order,pharmacy_order,radiology_order,clinical_procedure_order,theatre_procedure'],
             'lineItems.*.sourceWorkflowId' => ['nullable', 'uuid'],
             'lineItems.*.sourceWorkflowLabel' => ['nullable', 'string', 'max:255'],
             'lineItems.*.sourcePerformedAt' => ['nullable', 'date'],

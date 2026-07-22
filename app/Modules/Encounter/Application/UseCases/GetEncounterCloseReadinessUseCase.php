@@ -15,6 +15,8 @@ use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ClinicalProcedure\Domain\ValueObjects\ClinicalProcedureOrderStatus;
+use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
 use App\Modules\TheatreProcedure\Domain\ValueObjects\TheatreProcedureStatus;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
 use App\Support\ClinicalOrders\ClinicalOrderEntryState;
@@ -59,6 +61,11 @@ class GetEncounterCloseReadinessUseCase
     public static function theatreTerminalStatuses(): array
     {
         return TheatreProcedureStatus::terminalValues();
+    }
+
+    public static function clinicalProcedureTerminalStatuses(): array
+    {
+        return ClinicalProcedureOrderStatus::terminalValues();
     }
 
     // C-5 (reports/clinical-note-audit/15-critical-system-integrity-review.md),
@@ -252,7 +259,8 @@ class GetEncounterCloseReadinessUseCase
         return $this->countPendingLaboratoryOrders($encounterId)
             + $this->countPendingPharmacyOrders($encounterId)
             + $this->countPendingRadiologyOrders($encounterId)
-            + $this->countPendingTheatreProcedures($encounterId);
+            + $this->countPendingTheatreProcedures($encounterId)
+            + $this->countPendingClinicalProcedureOrders($encounterId);
     }
 
     /**
@@ -324,7 +332,22 @@ class GetEncounterCloseReadinessUseCase
                 'orderedAt' => $procedure->scheduled_at?->toIso8601String(),
             ]);
 
-        return $lab->concat($pharmacy)->concat($radiology)->concat($theatre)
+        $clinicalProcedure = ClinicalProcedureOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNull('entered_in_error_at')
+            ->whereNotIn('status', self::clinicalProcedureTerminalStatuses())
+            ->orderByDesc('ordered_at')
+            ->limit(self::ITEM_DETAIL_LIMIT)
+            ->get(['id', 'procedure_description', 'ordered_at'])
+            ->map(static fn (ClinicalProcedureOrderModel $order): array => [
+                'id' => $order->id,
+                'type' => 'clinical_procedure',
+                'label' => $order->procedure_description,
+                'orderedAt' => $order->ordered_at?->toIso8601String(),
+            ]);
+
+        return $lab->concat($pharmacy)->concat($radiology)->concat($theatre)->concat($clinicalProcedure)
             ->take(self::ITEM_DETAIL_LIMIT)
             ->values()
             ->all();
@@ -366,6 +389,16 @@ class GetEncounterCloseReadinessUseCase
             ->where('encounter_id', $encounterId)
             ->whereNull('entered_in_error_at')
             ->whereNotIn('status', self::theatreTerminalStatuses())
+            ->count();
+    }
+
+    private function countPendingClinicalProcedureOrders(string $encounterId): int
+    {
+        return ClinicalProcedureOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNull('entered_in_error_at')
+            ->whereNotIn('status', self::clinicalProcedureTerminalStatuses())
             ->count();
     }
 

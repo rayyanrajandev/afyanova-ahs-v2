@@ -12,6 +12,7 @@ use App\Modules\MedicalRecord\Domain\Services\AppointmentLookupServiceInterface;
 use App\Modules\Patient\Domain\Repositories\PatientRepositoryInterface;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
 use App\Support\ClinicalOrders\ClinicalOrderEntryState;
 use Illuminate\Database\Eloquent\Builder;
@@ -68,6 +69,8 @@ class GetEncounterWorkspaceUseCase
             'radiologyOrdersPendingCount' => $this->countPendingRadiologyOrders($encounterId),
             'theatreProcedures' => $this->loadTheatreProcedures($encounterId),
             'theatreProceduresPendingCount' => $this->countPendingTheatreProcedures($encounterId),
+            'clinicalProcedureOrders' => $this->loadClinicalProcedureOrders($encounterId),
+            'clinicalProcedureOrdersPendingCount' => $this->countPendingClinicalProcedureOrders($encounterId),
             'closeReadiness' => $this->encounterCloseReadinessUseCase->execute($encounterId),
         ];
     }
@@ -196,6 +199,34 @@ class GetEncounterWorkspaceUseCase
             ->where('encounter_id', $encounterId)
             ->whereNull('entered_in_error_at')
             ->whereNotIn('status', GetEncounterCloseReadinessUseCase::theatreTerminalStatuses())
+            ->count();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function loadClinicalProcedureOrders(string $encounterId): array
+    {
+        $query = ClinicalProcedureOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value);
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::clinicalProcedureTerminalStatuses());
+
+        return $query
+            ->orderByDesc('ordered_at')
+            ->orderByDesc('created_at')
+            ->limit(self::CARE_ARTIFACT_LIMIT)
+            ->get()
+            ->map(static fn (ClinicalProcedureOrderModel $order): array => $order->toArray())
+            ->all();
+    }
+
+    private function countPendingClinicalProcedureOrders(string $encounterId): int
+    {
+        return ClinicalProcedureOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::clinicalProcedureTerminalStatuses())
             ->count();
     }
 

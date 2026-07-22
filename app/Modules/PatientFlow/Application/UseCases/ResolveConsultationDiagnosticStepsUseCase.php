@@ -8,6 +8,8 @@ use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ClinicalProcedure\Domain\ValueObjects\ClinicalProcedureOrderStatus;
+use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
 
 /**
  * Extracted from GetActiveVisitJourneyUseCase::deriveAppointmentStep()'s
@@ -80,11 +82,18 @@ class ResolveConsultationDiagnosticStepsUseCase
             ->get(['appointment_id', 'ordered_at', 'medication_name'])
             ->groupBy('appointment_id');
 
+        $clinicalProcedureRowsByAppointmentId = ClinicalProcedureOrderModel::query()
+            ->whereIn('appointment_id', $appointmentIds)
+            ->whereIn('status', ClinicalProcedureOrderStatus::openWorklistValues())
+            ->get(['appointment_id', 'ordered_at', 'procedure_description'])
+            ->groupBy('appointment_id');
+
         $result = [];
         foreach ($appointmentIds as $appointmentId) {
             $labRows = $labRowsByAppointmentId->get($appointmentId, collect());
             $radiologyRows = $radiologyRowsByAppointmentId->get($appointmentId, collect());
             $pharmacyRows = $pharmacyRowsByAppointmentId->get($appointmentId, collect());
+            $clinicalProcedureRows = $clinicalProcedureRowsByAppointmentId->get($appointmentId, collect());
 
             $step = $this->deriveStep(
                 $labRows->pluck('status')->all(),
@@ -95,7 +104,7 @@ class ResolveConsultationDiagnosticStepsUseCase
             $result[$appointmentId] = [
                 'step' => $step,
                 'stepEnteredAt' => $this->stepEnteredAt($step, $labRows, $radiologyRows, $pharmacyRows),
-                'openOrders' => $this->openOrders($labRows, $radiologyRows, $pharmacyRows),
+                'openOrders' => $this->openOrders($labRows, $radiologyRows, $pharmacyRows, $clinicalProcedureRows),
             ];
         }
 
@@ -112,15 +121,17 @@ class ResolveConsultationDiagnosticStepsUseCase
      * @param  \Illuminate\Support\Collection<int, mixed>  $labRows
      * @param  \Illuminate\Support\Collection<int, mixed>  $radiologyRows
      * @param  \Illuminate\Support\Collection<int, mixed>  $pharmacyRows
+     * @param  \Illuminate\Support\Collection<int, mixed>  $clinicalProcedureRows
      * @return array<int, array{type: string, label: string}>
      */
-    private function openOrders($labRows, $radiologyRows, $pharmacyRows): array
+    private function openOrders($labRows, $radiologyRows, $pharmacyRows, $clinicalProcedureRows): array
     {
         $labOrders = $labRows->map(fn ($row) => ['type' => 'lab', 'label' => $row->test_name ?? 'Laboratory test']);
         $radiologyOrders = $radiologyRows->map(fn ($row) => ['type' => 'imaging', 'label' => $row->study_description ?? 'Imaging study']);
         $pharmacyOrders = $pharmacyRows->map(fn ($row) => ['type' => 'pharmacy', 'label' => $row->medication_name ?? 'Medication']);
+        $clinicalProcedureOrders = $clinicalProcedureRows->map(fn ($row) => ['type' => 'clinical_procedure', 'label' => $row->procedure_description ?? 'Clinical procedure']);
 
-        return $labOrders->concat($radiologyOrders)->concat($pharmacyOrders)->values()->all();
+        return $labOrders->concat($radiologyOrders)->concat($pharmacyOrders)->concat($clinicalProcedureOrders)->values()->all();
     }
 
     /**

@@ -27,7 +27,7 @@ class BulkSyncFromClinicalCatalogRequest extends FormRequest
             'catalogItemIds' => ['nullable', 'array'],
             'catalogItemIds.*' => ['uuid'],
             'catalogTypes' => ['nullable', 'array'],
-            'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,formulary_item'],
+            'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,clinical_procedure,formulary_item'],
             'defaultCurrencyCode' => ['nullable', 'string', 'max:3'],
         ];
     }

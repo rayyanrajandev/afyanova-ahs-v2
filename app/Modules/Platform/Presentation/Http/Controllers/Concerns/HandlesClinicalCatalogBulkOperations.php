@@ -88,6 +88,30 @@ trait HandlesClinicalCatalogBulkOperations
         return $this->bulkUpdateCatalogItemStatus('theatre_procedure', $request, $useCase);
     }
 
+    public function exportClinicalProceduresCsv(Request $request, ExportClinicalCatalogItemsCsvUseCase $useCase): StreamedResponse
+    {
+        return $this->exportCatalogItemsCsv('clinical_procedure', 'clinical-procedures', $request, $useCase);
+    }
+
+    public function clinicalProceduresImportTemplate(): StreamedResponse
+    {
+        return $this->importCatalogItemsTemplateCsv('clinical_procedure', 'clinical-procedures');
+    }
+
+    public function bulkImportClinicalProcedures(
+        BulkImportClinicalCatalogItemsRequest $request,
+        BulkImportClinicalCatalogItemsUseCase $useCase
+    ): JsonResponse {
+        return $this->bulkImportCatalogItems('clinical_procedure', $request, $useCase);
+    }
+
+    public function bulkUpdateClinicalProcedureStatus(
+        BulkUpdateClinicalCatalogItemStatusRequest $request,
+        BulkUpdateClinicalCatalogItemStatusUseCase $useCase
+    ): JsonResponse {
+        return $this->bulkUpdateCatalogItemStatus('clinical_procedure', $request, $useCase);
+    }
+
     public function exportFormularyItemsCsv(Request $request, ExportClinicalCatalogItemsCsvUseCase $useCase): StreamedResponse
     {
         return $this->exportCatalogItemsCsv('formulary_item', 'formulary-items', $request, $useCase);

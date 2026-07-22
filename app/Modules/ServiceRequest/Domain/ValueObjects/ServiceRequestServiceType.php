@@ -8,6 +8,7 @@ enum ServiceRequestServiceType: string
     case PHARMACY = 'pharmacy';
     case RADIOLOGY = 'radiology';
     case THEATRE_PROCEDURE = 'theatre_procedure';
+    case CLINICAL_PROCEDURE = 'clinical_procedure';
 
     /**
      * @return string[]
@@ -32,6 +33,7 @@ enum ServiceRequestServiceType: string
             self::PHARMACY => 'pharmacy_order',
             self::RADIOLOGY => 'radiology_order',
             self::THEATRE_PROCEDURE => 'theatre_procedure',
+            self::CLINICAL_PROCEDURE => 'clinical_procedure_order',
         };
     }
 }

@@ -2,6 +2,7 @@ export type ClinicalCatalogBulkKey =
     | 'lab-tests'
     | 'radiology-procedures'
     | 'theatre-procedures'
+    | 'clinical-procedures'
     | 'formulary-items';
 
 export const CLINICAL_CATALOG_BULK_MAX_IMPORT_ROWS = 200;
@@ -32,6 +33,7 @@ const DOMAIN_COLUMNS: Record<ClinicalCatalogBulkKey, readonly string[]> = {
     'lab-tests': ['sample_type', 'specimen_container', 'turnaround_hours', 'fasting_required'],
     'radiology-procedures': ['modality', 'body_site', 'contrast_required', 'study_duration_minutes'],
     'theatre-procedures': ['procedure_class', 'anesthesia_type', 'expected_duration_minutes', 'sterile_prep_required'],
+    'clinical-procedures': ['procedure_setting', 'performer_role', 'estimated_duration_minutes', 'consent_required'],
     'formulary-items': ['strength', 'dosage_form', 'route', 'pack_size', 'otc_allowed', 'stock_unit', 'conversion_factor'],
 };
 

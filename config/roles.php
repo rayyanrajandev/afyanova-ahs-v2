@@ -72,6 +72,7 @@ return [
             'laboratory.orders.read',
             'pharmacy.orders.read',
             'radiology.orders.read',
+            'clinical_procedure.orders.read',
         ],
     ],
 
@@ -104,6 +105,7 @@ return [
             'laboratory.orders.read',
             'pharmacy.orders.read',
             'radiology.orders.read',
+            'clinical_procedure.orders.read',
         ],
     ],
 
@@ -137,6 +139,7 @@ return [
             'laboratory.orders.read',
             'pharmacy.orders.read',
             'radiology.orders.read',
+            'clinical_procedure.orders.read',
         ],
     ],
 
@@ -162,6 +165,7 @@ return [
             'lab.sample.collect',
             'service.requests.create',
             'service.requests.read',
+            'clinical_procedure.orders.read',
         ],
     ],
 
@@ -370,7 +374,7 @@ return [
             'appointments.read', 'appointments.create', 'appointment.reschedule',
             'medical.records.read', 'medical.records.archive',
             'admissions.read', 'admissions.create', 'admissions.update',
-            'laboratory.access', 'pharmacy.access', 'imaging.access',
+            'laboratory.access', 'pharmacy.access', 'imaging.access', 'clinical_procedure.access',
             'staff.read', 'staff.create',
             'staff.employment.update', 'staff.status.update',
             'staff.documents.read', 'staff.documents.create',
@@ -380,6 +384,7 @@ return [
             'platform.clinical-catalog.read',
             'platform.resources.read',
             'inventory.procurement.read',
+            'clinical_procedure.orders.audit-logs.view',
         ],
     ],
 

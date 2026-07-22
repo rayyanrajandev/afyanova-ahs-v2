@@ -247,6 +247,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
             'lab_test' => 0,
             'radiology_procedure' => 0,
             'theatre_procedure' => 0,
+            'clinical_procedure' => 0,
             'formulary_item' => 0,
             'total' => 0,
         ];

@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown } from '@/lib/notify';
 
-type CatalogType = 'lab_test' | 'radiology_procedure' | 'theatre_procedure' | 'formulary_item';
+type CatalogType = 'lab_test' | 'radiology_procedure' | 'theatre_procedure' | 'clinical_procedure' | 'formulary_item';
 
 type CatalogLookupItem = {
     id: string | null;
@@ -52,7 +52,7 @@ const props = withDefaults(defineProps<Props>(), {
     required: false,
     disabled: false,
     errorMessage: null,
-    catalogTypes: () => ['lab_test', 'radiology_procedure', 'theatre_procedure', 'formulary_item'],
+    catalogTypes: () => ['lab_test', 'radiology_procedure', 'theatre_procedure', 'clinical_procedure', 'formulary_item'],
     showPreview: true,
 });
 
@@ -73,6 +73,7 @@ const catalogSources = [
     { type: 'lab_test' as const, path: '/platform/admin/clinical-catalogs/lab-tests', label: 'Lab Tests' },
     { type: 'radiology_procedure' as const, path: '/platform/admin/clinical-catalogs/radiology-procedures', label: 'Radiology' },
     { type: 'theatre_procedure' as const, path: '/platform/admin/clinical-catalogs/theatre-procedures', label: 'Theatre' },
+    { type: 'clinical_procedure' as const, path: '/platform/admin/clinical-catalogs/clinical-procedures', label: 'Clinical Procedures' },
     { type: 'formulary_item' as const, path: '/platform/admin/clinical-catalogs/formulary-items', label: 'Medicines' },
 ];
 

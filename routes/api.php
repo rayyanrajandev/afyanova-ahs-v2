@@ -49,6 +49,7 @@ use App\Modules\Platform\Presentation\Http\Controllers\PlatformUserAdminControll
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformUserApprovalCaseController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosController;
 use App\Modules\Radiology\Presentation\Http\Controllers\RadiologyOrderController;
+use App\Modules\ClinicalProcedure\Presentation\Http\Controllers\ClinicalProcedureOrderController;
 use App\Modules\ServiceRequest\Presentation\Http\Controllers\ServiceRequestController;
 use App\Modules\Staff\Presentation\Http\Controllers\ClinicalPrivilegeCatalogController;
 use App\Modules\Staff\Presentation\Http\Controllers\ClinicalSpecialtyController;
@@ -136,6 +137,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/pharmacy-orders', [PlatformAdminController::class, 'pharmacyOrders'])
         ->middleware('can:platform.cross-tenant.read')
         ->name('platform.admin.pharmacy-orders.index');
+    Route::get('platform/admin/clinical-procedure-orders', [PlatformAdminController::class, 'clinicalProcedureOrders'])
+        ->middleware('can:platform.cross-tenant.read')
+        ->name('platform.admin.clinical-procedure-orders.index');
     Route::get('platform/admin/medical-records', [PlatformAdminController::class, 'medicalRecords'])
         ->middleware('can:platform.cross-tenant.read')
         ->name('platform.admin.medical-records.index');
@@ -436,6 +440,52 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/clinical-catalogs/theatre-procedures/{id}/audit-logs', [PlatformClinicalCatalogController::class, 'theatreProcedureAuditLogs'])
         ->middleware('can:platform.clinical-catalog.view-audit-logs')
         ->name('platform.admin.clinical-catalogs.theatre-procedures.audit-logs');
+
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures', [PlatformClinicalCatalogController::class, 'clinicalProcedures'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.index');
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures/status-counts', [PlatformClinicalCatalogController::class, 'clinicalProcedureStatusCounts'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.status-counts');
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures/consumption-inventory-options', [PlatformClinicalCatalogController::class, 'clinicalProcedureConsumptionInventoryOptions'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.consumption-inventory-options');
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures/export', [PlatformClinicalCatalogController::class, 'exportClinicalProceduresCsv'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.export');
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures/import-template', [PlatformClinicalCatalogController::class, 'clinicalProceduresImportTemplate'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.import-template');
+    Route::post('platform/admin/clinical-catalogs/clinical-procedures/bulk-import', [PlatformClinicalCatalogController::class, 'bulkImportClinicalProcedures'])
+        ->middleware('can:platform.clinical-catalog.manage-clinical-procedures')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.bulk-import');
+    Route::patch('platform/admin/clinical-catalogs/clinical-procedures/bulk-status', [PlatformClinicalCatalogController::class, 'bulkUpdateClinicalProcedureStatus'])
+        ->middleware('can:platform.clinical-catalog.manage-clinical-procedures')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.bulk-status');
+    Route::post('platform/admin/clinical-catalogs/clinical-procedures', [PlatformClinicalCatalogController::class, 'storeClinicalProcedure'])
+        ->middleware('can:platform.clinical-catalog.manage-clinical-procedures')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.store');
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures/{id}', [PlatformClinicalCatalogController::class, 'clinicalProcedure'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.show');
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures/{id}/consumption-recipe', [PlatformClinicalCatalogController::class, 'clinicalProcedureConsumptionRecipe'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.consumption-recipe.show');
+    Route::put('platform/admin/clinical-catalogs/clinical-procedures/{id}/consumption-recipe', [PlatformClinicalCatalogController::class, 'syncClinicalProcedureConsumptionRecipe'])
+        ->middleware('can:platform.clinical-catalog.manage-clinical-procedures')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.consumption-recipe.sync');
+    Route::patch('platform/admin/clinical-catalogs/clinical-procedures/{id}', [PlatformClinicalCatalogController::class, 'updateClinicalProcedure'])
+        ->middleware('can:platform.clinical-catalog.manage-clinical-procedures')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.update');
+    Route::patch('platform/admin/clinical-catalogs/clinical-procedures/{id}/status', [PlatformClinicalCatalogController::class, 'updateClinicalProcedureStatus'])
+        ->middleware('can:platform.clinical-catalog.manage-clinical-procedures')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.update-status');
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures/{id}/audit-logs/export', [PlatformClinicalCatalogController::class, 'exportClinicalProcedureAuditLogsCsv'])
+        ->middleware('can:platform.clinical-catalog.view-audit-logs')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.audit-logs.export');
+    Route::get('platform/admin/clinical-catalogs/clinical-procedures/{id}/audit-logs', [PlatformClinicalCatalogController::class, 'clinicalProcedureAuditLogs'])
+        ->middleware('can:platform.clinical-catalog.view-audit-logs')
+        ->name('platform.admin.clinical-catalogs.clinical-procedures.audit-logs');
 
     Route::get('platform/admin/clinical-catalogs/formulary-items', [PlatformClinicalCatalogController::class, 'formularyItems'])
         ->middleware('can:platform.clinical-catalog.read')
@@ -1346,6 +1396,43 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('radiology-orders/{id}/audit-logs', [RadiologyOrderController::class, 'auditLogs'])
         ->middleware('can:radiology.orders.view-audit-logs')
         ->name('radiology-orders.audit-logs');
+
+    Route::get('clinical-procedure-orders', [ClinicalProcedureOrderController::class, 'index'])
+        ->middleware('can:clinical-procedure.orders.read')
+        ->name('clinical-procedure-orders.index');
+    Route::get('clinical-procedure-orders/status-counts', [ClinicalProcedureOrderController::class, 'statusCounts'])
+        ->middleware('can:clinical-procedure.orders.read')
+        ->name('clinical-procedure-orders.status-counts');
+    Route::get('clinical-procedure-orders/duplicate-check', [ClinicalProcedureOrderController::class, 'duplicateCheck'])
+        ->middleware('can:clinical-procedure.order')
+        ->name('clinical-procedure-orders.duplicate-check');
+    Route::post('clinical-procedure-orders', [ClinicalProcedureOrderController::class, 'store'])
+        ->middleware('can:clinical-procedure.order')
+        ->name('clinical-procedure-orders.store');
+    Route::get('clinical-procedure-orders/{id}', [ClinicalProcedureOrderController::class, 'show'])
+        ->middleware('can:clinical-procedure.orders.read')
+        ->name('clinical-procedure-orders.show');
+    Route::patch('clinical-procedure-orders/{id}', [ClinicalProcedureOrderController::class, 'update'])
+        ->middleware('can:clinical-procedure.orders.update')
+        ->name('clinical-procedure-orders.update');
+    Route::post('clinical-procedure-orders/{id}/sign', [ClinicalProcedureOrderController::class, 'sign'])
+        ->middleware('can:clinical-procedure.order')
+        ->name('clinical-procedure-orders.sign');
+    Route::delete('clinical-procedure-orders/{id}/draft', [ClinicalProcedureOrderController::class, 'discardDraft'])
+        ->middleware('can:clinical-procedure.order')
+        ->name('clinical-procedure-orders.discard-draft');
+    Route::patch('clinical-procedure-orders/{id}/status', [ClinicalProcedureOrderController::class, 'updateStatus'])
+        ->middleware('can:clinical-procedure.perform')
+        ->name('clinical-procedure-orders.update-status');
+    Route::post('clinical-procedure-orders/{id}/lifecycle', [ClinicalProcedureOrderController::class, 'applyLifecycleAction'])
+        ->middleware('can:clinical-procedure.order')
+        ->name('clinical-procedure-orders.lifecycle');
+    Route::get('clinical-procedure-orders/{id}/audit-logs/export', [ClinicalProcedureOrderController::class, 'exportAuditLogsCsv'])
+        ->middleware('can:clinical-procedure.orders.view-audit-logs')
+        ->name('clinical-procedure-orders.audit-logs.export');
+    Route::get('clinical-procedure-orders/{id}/audit-logs', [ClinicalProcedureOrderController::class, 'auditLogs'])
+        ->middleware('can:clinical-procedure.orders.view-audit-logs')
+        ->name('clinical-procedure-orders.audit-logs');
 
     Route::get('emergency-triage-cases', [EmergencyTriageCaseController::class, 'index'])
         ->middleware('can:emergency.triage.read')

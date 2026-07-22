@@ -211,22 +211,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         permissionPrefixes: ['appointments.start-consultation'],
         helpNote: 'Your own patients waiting for review or already in consultation',
     },
-    {
-        title: 'Ward management',
-        href: '/inpatient-ward',
-        iconName: 'clipboard-list',
-        section: 'clinical_care',
-        permissionPrefixes: ['inpatient.ward.'],
-        helpNote: 'Ward census, nursing tasks, and bedside workflow',
-    },
-    {
-        title: 'Operating theatre',
-        href: '/theatre-procedures',
-        iconName: 'scissors',
-        section: 'clinical_care',
-        permissionPrefixes: ['theatre.procedures.'],
-        helpNote: 'Procedure scheduling and perioperative workflow',
-    },
+
     {
         title: 'Encounter records',
         href: '/encounters',
@@ -245,39 +230,8 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         permissionPrefixes: ['medical.records.', 'medical-records.'],
         helpNote: 'Medical Records (HIM): govern clinical-note completeness — finalize, amend, archive, audit',
     },
-    {
-        title: 'Laboratory',
-        href: '/laboratory-orders',
-        iconName: 'flask-conical',
-        section: 'diagnostics',
-        permissionPrefixes: ['laboratory.orders.', 'laboratory-orders.'],
-        helpNote: 'Lab order queue and result status updates',
-    },
-    {
-        title: 'Imaging & radiology',
-        href: '/radiology-orders',
-        iconName: 'activity',
-        section: 'diagnostics',
-        permissionPrefixes: ['radiology.orders.'],
-        helpNote: 'Imaging orders across modalities',
-    },
-    {
-        title: 'Pharmacy & dispensing',
-        href: '/pharmacy-orders',
-        iconName: 'pill',
-        section: 'diagnostics',
-        permissionPrefixes: ['pharmacy.orders.', 'pharmacy-orders.'],
-        helpNote: 'Dispense queue and medication fulfillment',
-    },
-    {
-        title: 'Invoices & billing',
-        href: '/billing',
-        iconName: 'receipt',
-        section: 'billing',
-        subGroup: 'invoicing',
-        permissionPrefixes: ['billing.invoices.', 'billing-invoices.'],
-        helpNote: 'Invoice queue, board, and create invoices',
-    },
+
+
     {
         title: 'Cash payments',
         href: '/billing-cash',
@@ -359,15 +313,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         permissionPrefixes: ['billing.service-catalog.'],
         helpNote: 'Billable services, tariffs, and pricing history',
     },
-    {
-        title: 'NHIF & insurance',
-        href: '/claims-insurance',
-        iconName: 'shield-check',
-        section: 'billing',
-        subGroup: 'rates',
-        permissionPrefixes: ['claims.insurance.'],
-        helpNote: 'NHIF, private payers, pre-auth, and claim adjudication',
-    },
+
     {
         title: 'Payer contracts',
         href: '/billing-payer-contracts',
@@ -395,15 +341,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         permissionPrefixes: ['billing.financial-controls.'],
         helpNote: 'Aged accounts receivable balances',
     },
-    {
-        title: 'Supply chain',
-        href: '/inventory-procurement',
-        iconName: 'package',
-        section: 'stores',
-        subGroup: 'transactions',
-        permissionPrefixes: ['inventory.procurement.'],
-        helpNote: 'Hospital stores, procurement, and stock tasks',
-    },
+
     {
         title: 'Pending approvals',
         href: '/inventory-procurement/pending-approvals',
@@ -501,15 +439,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         permissionPrefixes: ['inventory.procurement.manage-suppliers'],
         helpNote: 'Supplier registry and vendor management',
     },
-    {
-        title: 'Staff directory',
-        href: '/staff',
-        iconName: 'users',
-        section: 'people',
-        subGroup: 'staff',
-        permissionPrefixes: ['staff.'],
-        helpNote: 'Staff profiles and employment status',
-    },
+
     {
         title: 'Staff attendance',
         href: '/staff-attendance',

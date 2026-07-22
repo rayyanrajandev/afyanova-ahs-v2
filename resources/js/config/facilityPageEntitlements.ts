@@ -1,6 +1,8 @@
 /**
  * Facility subscription entitlements required to load Inertia pages, aligned with
  * `routes/web.php` `facility.entitlement` / `facility.entitlement.any` middleware (longest path prefix wins).
+ * Static rules (below) cover non-module paths; module-derived rules can be appended at runtime
+ * via {@link setModulePathRules} from the `config/modules.php` registry.
  * Paths are normalized with {@link normalizeAppPath} before matching.
  */
 export type FacilityWebPathRule = {
@@ -16,7 +18,22 @@ export type PathEntitlementRequirement =
     | { type: 'any'; keys: string[] };
 
 /**
+ * Module-derived path rules appended at runtime from the module registry (config/modules.php).
+ * Set once during app initialization via {@link setModulePathRules}.
+ */
+let modulePathRules: readonly FacilityWebPathRule[] = [];
+
+/**
+ * Populate the module-derived path rules from the Inertia-shared module registry.
+ * Called during app bootstrap (e.g. in the sidebar component or layout).
+ */
+export function setModulePathRules(rules: readonly FacilityWebPathRule[]): void {
+    modulePathRules = rules;
+}
+
+/**
  * Ordered longest-prefix-first so nested routes resolve before parents.
+ * Includes both static rules and any module-derived rules added at runtime.
  */
 export const FACILITY_WEB_PATH_RULES: readonly FacilityWebPathRule[] = [
     { pathPrefix: '/inventory-procurement/warehouse-transfers', requiredAll: ['inventory.transfers'] },
@@ -42,18 +59,11 @@ export const FACILITY_WEB_PATH_RULES: readonly FacilityWebPathRule[] = [
     { pathPrefix: '/pos/frontdesk-quick', requiredAll: ['pos.registers_sessions'] },
     { pathPrefix: '/pos', requiredAll: ['pos.registers_sessions'] },
     { pathPrefix: '/claims-insurance', requiredAll: ['claims.insurance'] },
-    { pathPrefix: '/staff-credentialing', requiredAll: ['staff.credentialing'] },
-    { pathPrefix: '/staff-privileges', requiredAll: ['staff.privileges'] },
-    { pathPrefix: '/staff', requiredAll: ['staff.profiles'] },
     { pathPrefix: '/medical-records', requiredAll: ['medical_records.core'] },
     { pathPrefix: '/emergency-triage', requiredAll: ['emergency.triage'] },
     { pathPrefix: '/emergency', requiredAll: ['emergency.triage'] },
-    { pathPrefix: '/theatre-procedures', requiredAll: ['theatre.procedures'] },
-    { pathPrefix: '/radiology-orders', requiredAll: ['radiology.orders'] },
     { pathPrefix: '/walk-in-service-requests', requiredAll: ['clinical.walk_in_queue'] },
     { pathPrefix: '/direct-service', requiredAll: ['clinical.walk_in_queue'] },
-    { pathPrefix: '/pharmacy-orders', requiredAll: ['pharmacy.orders'] },
-    { pathPrefix: '/laboratory-orders', requiredAll: ['laboratory.orders'] },
     { pathPrefix: '/appointments', requiredAll: ['appointments.scheduling'] },
     {
         pathPrefix: '/admissions',
@@ -78,10 +88,12 @@ function normalizeKeys(keys: readonly string[]): string[] {
 
 /**
  * @returns Entitlement requirement for this path, or `null` when not gated (e.g. dashboard, platform admin).
+ * Checks both static rules and any module-derived rules set via {@link setModulePathRules}.
  */
 export function pathEntitlementRequirement(normalizedPath: string): PathEntitlementRequirement | null {
     const path = normalizedPath;
-    for (const rule of FACILITY_WEB_PATH_RULES) {
+    const allRules = [...FACILITY_WEB_PATH_RULES, ...modulePathRules];
+    for (const rule of allRules) {
         if (path === rule.pathPrefix || path.startsWith(`${rule.pathPrefix}/`)) {
             if (rule.requiredAny && rule.requiredAny.length > 0) {
                 return { type: 'any', keys: normalizeKeys(rule.requiredAny) };

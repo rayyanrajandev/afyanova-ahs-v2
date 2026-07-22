@@ -39,13 +39,14 @@ class PlatformClinicalCatalogController extends Controller
     {
         $validated = $request->validate([
             'catalogTypes' => ['nullable', 'array'],
-            'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,formulary_item'],
+            'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,clinical_procedure,formulary_item'],
         ]);
 
         $types = $validated['catalogTypes'] ?? [
             ClinicalCatalogType::LAB_TEST->value,
             ClinicalCatalogType::RADIOLOGY_PROCEDURE->value,
             ClinicalCatalogType::THEATRE_PROCEDURE->value,
+            ClinicalCatalogType::CLINICAL_PROCEDURE->value,
             ClinicalCatalogType::FORMULARY_ITEM->value,
         ];
 
@@ -291,6 +292,82 @@ class PlatformClinicalCatalogController extends Controller
         ListClinicalCatalogItemAuditLogsUseCase $useCase
     ): StreamedResponse {
         return $this->exportCatalogAuditLogsCsv(ClinicalCatalogType::THEATRE_PROCEDURE->value, 'theatre-procedure', $id, $request, $useCase);
+    }
+
+    public function clinicalProcedures(Request $request, ListClinicalCatalogItemsUseCase $useCase): JsonResponse
+    {
+        return $this->listCatalogItems(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $request, $useCase);
+    }
+
+    public function clinicalProcedureStatusCounts(
+        Request $request,
+        ListClinicalCatalogItemStatusCountsUseCase $useCase
+    ): JsonResponse {
+        return $this->catalogStatusCounts(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $request, $useCase);
+    }
+
+    public function clinicalProcedureConsumptionInventoryOptions(
+        Request $request,
+        ClinicalCatalogConsumptionRecipeService $recipeService
+    ): JsonResponse {
+        return $this->consumptionInventoryOptions(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $request, $recipeService);
+    }
+
+    public function storeClinicalProcedure(
+        StoreClinicalCatalogItemRequest $request,
+        CreateClinicalCatalogItemUseCase $useCase
+    ): JsonResponse {
+        return $this->storeCatalogItem(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $request->validated(), $request, $useCase);
+    }
+
+    public function clinicalProcedure(string $id, GetClinicalCatalogItemUseCase $useCase): JsonResponse
+    {
+        return $this->showCatalogItem(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $id, $useCase);
+    }
+
+    public function clinicalProcedureConsumptionRecipe(string $id, ClinicalCatalogConsumptionRecipeService $recipeService): JsonResponse
+    {
+        return $this->consumptionRecipe(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $id, $recipeService);
+    }
+
+    public function syncClinicalProcedureConsumptionRecipe(
+        string $id,
+        Request $request,
+        ClinicalCatalogConsumptionRecipeService $recipeService
+    ): JsonResponse {
+        return $this->syncConsumptionRecipe(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $id, $request, $recipeService);
+    }
+
+    public function updateClinicalProcedure(
+        string $id,
+        UpdateClinicalCatalogItemRequest $request,
+        UpdateClinicalCatalogItemUseCase $useCase
+    ): JsonResponse {
+        return $this->updateCatalogItem(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $id, $request->validated(), $request, $useCase);
+    }
+
+    public function updateClinicalProcedureStatus(
+        string $id,
+        UpdateClinicalCatalogItemStatusRequest $request,
+        UpdateClinicalCatalogItemStatusUseCase $useCase
+    ): JsonResponse {
+        return $this->updateCatalogItemStatus(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $id, $request, $useCase);
+    }
+
+    public function clinicalProcedureAuditLogs(
+        string $id,
+        Request $request,
+        ListClinicalCatalogItemAuditLogsUseCase $useCase
+    ): JsonResponse {
+        return $this->catalogAuditLogs(ClinicalCatalogType::CLINICAL_PROCEDURE->value, $id, $request, $useCase);
+    }
+
+    public function exportClinicalProcedureAuditLogsCsv(
+        string $id,
+        Request $request,
+        ListClinicalCatalogItemAuditLogsUseCase $useCase
+    ): StreamedResponse {
+        return $this->exportCatalogAuditLogsCsv(ClinicalCatalogType::CLINICAL_PROCEDURE->value, 'clinical-procedure', $id, $request, $useCase);
     }
 
     public function formularyItems(Request $request, ListClinicalCatalogItemsUseCase $useCase): JsonResponse

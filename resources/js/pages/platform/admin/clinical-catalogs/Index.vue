@@ -41,14 +41,14 @@ import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 import { type BreadcrumbItem } from '@/types';
 
-type CatalogKey = 'lab-tests' | 'radiology-procedures' | 'theatre-procedures' | 'formulary-items';
+type CatalogKey = 'lab-tests' | 'radiology-procedures' | 'theatre-procedures' | 'clinical-procedures' | 'formulary-items';
 type CatalogStatus = 'active' | 'inactive' | 'retired';
 type BillingLinkStatus = 'linked' | 'pending_price' | 'review_required' | 'not_linked';
 type ApiError = Error & { status?: number; payload?: { message?: string; errors?: Record<string, string[]> } };
 type StandardsCodes = Partial<Record<'LOCAL' | 'LOINC' | 'SNOMED_CT' | 'NHIF' | 'MSD' | 'CPT' | 'ICD', string>>;
 
 const props = defineProps<{ catalog?: string | null }>();
-const catalogKeys = ['lab-tests', 'radiology-procedures', 'theatre-procedures', 'formulary-items'] as const;
+const catalogKeys = ['lab-tests', 'radiology-procedures', 'theatre-procedures', 'clinical-procedures', 'formulary-items'] as const;
 
 type BillingLinkItem = {
     id: string | null;
@@ -188,6 +188,19 @@ const domains = {
         domainSectionTitle: 'Theatre workflow details',
         domainSectionDescription: 'Capture operating class, anaesthesia expectation, sterile prep, and estimated duration for theatre planning and controls.',
     },
+    'clinical-procedures': {
+        label: 'Clinical Procedures',
+        singular: 'Clinical procedure',
+        manage: 'platform.clinical-catalog.manage-clinical-procedures',
+        codePlaceholder: 'CLN-WOUND-001',
+        namePlaceholder: 'Wound dressing change',
+        categoryLabel: 'Procedure family',
+        categoryPlaceholder: 'nursing_procedure',
+        unitLabel: 'Procedure unit',
+        unitPlaceholder: 'procedure',
+        domainSectionTitle: 'Clinical procedure workflow details',
+        domainSectionDescription: 'Capture setting, performer role, consent requirement, and expected duration for nursing and bedside procedures.',
+    },
     'formulary-items': {
         label: 'Approved Medicines',
         singular: 'Medicine',
@@ -244,7 +257,7 @@ const workspaceIntroText = computed(() => {
 
     return clinicalCatalogReadOnly.value
         ? `${base} · browse orderable definitions and billing linkage for care teams`
-        : `${base} · maintain lab, radiology, theatre, and medicine definitions linked to billing`;
+        : `${base} · maintain lab, radiology, theatre, clinical procedure, and medicine definitions linked to billing`;
 });
 const base = computed(() => `/platform/admin/clinical-catalogs/${catalogKey.value}`);
 
@@ -256,8 +269,8 @@ const catalogPrinting = ref(false);
 const items = ref<Item[]>([]);
 const pager = ref<Pager | null>(null);
 const counts = ref<Counts>({ active: 0, inactive: 0, retired: 0, other: 0, total: 0 });
-type TypeCounts = { lab_test: number; radiology_procedure: number; theatre_procedure: number; formulary_item: number; total: number };
-const typeCounts = ref<TypeCounts>({ lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, formulary_item: 0, total: 0 });
+type TypeCounts = { lab_test: number; radiology_procedure: number; theatre_procedure: number; clinical_procedure: number; formulary_item: number; total: number };
+const typeCounts = ref<TypeCounts>({ lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, clinical_procedure: 0, formulary_item: 0, total: 0 });
 const departments = ref<Department[]>([]);
 const departmentsLoading = ref(false);
 const SELECT_ALL_VALUE = '__all__';
@@ -532,6 +545,7 @@ function preferredDepartmentServiceType(key: CatalogKey): string {
     if (key === 'lab-tests') return 'laboratory';
     if (key === 'radiology-procedures') return 'radiology';
     if (key === 'theatre-procedures') return 'theatre';
+    if (key === 'clinical-procedures') return 'clinical';
     return 'pharmacy';
 }
 
@@ -877,6 +891,10 @@ function createClinicalDefinitionForm() {
         anesthesiaType: '',
         expectedDurationMinutes: '',
         sterilePrepRequired: '',
+        procedureSetting: '',
+        performerRole: '',
+        estimatedDurationMinutes: '',
+        consentRequired: '',
         strength: '',
         dosageForm: '',
         route: '',
@@ -923,6 +941,7 @@ function itemCatalogKey(item: Item | null): CatalogKey {
     if (catalogType === 'lab_test') return 'lab-tests';
     if (catalogType === 'radiology_procedure') return 'radiology-procedures';
     if (catalogType === 'theatre_procedure') return 'theatre-procedures';
+    if (catalogType === 'clinical_procedure') return 'clinical-procedures';
     if (catalogType === 'formulary_item') return 'formulary-items';
 
     return catalogKey.value;
@@ -932,6 +951,7 @@ function knownMetadataKeysForCatalog(key: CatalogKey): string[] {
     if (key === 'lab-tests') return ['sampleType', 'specimenContainer', 'turnaroundHours', 'fastingRequired'];
     if (key === 'radiology-procedures') return ['modality', 'bodySite', 'contrastRequired', 'studyDurationMinutes'];
     if (key === 'theatre-procedures') return ['procedureClass', 'anesthesiaType', 'expectedDurationMinutes', 'sterilePrepRequired'];
+    if (key === 'clinical-procedures') return ['procedureSetting', 'performerRole', 'estimatedDurationMinutes', 'consentRequired'];
 
     return ['strength', 'dosageForm', 'route', 'otcAllowed', 'packSize', 'stockUnit', 'conversionFactor'];
 }
@@ -999,6 +1019,10 @@ function applyDomainMetadataToForm(form: ReturnType<typeof createClinicalDefinit
     form.anesthesiaType = '';
     form.expectedDurationMinutes = '';
     form.sterilePrepRequired = '';
+    form.procedureSetting = '';
+    form.performerRole = '';
+    form.estimatedDurationMinutes = '';
+    form.consentRequired = '';
     form.strength = '';
     form.dosageForm = '';
     form.route = '';
@@ -1030,6 +1054,14 @@ function applyDomainMetadataToForm(form: ReturnType<typeof createClinicalDefinit
         form.anesthesiaType = metadataStringValue(values, 'anesthesiaType');
         form.expectedDurationMinutes = metadataStringValue(values, 'expectedDurationMinutes');
         form.sterilePrepRequired = metadataBooleanSelectValue(values, 'sterilePrepRequired');
+        return;
+    }
+
+    if (key === 'clinical-procedures') {
+        form.procedureSetting = metadataStringValue(values, 'procedureSetting');
+        form.performerRole = metadataStringValue(values, 'performerRole');
+        form.estimatedDurationMinutes = metadataStringValue(values, 'estimatedDurationMinutes');
+        form.consentRequired = metadataBooleanSelectValue(values, 'consentRequired');
         return;
     }
 
@@ -1092,6 +1124,15 @@ function buildKnownDomainMetadata(form: ReturnType<typeof createClinicalDefiniti
         return metadata;
     }
 
+    if (key === 'clinical-procedures') {
+        appendIfPresent(metadata, 'procedureSetting', form.procedureSetting);
+        appendIfPresent(metadata, 'performerRole', form.performerRole);
+        appendIfPresent(metadata, 'estimatedDurationMinutes', form.estimatedDurationMinutes);
+        const consentRequired = booleanValueFromSelect(form.consentRequired);
+        if (consentRequired !== null) metadata.consentRequired = consentRequired;
+        return metadata;
+    }
+
     appendIfPresent(metadata, 'strength', form.strength);
     appendIfPresent(metadata, 'dosageForm', form.dosageForm);
     appendIfPresent(metadata, 'route', form.route);
@@ -1132,6 +1173,12 @@ function applyDomainValidation(errors: Record<string, string[]>, form: ReturnTyp
     if (key === 'theatre-procedures') {
         const expectedDurationMinutesError = positiveWholeNumberError(form.expectedDurationMinutes, 'Expected duration minutes');
         if (expectedDurationMinutesError) errors.expectedDurationMinutes = expectedDurationMinutesError;
+        return;
+    }
+
+    if (key === 'clinical-procedures') {
+        const estimatedDurationMinutesError = positiveWholeNumberError(form.estimatedDurationMinutes, 'Estimated duration minutes');
+        if (estimatedDurationMinutesError) errors.estimatedDurationMinutes = estimatedDurationMinutesError;
     }
 }
 
@@ -1169,6 +1216,11 @@ function domainMetadataSummary(item: Item | null): string {
         if (metadataStringValue(metadata, 'anesthesiaType')) parts.push(`Anaesthesia ${metadataStringValue(metadata, 'anesthesiaType')}`);
         if (metadataStringValue(metadata, 'expectedDurationMinutes')) parts.push(`${metadataStringValue(metadata, 'expectedDurationMinutes')} min`);
         if (metadataBooleanSelectValue(metadata, 'sterilePrepRequired')) parts.push(`Sterile prep ${metadataBooleanSelectValue(metadata, 'sterilePrepRequired') === 'yes' ? 'required' : 'not required'}`);
+    } else if (key === 'clinical-procedures') {
+        if (metadataStringValue(metadata, 'procedureSetting')) parts.push(`Setting ${metadataStringValue(metadata, 'procedureSetting')}`);
+        if (metadataStringValue(metadata, 'performerRole')) parts.push(`Performer ${metadataStringValue(metadata, 'performerRole')}`);
+        if (metadataStringValue(metadata, 'estimatedDurationMinutes')) parts.push(`${metadataStringValue(metadata, 'estimatedDurationMinutes')} min`);
+        if (metadataBooleanSelectValue(metadata, 'consentRequired')) parts.push(`Consent ${metadataBooleanSelectValue(metadata, 'consentRequired') === 'yes' ? 'required' : 'not required'}`);
     } else {
         if (metadataStringValue(metadata, 'strength')) parts.push(metadataStringValue(metadata, 'strength'));
         if (metadataStringValue(metadata, 'dosageForm')) parts.push(metadataStringValue(metadata, 'dosageForm'));
@@ -1331,6 +1383,7 @@ const clinicalCatalogTabs = [
     { key: 'lab-tests' as const, label: 'Lab Tests', icon: 'flask-conical' as const },
     { key: 'radiology-procedures' as const, label: 'Radiology', icon: 'file-text' as const },
     { key: 'theatre-procedures' as const, label: 'Theatre', icon: 'scissors' as const },
+    { key: 'clinical-procedures' as const, label: 'Clinical Procedures', icon: 'stethoscope' as const },
     { key: 'formulary-items' as const, label: 'Medicines', icon: 'pill' as const },
 ] as const;
 
@@ -1347,6 +1400,7 @@ const catalogTypeCountMap: Record<string, keyof TypeCounts> = {
     'lab-tests': 'lab_test',
     'radiology-procedures': 'radiology_procedure',
     'theatre-procedures': 'theatre_procedure',
+    'clinical-procedures': 'clinical_procedure',
     'formulary-items': 'formulary_item',
 };
 function getTabCount(tabKey: string): number {
@@ -1643,9 +1697,9 @@ async function loadTypeCounts(): Promise<void> {
         const response = await apiRequest<{ data: TypeCounts }>('GET', '/platform/admin/clinical-catalogs/type-counts', {
             query: { q: filters.q.trim() || null, category: filters.category.trim() || null },
         });
-        typeCounts.value = response.data ?? { lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, formulary_item: 0, total: 0 };
+        typeCounts.value = response.data ?? { lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, clinical_procedure: 0, formulary_item: 0, total: 0 };
     } catch {
-        typeCounts.value = { lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, formulary_item: 0, total: 0 };
+        typeCounts.value = { lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, clinical_procedure: 0, formulary_item: 0, total: 0 };
     }
 }
 
@@ -2433,7 +2487,7 @@ onBeforeUnmount(() => {
                             @update:model-value="setCatalogTab"
                         >
                             <TabsList
-                                class="grid h-9 w-full grid-cols-2 gap-1 bg-muted/40 p-1 sm:grid-cols-4"
+                                class="grid h-auto w-full grid-cols-2 gap-1 bg-muted/40 p-1 sm:grid-cols-5"
                             >
                                 <TabsTrigger
                                     v-for="tab in clinicalCatalogTabs"
@@ -2807,6 +2861,12 @@ onBeforeUnmount(() => {
                                     <div class="grid gap-1.5"><Label>Expected duration minutes</Label><Input v-model="createForm.expectedDurationMinutes" inputmode="numeric" placeholder="90" /><p v-if="firstError(createErrors, 'expectedDurationMinutes')" class="text-xs text-destructive">{{ firstError(createErrors, 'expectedDurationMinutes') }}</p></div>
                                     <div class="grid gap-1.5"><Label>Sterile prep required</Label><Select v-model="createForm.sterilePrepRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
                                 </div>
+                                <div v-else-if="catalogKey === 'clinical-procedures'" class="grid gap-3 md:grid-cols-2">
+                                    <div class="grid gap-1.5"><Label>Procedure setting</Label><Input v-model="createForm.procedureSetting" placeholder="outpatient" /></div>
+                                    <div class="grid gap-1.5"><Label>Performer role</Label><Input v-model="createForm.performerRole" placeholder="nurse" /></div>
+                                    <div class="grid gap-1.5"><Label>Estimated duration minutes</Label><Input v-model="createForm.estimatedDurationMinutes" inputmode="numeric" placeholder="20" /><p v-if="firstError(createErrors, 'estimatedDurationMinutes')" class="text-xs text-destructive">{{ firstError(createErrors, 'estimatedDurationMinutes') }}</p></div>
+                                    <div class="grid gap-1.5"><Label>Consent required</Label><Select v-model="createForm.consentRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
+                                </div>
                                 <div v-else class="grid gap-3 md:grid-cols-2">
                                     <div class="grid gap-1.5"><Label>Strength</Label><Input v-model="createForm.strength" placeholder="500 mg" /></div>
                                     <ComboboxField
@@ -2946,6 +3006,7 @@ onBeforeUnmount(() => {
                                 <Badge v-else-if="selected.catalogType === 'lab_test'" variant="secondary">Lab Tests</Badge>
                                 <Badge v-else-if="selected.catalogType === 'radiology_procedure'" variant="secondary">Radiology</Badge>
                                 <Badge v-else-if="selected.catalogType === 'theatre_procedure'" variant="secondary">Theatre</Badge>
+                                <Badge v-else-if="selected.catalogType === 'clinical_procedure'" variant="secondary">Clinical Procedure</Badge>
                             </div>
                         </div>
                     </SheetHeader>
@@ -3331,6 +3392,12 @@ onBeforeUnmount(() => {
                                     <div class="grid gap-1.5"><Label>Anaesthesia type</Label><Input v-model="editForm.anesthesiaType" placeholder="general" /></div>
                                     <div class="grid gap-1.5"><Label>Expected duration minutes</Label><Input v-model="editForm.expectedDurationMinutes" inputmode="numeric" placeholder="90" /><p v-if="firstError(editErrors, 'expectedDurationMinutes')" class="text-xs text-destructive">{{ firstError(editErrors, 'expectedDurationMinutes') }}</p></div>
                                     <div class="grid gap-1.5"><Label>Sterile prep required</Label><Select v-model="editForm.sterilePrepRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
+                                </div>
+                                <div v-else-if="selectedCatalogKey === 'clinical-procedures'" class="grid gap-3 md:grid-cols-2">
+                                    <div class="grid gap-1.5"><Label>Procedure setting</Label><Input v-model="editForm.procedureSetting" placeholder="outpatient" /></div>
+                                    <div class="grid gap-1.5"><Label>Performer role</Label><Input v-model="editForm.performerRole" placeholder="nurse" /></div>
+                                    <div class="grid gap-1.5"><Label>Estimated duration minutes</Label><Input v-model="editForm.estimatedDurationMinutes" inputmode="numeric" placeholder="20" /><p v-if="firstError(editErrors, 'estimatedDurationMinutes')" class="text-xs text-destructive">{{ firstError(editErrors, 'estimatedDurationMinutes') }}</p></div>
+                                    <div class="grid gap-1.5"><Label>Consent required</Label><Select v-model="editForm.consentRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
                                 </div>
                                 <div v-else class="grid gap-3 md:grid-cols-2">
                                     <div class="grid gap-1.5"><Label>Strength</Label><Input v-model="editForm.strength" placeholder="500 mg" /></div>

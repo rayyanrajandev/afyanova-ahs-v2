@@ -27,7 +27,7 @@ class ListFrontdeskQuickCandidatesUseCase
 
         $allCandidates = [];
 
-        foreach (['laboratory_order', 'pharmacy_prescription', 'radiology_order', 'procedure'] as $kind) {
+        foreach (['laboratory_order', 'pharmacy_prescription', 'radiology_order', 'clinical_procedure_order', 'procedure'] as $kind) {
             $query = $this->frontdeskQuickCashierSupport->eligibleOrderQuery($kind);
             if ($query === null) {
                 continue;
@@ -129,6 +129,7 @@ class ListFrontdeskQuickCandidatesUseCase
             'laboratory_order' => ['order_number', 'test_code', 'test_name'],
             'pharmacy_prescription' => ['order_number', 'medication_code', 'medication_name'],
             'radiology_order' => ['order_number', 'procedure_code', 'study_description'],
+            'clinical_procedure_order' => ['order_number', 'procedure_code', 'procedure_description'],
             'procedure' => ['procedure_number', 'procedure_type', 'procedure_name'],
             default => ['id'],
         };

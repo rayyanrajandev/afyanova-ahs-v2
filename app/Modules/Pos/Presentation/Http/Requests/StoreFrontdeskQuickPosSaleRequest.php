@@ -26,7 +26,7 @@ class StoreFrontdeskQuickPosSaleRequest extends FormRequest
             'metadata' => ['nullable', 'array'],
             'createInvoice' => ['nullable', 'boolean'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.kind' => ['required', 'string', Rule::in(['laboratory_order', 'pharmacy_prescription', 'radiology_order', 'procedure'])],
+            'items.*.kind' => ['required', 'string', Rule::in(['laboratory_order', 'pharmacy_prescription', 'radiology_order', 'clinical_procedure_order', 'procedure'])],
             'items.*.orderId' => ['required', 'uuid'],
             'items.*.note' => ['nullable', 'string', 'max:255'],
             'payments' => ['required', 'array', 'min:1'],

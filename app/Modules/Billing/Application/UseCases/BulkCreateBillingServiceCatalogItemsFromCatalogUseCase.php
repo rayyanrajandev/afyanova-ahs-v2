@@ -30,7 +30,7 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
     /**
      * Bulk-create or update billing service catalog items from active clinical catalog definitions.
      *
-     * Supports all 4 clinical catalog types: lab_test, radiology_procedure, theatre_procedure, formulary_item.
+     * Supports billable clinical catalog types: lab_test, radiology_procedure, theatre_procedure, clinical_procedure, formulary_item.
      *
      * @param  list<string>|null  $catalogItemIds  Optional subset of catalog item UUIDs; null = all eligible
      * @param  string|null  $defaultCurrencyCode  Currency code for new items (defaults to TZS)
@@ -53,7 +53,7 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
 
         $eligibleTypes = (is_array($catalogTypes) && $catalogTypes !== [])
             ? $catalogTypes
-            : ['lab_test', 'radiology_procedure', 'theatre_procedure', 'formulary_item'];
+            : ['lab_test', 'radiology_procedure', 'theatre_procedure', 'clinical_procedure', 'formulary_item'];
 
         $catalogQuery = ClinicalCatalogItemModel::query()
             ->whereIn('catalog_type', $eligibleTypes)

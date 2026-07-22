@@ -7,7 +7,7 @@ export type EncounterOrderContext = {
     admissionId?: string;
 };
 
-export type EncounterInlineOrderType = 'laboratory' | 'pharmacy' | 'radiology';
+export type EncounterInlineOrderType = 'laboratory' | 'pharmacy' | 'radiology' | 'clinical_procedure';
 export type EncounterInlineOrderMode = 'new' | 'reorder' | 'add_on';
 
 export type EncounterInlineOrderLinkageContext = {
@@ -86,6 +86,15 @@ export const laboratoryPriorityOptions = [
     { value: 'stat', label: 'STAT' },
 ] as const;
 
+export const procedureSettingOptions = [
+    { value: 'outpatient', label: 'Outpatient' },
+    { value: 'inpatient', label: 'Inpatient' },
+    { value: 'emergency', label: 'Emergency' },
+    { value: 'icu', label: 'ICU' },
+    { value: 'ward', label: 'Ward' },
+    { value: 'home', label: 'Home care' },
+] as const;
+
 function catalogMetadataValue(
     catalogItem: ClinicalCatalogItem | null,
     keys: string[],
@@ -157,6 +166,23 @@ export async function fetchRadiologyProcedureCatalog(): Promise<
 > {
     const response = await apiGet<ClinicalCatalogItemListResponse>(
         '/platform/admin/clinical-catalogs/radiology-procedures',
+        {
+            status: 'active',
+            sortBy: 'name',
+            sortDir: 'asc',
+            perPage: 500,
+            page: 1,
+        },
+    );
+
+    return response.data ?? [];
+}
+
+export async function fetchClinicalProcedureCatalog(): Promise<
+    ClinicalCatalogItem[]
+> {
+    const response = await apiGet<ClinicalCatalogItemListResponse>(
+        '/platform/admin/clinical-catalogs/clinical-procedures',
         {
             status: 'active',
             sortBy: 'name',
@@ -273,6 +299,14 @@ export type RadiologyInlineOrderInput = {
     clinicalIndication: string;
 };
 
+export type ClinicalProcedureInlineOrderInput = {
+    clinicalProcedureCatalogItemId: string;
+    procedureCode: string;
+    procedureSetting: string;
+    procedureDescription: string;
+    clinicalIndication: string;
+};
+
 export async function checkLaboratoryDuplicate(
     context: EncounterOrderContext,
     item: Pick<
@@ -334,6 +368,29 @@ export async function checkRadiologyDuplicate(
             admissionId: context.admissionId?.trim() || null,
             radiologyProcedureCatalogItemId:
                 item.radiologyProcedureCatalogItemId.trim() || null,
+            procedureCode: item.procedureCode.trim() || null,
+        },
+    );
+
+    return response.data;
+}
+
+export async function checkClinicalProcedureDuplicate(
+    context: EncounterOrderContext,
+    item: Pick<
+        ClinicalProcedureInlineOrderInput,
+        'clinicalProcedureCatalogItemId' | 'procedureCode' | 'procedureDescription'
+    >,
+): Promise<EncounterDuplicateCheckResult> {
+    const response = await apiGet<DuplicateCheckResponse>(
+        '/clinical-procedure-orders/duplicate-check',
+        {
+            patientId: context.patientId.trim(),
+            encounterId: context.encounterId?.trim() || null,
+            appointmentId: context.appointmentId?.trim() || null,
+            admissionId: context.admissionId?.trim() || null,
+            clinicalProcedureCatalogItemId:
+                item.clinicalProcedureCatalogItemId.trim() || null,
             procedureCode: item.procedureCode.trim() || null,
         },
     );
@@ -432,6 +489,33 @@ export async function createRadiologyInlineOrder(
     });
 }
 
+export async function createClinicalProcedureInlineOrder(
+    context: EncounterOrderContext,
+    item: ClinicalProcedureInlineOrderInput,
+    options?: InlineOrderCreateOptions,
+) {
+    return apiPost<{ data: Record<string, unknown> }>('/clinical-procedure-orders', {
+        body: {
+            patientId: context.patientId.trim(),
+            encounterId: context.encounterId?.trim() || null,
+            appointmentId: context.appointmentId?.trim() || null,
+            admissionId: context.admissionId?.trim() || null,
+            orderSessionId:
+                options?.orderSessionId ??
+                generateClinicalOrderSessionId('cp-session'),
+            entryMode: 'active',
+            replacesOrderId: options?.replacesOrderId?.trim() || null,
+            addOnToOrderId: options?.addOnToOrderId?.trim() || null,
+            clinicalProcedureCatalogItemId:
+                item.clinicalProcedureCatalogItemId.trim() || null,
+            procedureCode: item.procedureCode.trim() || null,
+            procedureSetting: item.procedureSetting,
+            procedureDescription: item.procedureDescription.trim() || null,
+            clinicalIndication: item.clinicalIndication.trim() || null,
+        },
+    });
+}
+
 export function encounterInlineOrderTypeLabel(
     type: EncounterInlineOrderType,
 ): string {
@@ -442,6 +526,8 @@ export function encounterInlineOrderTypeLabel(
             return 'Pharmacy order';
         case 'radiology':
             return 'Imaging order';
+        case 'clinical_procedure':
+            return 'Clinical procedure';
     }
 }
 

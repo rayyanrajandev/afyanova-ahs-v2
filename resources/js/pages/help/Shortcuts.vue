@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
@@ -47,9 +47,30 @@ const {
 
 const resolvedPermissionNames = computed(() => permissionNames.value ?? []);
 
+const moduleNavItems = computed(() =>
+    ((usePage().props.moduleNavCatalog ?? []) as {
+        title: string;
+        href: string;
+        icon: string;
+        section: string;
+        sub_group?: string;
+        permission_prefixes: string[];
+        help_note?: string;
+    }[]).map((item) => ({
+        id: `module:${item.href}`,
+        title: item.title,
+        href: item.href,
+        iconName: item.icon,
+        section: item.section,
+        subGroup: item.sub_group,
+        permissionPrefixes: item.permission_prefixes,
+        helpNote: item.help_note,
+    })),
+);
+
 const visibleNavItems = computed(() =>
     filterSidebarNavCatalogItems(
-        appNavCatalog,
+        [...appNavCatalog, ...moduleNavItems.value],
         resolvedPermissionNames.value,
         hasUniversalAdminAccess.value,
         facilityEntitlementNames.value,

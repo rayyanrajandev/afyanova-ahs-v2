@@ -72,6 +72,12 @@ class ClinicalCatalogBulkCsvSchema
                 'expected_duration_minutes',
                 'sterile_prep_required',
             ],
+            ClinicalCatalogType::CLINICAL_PROCEDURE->value => [
+                'procedure_setting',
+                'performer_role',
+                'estimated_duration_minutes',
+                'consent_required',
+            ],
             ClinicalCatalogType::FORMULARY_ITEM->value => [
                 'strength',
                 'dosage_form',
@@ -152,6 +158,25 @@ class ClinicalCatalogBulkCsvSchema
                 '',
                 '',
             ], ['major', 'general', '90', 'yes']),
+            ClinicalCatalogType::CLINICAL_PROCEDURE->value => array_merge([
+                'CLN-WOUND-001',
+                'Wound dressing change',
+                'nursing_procedure',
+                'procedure',
+                'health_centre',
+                'NUR',
+                'CLN-WOUND-TARIFF',
+                'Routine wound assessment and dressing change.',
+                'active',
+                '',
+                'LOCAL-WOUND-DRESS',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+            ], ['outpatient', 'nurse', '20', 'no']),
             ClinicalCatalogType::FORMULARY_ITEM->value => array_merge([
                 'MED-AMOX-500CAP',
                 'Amoxicillin 500mg capsule',
@@ -322,6 +347,19 @@ class ClinicalCatalogBulkCsvSchema
             return $metadata;
         }
 
+        if ($catalogType === ClinicalCatalogType::CLINICAL_PROCEDURE->value) {
+            self::appendIfPresent($metadata, 'procedureSetting', (string) ($row['procedure_setting'] ?? ''));
+            self::appendIfPresent($metadata, 'performerRole', (string) ($row['performer_role'] ?? ''));
+            self::appendIfPresent($metadata, 'estimatedDurationMinutes', (string) ($row['estimated_duration_minutes'] ?? ''));
+            $consent = self::parseBoolean((string) ($row['consent_required'] ?? ''));
+            if ($consent !== null) {
+                $metadata['consentRequired'] = $consent;
+            }
+            self::assertPositiveWholeNumber($row['estimated_duration_minutes'] ?? '', 'estimated_duration_minutes', $errors);
+
+            return $metadata;
+        }
+
         self::appendIfPresent($metadata, 'strength', (string) ($row['strength'] ?? ''));
         self::appendIfPresent($metadata, 'dosageForm', (string) ($row['dosage_form'] ?? ''));
         self::appendIfPresent($metadata, 'route', (string) ($row['route'] ?? ''));
@@ -375,6 +413,10 @@ class ClinicalCatalogBulkCsvSchema
             self::assertPositiveWholeNumber($row['expected_duration_minutes'] ?? '', 'expected_duration_minutes', $errors);
         }
 
+        if ($catalogType === ClinicalCatalogType::CLINICAL_PROCEDURE->value) {
+            self::assertPositiveWholeNumber($row['estimated_duration_minutes'] ?? '', 'estimated_duration_minutes', $errors);
+        }
+
         if ($catalogType === ClinicalCatalogType::FORMULARY_ITEM->value) {
             self::assertPositiveNumeric($row['conversion_factor'] ?? '', 'conversion_factor', $errors);
         }
@@ -395,6 +437,10 @@ class ClinicalCatalogBulkCsvSchema
             [ClinicalCatalogType::THEATRE_PROCEDURE->value, 'anesthesia_type'] => self::metadataString($metadata, 'anesthesiaType'),
             [ClinicalCatalogType::THEATRE_PROCEDURE->value, 'expected_duration_minutes'] => self::metadataString($metadata, 'expectedDurationMinutes'),
             [ClinicalCatalogType::THEATRE_PROCEDURE->value, 'sterile_prep_required'] => self::booleanCsv(self::metadataBool($metadata, 'sterilePrepRequired')),
+            [ClinicalCatalogType::CLINICAL_PROCEDURE->value, 'procedure_setting'] => self::metadataString($metadata, 'procedureSetting'),
+            [ClinicalCatalogType::CLINICAL_PROCEDURE->value, 'performer_role'] => self::metadataString($metadata, 'performerRole'),
+            [ClinicalCatalogType::CLINICAL_PROCEDURE->value, 'estimated_duration_minutes'] => self::metadataString($metadata, 'estimatedDurationMinutes'),
+            [ClinicalCatalogType::CLINICAL_PROCEDURE->value, 'consent_required'] => self::booleanCsv(self::metadataBool($metadata, 'consentRequired')),
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'strength'] => self::metadataString($metadata, 'strength'),
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'dosage_form'] => self::metadataString($metadata, 'dosageForm'),
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'route'] => self::metadataString($metadata, 'route'),

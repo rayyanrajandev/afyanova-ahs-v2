@@ -10,6 +10,8 @@ use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ClinicalProcedure\Domain\ValueObjects\ClinicalProcedureOrderStatus;
+use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
 use Illuminate\Support\Collection;
 
 /**
@@ -86,8 +88,22 @@ class GetOrderCompletionNotificationsForClinicianUseCase
                 'completedAt' => $order->completed_at,
             ]);
 
+        $clinicalProcedureEntries = ClinicalProcedureOrderModel::query()
+            ->where('ordered_by_user_id', $clinicianUserId)
+            ->where('status', ClinicalProcedureOrderStatus::COMPLETED->value)
+            ->whereIn('appointment_id', $activeAppointmentIds)
+            ->get(['id', 'patient_id', 'appointment_id', 'procedure_description', 'completed_at'])
+            ->map(fn (ClinicalProcedureOrderModel $order): array => [
+                'orderType' => 'clinical_procedure',
+                'orderId' => $order->id,
+                'patientId' => $order->patient_id,
+                'appointmentId' => $order->appointment_id,
+                'label' => $order->procedure_description,
+                'completedAt' => $order->completed_at,
+            ]);
+
         /** @var Collection<int, array<string, mixed>> $entries */
-        $entries = $labEntries->concat($pharmacyEntries)->concat($radiologyEntries);
+        $entries = $labEntries->concat($pharmacyEntries)->concat($radiologyEntries)->concat($clinicalProcedureEntries);
 
         if ($entries->isEmpty()) {
             return [];

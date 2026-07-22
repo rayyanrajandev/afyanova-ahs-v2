@@ -64,12 +64,13 @@ export const FACILITY_TIER_OPTIONS = [
 // Clinical catalog source config
 // ---------------------------------------------------------------------------
 
-export type ClinicalCatalogType = 'lab_test' | 'radiology_procedure' | 'theatre_procedure' | 'formulary_item';
+export type ClinicalCatalogType = 'lab_test' | 'radiology_procedure' | 'theatre_procedure' | 'clinical_procedure' | 'formulary_item';
 
 export const CLINICAL_CATALOG_SOURCES = [
     { type: 'lab_test' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/lab-tests', label: 'Lab Tests', defaultServiceType: 'laboratory' },
     { type: 'radiology_procedure' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/radiology-procedures', label: 'Radiology', defaultServiceType: 'radiology' },
     { type: 'theatre_procedure' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/theatre-procedures', label: 'Theatre Procedures', defaultServiceType: 'theatre' },
+    { type: 'clinical_procedure' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/clinical-procedures', label: 'Clinical Procedures', defaultServiceType: 'procedure' },
     { type: 'formulary_item' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/formulary-items', label: 'Formulary', defaultServiceType: 'pharmacy' },
 ] as const;
 

@@ -15,6 +15,7 @@ return new class extends Migration
         'pharmacy_orders',
         'radiology_orders',
         'theatre_procedures',
+        'clinical_procedure_orders',
         'billing_invoices',
     ];
 

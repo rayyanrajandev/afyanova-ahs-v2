@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Modules\Platform\Application\Services\FacilitySubscriptionAccessService;
+use App\Modules\Platform\Application\Services\ModuleRegistryService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -10,9 +11,11 @@ use Symfony\Component\HttpFoundation\Response;
 class EnsureMappedFacilitySubscriptionEntitlement
 {
     /**
+     * Non-module route overrides that don't fit the module registry pattern.
+     *
      * @var array<string, array<int, string>>
      */
-    private const ROUTE_ENTITLEMENT_MAP = [
+    private const SPECIAL_ENTITLEMENT_MAP = [
         'appointments.start-consultation' => ['appointments.provider_sessions'],
         'appointments.manage-provider-session' => ['appointments.provider_sessions'],
         'appointments.referrals.' => ['appointments.referrals'],
@@ -22,9 +25,7 @@ class EnsureMappedFacilitySubscriptionEntitlement
         // scheduling but not the full admissions.management SKU; admissions.read remains enforced per route.
         'admissions.status-counts' => ['appointments.scheduling'],
         'admissions.discharge-destination-options' => ['appointments.scheduling'],
-        // Nursing/front-office dashboard snippet of admitted rows (still `can:admissions.read`).
         'admissions.index' => ['appointments.scheduling'],
-
         'admissions.' => ['admissions.management'],
 
         'medical-records.signer-attestations.' => ['medical_records.governance'],
@@ -38,25 +39,15 @@ class EnsureMappedFacilitySubscriptionEntitlement
         'encounters.' => ['medical_records.core'],
 
         'emergency-triage-cases.' => ['emergency.triage'],
-        'laboratory-orders.' => ['laboratory.orders'],
-        'pharmacy-orders.' => ['pharmacy.orders'],
-        'radiology-orders.' => ['radiology.orders'],
         'service-requests.' => ['clinical.walk_in_queue'],
-        'theatre-procedures.' => ['theatre.procedures'],
-        'claims-insurance.' => ['claims.insurance'],
 
         'inpatient-ward.tasks.' => ['inpatient.tasks'],
         'inpatient-ward.round-notes.' => ['inpatient.tasks'],
         'inpatient-ward.care-plans.' => ['inpatient.care_plans'],
         'inpatient-ward.discharge-checklists.' => ['inpatient.care_plans'],
-        /*
-         * Ward KPI aggregates (`can:inpatient.ward.read` on each route). Down-map to scheduling tier — same rationale
-         * as admissions.status-counts — so Nursing dashboard tiles work without inpatient.ward / tasks / care_plans SKUs.
-         */
         'inpatient-ward.task-status-counts' => ['appointments.scheduling'],
         'inpatient-ward.care-plan-status-counts' => ['appointments.scheduling'],
         'inpatient-ward.discharge-checklist-status-counts' => ['appointments.scheduling'],
-        'inpatient-ward.' => ['inpatient.ward'],
 
         'billing-invoices.financial-controls.' => ['billing.financial_controls'],
         'billing-invoices.record-payment' => ['billing.payments'],
@@ -64,7 +55,6 @@ class EnsureMappedFacilitySubscriptionEntitlement
         'billing-invoices.payments' => ['billing.payments'],
         'billing-invoices.audit-logs.' => ['billing.financial_controls'],
         'billing-invoices.audit-logs' => ['billing.financial_controls'],
-        'billing-invoices.' => ['billing.invoices'],
         'billing-payment-plans.' => ['billing.payment_plans'],
         'billing-corporate-accounts.' => ['billing.payer_contracts'],
         'billing-corporate-runs.' => ['billing.payer_contracts'],
@@ -112,7 +102,30 @@ class EnsureMappedFacilitySubscriptionEntitlement
         'departments.' => ['departments.management'],
     ];
 
-    public function __construct(private readonly FacilitySubscriptionAccessService $subscriptionAccessService) {}
+    /**
+     * @var array<string, array<int, string>>|null
+     */
+    private ?array $mergedEntitlementMap = null;
+
+    public function __construct(
+        private readonly FacilitySubscriptionAccessService $subscriptionAccessService,
+        private readonly ModuleRegistryService $moduleRegistry,
+    ) {}
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private function entitlementMap(): array
+    {
+        if ($this->mergedEntitlementMap === null) {
+            $this->mergedEntitlementMap = [
+                ...self::SPECIAL_ENTITLEMENT_MAP,
+                ...$this->moduleRegistry->buildRouteEntitlementMap(),
+            ];
+        }
+
+        return $this->mergedEntitlementMap;
+    }
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -150,7 +163,7 @@ class EnsureMappedFacilitySubscriptionEntitlement
             return [];
         }
 
-        foreach (self::ROUTE_ENTITLEMENT_MAP as $routePrefix => $entitlements) {
+        foreach ($this->entitlementMap() as $routePrefix => $entitlements) {
             if ($this->routeNameMatches($routeName, $routePrefix)) {
                 return $entitlements;
             }

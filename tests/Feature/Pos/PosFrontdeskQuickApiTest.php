@@ -287,7 +287,7 @@ it('lists frontdesk quick candidates for all source kinds with pricing and exclu
 
     expect($response->json('meta.total'))->toBe(4);
     $sourceKinds = array_column($response->json('data'), 'sourceKind');
-    expect($sourceKinds)->toContain('laboratory_order', 'pharmacy_prescription', 'radiology_order', 'procedure');
+    expect($sourceKinds)->toContain('laboratory_order', 'pharmacy_prescription', 'radiology_order', 'clinical_procedure_order', 'procedure');
     expect((float) $response->json('data.0.unitPrice'))->toBe(25000.0);
 });
 

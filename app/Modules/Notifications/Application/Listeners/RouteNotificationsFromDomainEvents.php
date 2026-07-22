@@ -9,6 +9,7 @@ use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffAccepted;
 use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffInitiated;
 use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
+use App\Modules\ClinicalProcedure\Domain\Events\ClinicalProcedureOrderCompleted;
 use App\Modules\Reception\Domain\Events\AppointmentCheckedIn;
 use App\Modules\ServiceRequest\Domain\Events\ServiceRequestStatusChanged;
 use App\Modules\ServiceRequest\Domain\Repositories\ServiceRequestRepositoryInterface;
@@ -156,6 +157,25 @@ class RouteNotificationsFromDomainEvents
             actionLabel: 'View report',
             contextType: 'radiology_order',
             contextId: $event->radiologyOrderId,
+        );
+    }
+
+    public function handleClinicalProcedureOrderCompleted(ClinicalProcedureOrderCompleted $event): void
+    {
+        if ($event->orderedByUserId === null) {
+            return;
+        }
+
+        $this->dispatchInAppNotification->handle(
+            userId: $event->orderedByUserId,
+            category: 'clinical',
+            priority: 'normal',
+            title: 'Procedure completed',
+            body: sprintf('Clinical procedure has been completed for patient #%s.', $event->patientId),
+            actionUrl: sprintf('/clinical-procedures?focusOrderId=%s', $event->clinicalProcedureOrderId),
+            actionLabel: 'View procedure',
+            contextType: 'clinical_procedure_order',
+            contextId: $event->clinicalProcedureOrderId,
         );
     }
 

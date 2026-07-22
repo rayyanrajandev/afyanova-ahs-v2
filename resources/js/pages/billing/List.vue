@@ -30,7 +30,7 @@ import type { BreadcrumbItem } from '@/types';
 /**
  * List-only billing queue (reports/billing-module-architecture-redesign.md
  * Phase 6). This is IndexV2.vue with the right-hand patient detail panel,
- * payment sheets, and reversal/undo flow removed — selecting a patient now
+ * payment sheets, and reversal/undo flow removed — selecting a patient nowcommit and push you
  * navigates to their billing workspace (billing/workspace/Workspace.vue)
  * instead of opening an inline panel. Header/stat-tile/Tabs-wrapped-sticky-
  * header structure matches encounters/List.vue; cross-module navigation is

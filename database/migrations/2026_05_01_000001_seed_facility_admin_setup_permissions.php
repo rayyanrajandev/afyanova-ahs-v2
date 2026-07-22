@@ -31,6 +31,7 @@ return new class extends Migration
         'platform.clinical-catalog.manage-lab-tests',
         'platform.clinical-catalog.manage-radiology-procedures',
         'platform.clinical-catalog.manage-theatre-procedures',
+        'platform.clinical-catalog.manage-clinical-procedures',
         'platform.clinical-catalog.manage-formulary',
         'platform.clinical-catalog.view-audit-logs',
         'billing.service-catalog.read',

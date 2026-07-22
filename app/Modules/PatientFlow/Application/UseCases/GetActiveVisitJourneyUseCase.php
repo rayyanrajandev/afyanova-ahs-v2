@@ -93,6 +93,7 @@ class GetActiveVisitJourneyUseCase
         'laboratory' => 'Laboratory',
         'pharmacy' => 'Pharmacy',
         'radiology' => 'Radiology',
+        'clinical_procedure' => 'Clinical procedure',
         'theatre_procedure' => 'Theatre procedure',
     ];
 

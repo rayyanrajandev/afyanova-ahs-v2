@@ -64,6 +64,7 @@ class PatientSummaryResponseTransformer
                 'pharmacyActive' => $activeOrders['pharmacyActive'] ?? 0,
                 'imagingActive' => $activeOrders['imagingActive'] ?? 0,
                 'procedureActive' => $activeOrders['procedureActive'] ?? 0,
+                'clinicalProcedureActive' => $activeOrders['clinicalProcedureActive'] ?? 0,
             ],
             'upcomingAppointment' => $upcomingAppointment !== null ? [
                 'id' => $upcomingAppointment['id'] ?? null,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { setModulePathRules } from '@/config/facilityPageEntitlements';
 import AppIcon from '@/components/AppIcon.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -54,6 +55,7 @@ const BADGE_HREF_MAP: Record<string, string> = {
     '/triage/queue': 'triage-queue',
     '/clinician/queue': 'clinician-queue',
     '/emergency/queue': 'emergency-queue',
+    '/clinical-procedure-orders': 'clinical-procedure',
     '/laboratory-orders': 'laboratory',
     '/radiology-orders': 'radiology',
     '/pharmacy-orders': 'pharmacy',
@@ -93,9 +95,46 @@ const permissionsLoaded = computed(
 );
 const resolvedPermissionNames = computed(() => permissionNames.value ?? []);
 
+// Populate module-derived facility path rules from the module registry (config/modules.php).
+{
+    const rules = (usePage().props.facilityPathRules ?? []) as {
+        path_prefix: string;
+        required_all?: string[];
+        required_any?: string[];
+    }[];
+    setModulePathRules(
+        rules.map((r) => ({
+            pathPrefix: r.path_prefix,
+            ...(r.required_all ? { requiredAll: r.required_all } : {}),
+            ...(r.required_any ? { requiredAny: r.required_any } : {}),
+        })),
+    );
+}
+
+const moduleNavItems = computed(() =>
+    ((usePage().props.moduleNavCatalog ?? []) as {
+        title: string;
+        href: string;
+        icon: string;
+        section: string;
+        sub_group?: string;
+        permission_prefixes: string[];
+        help_note?: string;
+    }[]).map((item) => ({
+        id: `module:${item.href}`,
+        title: item.title,
+        href: item.href,
+        iconName: item.icon,
+        section: item.section as NavSectionKey,
+        subGroup: item.sub_group,
+        permissionPrefixes: item.permission_prefixes,
+        helpNote: item.help_note,
+    })),
+);
+
 const visibleNavItems = computed(() =>
     filterSidebarNavCatalogItems(
-        appNavCatalog,
+        [...appNavCatalog, ...moduleNavItems.value],
         resolvedPermissionNames.value,
         hasUniversalAdminAccess.value,
         facilityEntitlementNames.value,

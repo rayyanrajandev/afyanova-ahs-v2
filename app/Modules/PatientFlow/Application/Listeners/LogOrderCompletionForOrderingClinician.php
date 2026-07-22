@@ -6,6 +6,7 @@ use App\Modules\Laboratory\Domain\Events\LaboratoryOrderCompleted;
 use App\Modules\PatientFlow\Application\UseCases\GetActiveVisitJourneyUseCase;
 use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
+use App\Modules\ClinicalProcedure\Domain\Events\ClinicalProcedureOrderCompleted;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -56,6 +57,17 @@ class LogOrderCompletionForOrderingClinician
         $this->log(
             sourceEvent: 'radiology_order_completed',
             orderId: $event->radiologyOrderId,
+            patientId: $event->patientId,
+            appointmentId: $event->appointmentId,
+            orderedByUserId: $event->orderedByUserId,
+        );
+    }
+
+    public function handleClinicalProcedureOrderCompleted(ClinicalProcedureOrderCompleted $event): void
+    {
+        $this->log(
+            sourceEvent: 'clinical_procedure_order_completed',
+            orderId: $event->clinicalProcedureOrderId,
             patientId: $event->patientId,
             appointmentId: $event->appointmentId,
             orderedByUserId: $event->orderedByUserId,

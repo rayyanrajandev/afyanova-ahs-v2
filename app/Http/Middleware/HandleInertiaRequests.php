@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Modules\Platform\Application\Services\FacilitySubscriptionAccessService;
+use App\Modules\Platform\Application\Services\ModuleRegistryService;
 use App\Modules\Platform\Application\Support\CredentialLinkDeliveryPolicy;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
@@ -65,6 +66,11 @@ class HandleInertiaRequests extends Middleware
                 'uploadLimits' => fn (): array => $this->platformUploadLimits(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'moduleNavCatalog' => fn (): array => app(ModuleRegistryService::class)->buildNavCatalog(),
+            'moduleNavSections' => fn (): array => app(ModuleRegistryService::class)->navSections(),
+            'moduleNavSectionOrder' => fn (): array => app(ModuleRegistryService::class)->navSectionOrder(),
+            'moduleNavSubGroups' => fn (): array => app(ModuleRegistryService::class)->navSubGroups(),
+            'facilityPathRules' => fn (): array => app(ModuleRegistryService::class)->buildFacilityPathRules(),
         ];
     }
 

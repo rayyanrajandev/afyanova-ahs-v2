@@ -9,6 +9,7 @@ use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffInitiated;
 use App\Modules\Notifications\Application\Listeners\RouteNotificationsFromDomainEvents;
 use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
+use App\Modules\ClinicalProcedure\Domain\Events\ClinicalProcedureOrderCompleted;
 use App\Modules\Reception\Domain\Events\AppointmentCheckedIn;
 use App\Modules\ServiceRequest\Domain\Events\ServiceRequestStatusChanged;
 use Illuminate\Support\Facades\Event;
@@ -41,6 +42,10 @@ class NotificationsServiceProvider extends ServiceProvider
         Event::listen(
             RadiologyOrderCompleted::class,
             [RouteNotificationsFromDomainEvents::class, 'handleRadiologyOrderCompleted'],
+        );
+        Event::listen(
+            ClinicalProcedureOrderCompleted::class,
+            [RouteNotificationsFromDomainEvents::class, 'handleClinicalProcedureOrderCompleted'],
         );
         Event::listen(
             MedicalRecordHandoffInitiated::class,

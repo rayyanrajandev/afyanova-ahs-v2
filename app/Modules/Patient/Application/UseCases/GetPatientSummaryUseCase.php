@@ -22,6 +22,8 @@ use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ClinicalProcedure\Domain\ValueObjects\ClinicalProcedureOrderStatus;
+use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
 use App\Modules\TheatreProcedure\Domain\ValueObjects\TheatreProcedureStatus;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
 use Illuminate\Support\Carbon;
@@ -214,6 +216,15 @@ class GetPatientSummaryUseCase
             ];
         }
 
+        $latestClinicalProcedure = ClinicalProcedureOrderModel::query()->where('patient_id', $patientId)->latest('ordered_at')->first();
+        if ($latestClinicalProcedure !== null) {
+            $entries[] = [
+                'type' => 'clinical_procedure',
+                'label' => 'Clinical procedure: '.($latestClinicalProcedure->procedure_description ?? 'Unknown procedure'),
+                'occurredAt' => $latestClinicalProcedure->ordered_at,
+            ];
+        }
+
         $latestInvoice = BillingInvoiceModel::query()->where('patient_id', $patientId)->latest('created_at')->first();
         if ($latestInvoice !== null) {
             $entries[] = [
@@ -252,6 +263,10 @@ class GetPatientSummaryUseCase
             'procedureActive' => TheatreProcedureModel::query()
                 ->where('patient_id', $patientId)
                 ->whereIn('status', self::ACTIVE_THEATRE_PROCEDURE_STATUSES)
+                ->count(),
+            'clinicalProcedureActive' => ClinicalProcedureOrderModel::query()
+                ->where('patient_id', $patientId)
+                ->whereIn('status', ClinicalProcedureOrderStatus::openWorklistValues())
                 ->count(),
         ];
     }

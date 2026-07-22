@@ -10,6 +10,7 @@ use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -129,6 +130,7 @@ class ListCashierQueueUseCase
             $outer->orWhereExists(fn (QueryBuilder $q) => $this->labUnbilledExists($q));
             $outer->orWhereExists(fn (QueryBuilder $q) => $this->pharmacyUnbilledExists($q));
             $outer->orWhereExists(fn (QueryBuilder $q) => $this->radiologyUnbilledExists($q));
+            $outer->orWhereExists(fn (QueryBuilder $q) => $this->clinicalProcedureUnbilledExists($q));
             $outer->orWhereExists(fn (QueryBuilder $q) => $this->theatreUnbilledExists($q));
         });
     }
@@ -185,6 +187,17 @@ class ListCashierQueueUseCase
         $query->select(\DB::raw(1))
             ->from('radiology_orders')
             ->whereColumn('radiology_orders.patient_id', 'patients.id')
+            ->where(function (QueryBuilder $q) {
+                $q->where('status', 'completed')->orWhereNotNull('completed_at');
+            })
+            ->whereNull('entered_in_error_at');
+    }
+
+    private function clinicalProcedureUnbilledExists(QueryBuilder $query): void
+    {
+        $query->select(\DB::raw(1))
+            ->from('clinical_procedure_orders')
+            ->whereColumn('clinical_procedure_orders.patient_id', 'patients.id')
             ->where(function (QueryBuilder $q) {
                 $q->where('status', 'completed')->orWhereNotNull('completed_at');
             })
@@ -296,6 +309,18 @@ class ListCashierQueueUseCase
             ->pluck('cnt', 'patient_id')
             ->toArray();
 
+        $clinicalProcedureCount = ClinicalProcedureOrderModel::query()
+            ->select('patient_id', \DB::raw('COUNT(*) as cnt'))
+            ->whereIn('patient_id', $patientIds)
+            ->where(function ($q) {
+                $q->where('status', 'completed')
+                    ->orWhereNotNull('completed_at');
+            })
+            ->whereNull('entered_in_error_at')
+            ->groupBy('patient_id')
+            ->pluck('cnt', 'patient_id')
+            ->toArray();
+
         $theatreCount = TheatreProcedureModel::query()
             ->select('patient_id', \DB::raw('COUNT(*) as cnt'))
             ->whereIn('patient_id', $patientIds)
@@ -312,6 +337,7 @@ class ListCashierQueueUseCase
             $counts[$pid] = ($labCount[$pid] ?? 0)
                 + ($pharmacyCount[$pid] ?? 0)
                 + ($radiologyCount[$pid] ?? 0)
+                + ($clinicalProcedureCount[$pid] ?? 0)
                 + ($theatreCount[$pid] ?? 0);
         }
 
