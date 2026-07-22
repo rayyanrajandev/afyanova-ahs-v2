@@ -674,7 +674,13 @@ const createCategoryWorkflowBadges = computed(() => []);
 
 const hasCreateItemDraftContent = computed(() => itemFormHasDraftContent(itemCreateForm));
 const { restoredDraft: restoredCreateItemDraft, clearPersistedDraft: clearPersistedCreateItemDraft } = useWorkflowDraftPersistence<InventoryItemFormState>({ key: INVENTORY_ITEM_CREATE_DRAFT_STORAGE_KEY, shouldPersist: hasCreateItemDraftContent, capture: () => createEmptyItemForm(), restore: () => {}, canRestore: () => false });
-const itemCreateSubmitReason = computed(() => null);
+const itemCreateSubmitReason = computed(() => {
+    if (!itemCreateForm.defaultWarehouseId.trim()) {
+        return 'Choose a default warehouse before creating this inventory item.';
+    }
+
+    return null;
+});
 const itemCreateSubmitDisabled = computed(() => itemCreateSubmitting.value || itemCreateSubmitReason.value !== null);
 const hasPendingCreateItemWorkflow = computed(() => hasCreateItemDraftContent.value);
 const hasPendingItemUpdateWorkflow = computed(() => Boolean(itemDetails.value) && currentItemUpdateSnapshot() !== itemUpdateSnapshot.value);

@@ -308,7 +308,7 @@ const ws = useSupplyChainPageApi();
                         <p v-if="ws.fieldError(ws.itemCreateErrors, 'binLocation')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'binLocation') }}</p>
                     </div>
                     <div class="grid gap-2">
-                        <Label for="inv-item-default-warehouse">Default Warehouse</Label>
+                        <Label for="inv-item-default-warehouse">Default Warehouse <span class="text-destructive">*</span></Label>
                         <Popover :open="ws.createItemWarehouseOpen" @update:open="ws.createItemWarehouseOpen = $event">
                             <PopoverTrigger as-child>
                                 <Button
@@ -331,12 +331,6 @@ const ws = useSupplyChainPageApi();
                                         <CommandEmpty>No warehouse found.</CommandEmpty>
                                         <CommandGroup>
                                             <CommandItem
-                                                value="__none__"
-                                                @select="() => { ws.itemCreateForm.defaultWarehouseId = ''; ws.createItemWarehouseOpen = false }"
-                                            >
-                                                <span class="text-muted-foreground">— None —</span>
-                                            </CommandItem>
-                                            <CommandItem
                                                 v-for="warehouse in ws.warehouses"
                                                 :key="warehouse.id"
                                                 :value="warehouse.id"
@@ -354,6 +348,7 @@ const ws = useSupplyChainPageApi();
                                 </Command>
                             </PopoverContent>
                         </Popover>
+                        <p class="text-xs text-muted-foreground">Required for stock availability, reservation, consumption, and movement posting.</p>
                         <p v-if="ws.fieldError(ws.itemCreateErrors, 'defaultWarehouseId')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'defaultWarehouseId') }}</p>
                     </div>
                     <div class="grid gap-2">

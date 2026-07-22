@@ -173,6 +173,8 @@ class InventoryProcurementController extends Controller
             'msdCode',
             'nhifCode',
             'barcode',
+            'defaultWarehouseId',
+            'defaultSupplierId',
         ];
 
         return response()->stream(function () use ($columns) {
@@ -200,6 +202,8 @@ class InventoryProcurementController extends Controller
                 'MSD-001',
                 'NHIF-001',
                 '123456789',
+                'replace-with-active-warehouse-uuid',
+                '',
             ]);
             fclose($output);
         }, 200, $headers);
@@ -226,13 +230,13 @@ class InventoryProcurementController extends Controller
             'catalogItemIds.*' => ['uuid'],
             'catalogTypes' => ['nullable', 'array'],
             'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,formulary_item'],
-            'defaultWarehouseId' => ['nullable', 'uuid'],
+            'defaultWarehouseId' => ['required', 'uuid'],
             'defaultSupplierId' => ['nullable', 'uuid'],
         ]);
 
         $result = $useCase->execute(
             catalogItemIds: $validated['catalogItemIds'] ?? null,
-            defaultWarehouseId: $validated['defaultWarehouseId'] ?? null,
+            defaultWarehouseId: $validated['defaultWarehouseId'],
             defaultSupplierId: $validated['defaultSupplierId'] ?? null,
             actorId: $request->user()?->id,
             catalogTypes: $validated['catalogTypes'] ?? null,

@@ -12,6 +12,7 @@ use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
+use Illuminate\Validation\ValidationException;
 
 class CreateInventoryItemUseCase
 {
@@ -34,6 +35,12 @@ class CreateInventoryItemUseCase
         }
 
         $clinicalCatalogItemId = $this->nullableTrimmedValue($payload['clinical_catalog_item_id'] ?? null);
+        $defaultWarehouseId = $this->nullableTrimmedValue($payload['default_warehouse_id'] ?? null);
+        if ($defaultWarehouseId === null) {
+            throw ValidationException::withMessages([
+                'defaultWarehouseId' => ['Choose a default warehouse before creating an inventory item.'],
+            ]);
+        }
 
         // When linked to a clinical catalog item, read identity fields from the catalog
         // to avoid duplicating data. The catalog is the single source of truth.
@@ -70,7 +77,7 @@ class CreateInventoryItemUseCase
             'current_stock' => 0,
             'reorder_level' => (float) ($payload['reorder_level'] ?? 0),
             'max_stock_level' => $this->nullableNumericValue($payload['max_stock_level'] ?? null),
-            'default_warehouse_id' => $payload['default_warehouse_id'] ?? null,
+            'default_warehouse_id' => $defaultWarehouseId,
             'default_supplier_id' => $payload['default_supplier_id'] ?? null,
             'status' => InventoryItemStatus::ACTIVE->value,
         ];

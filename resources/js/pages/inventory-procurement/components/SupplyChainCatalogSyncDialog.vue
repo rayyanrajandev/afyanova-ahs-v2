@@ -37,12 +37,24 @@ const catalogTypeOptions = [
 ];
 
 const selectedCategory = ref('');
+const defaultWarehouseId = ref('');
 const catalogItems = ref<CatalogItem[]>([]);
 const loadingItems = ref(false);
 const loadError = ref<string | null>(null);
 const selectedItemIds = ref<Set<string>>(new Set());
 const syncing = ref(false);
 const syncResult = ref<SyncResult | null>(null);
+
+const syncSubmitReason = computed(() => {
+    if (!defaultWarehouseId.value) {
+        return 'Choose the default warehouse for created inventory items.';
+    }
+    if (selectedItemIds.value.size === 0) {
+        return 'Select at least one catalog item to sync.';
+    }
+
+    return null;
+});
 
 const selectAllChecked = computed<boolean | 'indeterminate'>({
     get() {
@@ -106,7 +118,14 @@ async function loadItems() {
 
 async function executeSync() {
     const ids = [...selectedItemIds.value];
-    if (ids.length === 0) return;
+    if (syncSubmitReason.value) {
+        syncResult.value = {
+            created: 0,
+            updated: 0,
+            errors: [{ catalogItemId: '', code: '', name: 'Catalog sync', error: syncSubmitReason.value }],
+        };
+        return;
+    }
 
     syncing.value = true;
     syncResult.value = null;
@@ -115,7 +134,7 @@ async function executeSync() {
         const response = await apiRequestJson<SyncResult>('POST', '/inventory-procurement/items/bulk-sync-from-catalog', {
             body: {
                 catalogItemIds: ids,
-                defaultWarehouseId: null,
+                defaultWarehouseId: defaultWarehouseId.value,
                 defaultSupplierId: null,
             },
         });
@@ -135,6 +154,7 @@ async function executeSync() {
 function closeDialog() {
     (ws as any).catalogSyncDialogOpen = false;
     selectedCategory.value = '';
+    defaultWarehouseId.value = '';
     catalogItems.value = [];
     selectedItemIds.value = new Set();
     syncResult.value = null;
@@ -187,14 +207,36 @@ watch(selectedCategory, () => {
 
         <!-- Category + item list -->
         <div v-if="!syncResult" class="flex min-h-0 flex-1 flex-col">
-            <!-- Category dropdown -->
-            <div class="border-b px-4 py-3">
-                <label class="mb-1.5 block text-xs font-medium text-muted-foreground">Category</label>
-                <Select v-model="selectedCategory" @update:model-value="loadItems">
-                    <SelectTrigger class="w-full">
-                        <SelectValue placeholder="Choose a category..." />
-                    </SelectTrigger>
-                    <SelectContent>
+            <!-- Warehouse + category dropdowns -->
+            <div class="grid gap-3 border-b px-4 py-3 sm:grid-cols-2">
+                <div class="grid gap-1.5">
+                    <label for="catalog-sync-default-warehouse" class="block text-xs font-medium text-muted-foreground">
+                        Default Warehouse <span class="text-destructive">*</span>
+                    </label>
+                    <Select v-model="defaultWarehouseId">
+                        <SelectTrigger id="catalog-sync-default-warehouse" class="w-full">
+                            <SelectValue placeholder="Choose a warehouse..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                v-for="warehouse in (ws as any).warehouses ?? []"
+                                :key="warehouse.id"
+                                :value="warehouse.id"
+                            >
+                                {{ (ws as any).warehouseLabel?.(warehouse.id) ?? warehouse.name ?? warehouse.id }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p class="text-xs text-muted-foreground">Required for stock availability, reservation, and movement posting.</p>
+                </div>
+
+                <div class="grid gap-1.5">
+                    <label for="catalog-sync-category" class="block text-xs font-medium text-muted-foreground">Category</label>
+                    <Select v-model="selectedCategory" @update:model-value="loadItems">
+                        <SelectTrigger id="catalog-sync-category" class="w-full">
+                            <SelectValue placeholder="Choose a category..." />
+                        </SelectTrigger>
+                        <SelectContent>
                         <SelectItem
                             v-for="ct in catalogTypeOptions"
                             :key="ct.value"
@@ -205,8 +247,9 @@ watch(selectedCategory, () => {
                                 {{ ct.label }}
                             </span>
                         </SelectItem>
-                    </SelectContent>
-                </Select>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             <!-- Loading -->
@@ -282,7 +325,7 @@ watch(selectedCategory, () => {
             </Button>
             <Button
                 v-if="!syncResult"
-                :disabled="selectedItemIds.size === 0 || syncing"
+                :disabled="syncing || syncSubmitReason !== null"
                 class="gap-1.5"
                 @click="executeSync"
             >

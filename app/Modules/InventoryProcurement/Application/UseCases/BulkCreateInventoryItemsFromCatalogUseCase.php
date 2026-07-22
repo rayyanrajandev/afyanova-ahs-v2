@@ -5,8 +5,10 @@ namespace App\Modules\InventoryProcurement\Application\UseCases;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
+use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryWarehouseStatus;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryWarehouseModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
@@ -16,7 +18,7 @@ use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class BulkCreateInventoryItemsFromCatalogUseCase
 {
@@ -39,7 +41,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
      *
      * @param  list<string>|null  $catalogItemIds  Optional subset of catalog item IDs to sync.
      *                                             If null, syncs all eligible active formulary items.
-     * @param  string|null  $defaultWarehouseId  Default warehouse UUID for all created items.
+     * @param  string|null  $defaultWarehouseId  Required default warehouse UUID for all created items.
      * @param  string|null  $defaultSupplierId  Default supplier UUID for all created items.
      * @param  list<string>|null  $catalogTypes  Optional subset of catalog types; null = formulary_item only
      * @return array{created: positive-int, updated: positive-int, errors: list<array{catalogItemId: string, code: string, name: string, error: string}>}
@@ -55,6 +57,17 @@ class BulkCreateInventoryItemsFromCatalogUseCase
 
         $tenantId = $this->platformScopeContext->tenantId();
         $facilityId = $this->platformScopeContext->facilityId();
+        $defaultWarehouseId = trim((string) ($defaultWarehouseId ?? ''));
+        if ($defaultWarehouseId === '') {
+            throw ValidationException::withMessages([
+                'defaultWarehouseId' => ['Choose a default warehouse before syncing catalog items to inventory.'],
+            ]);
+        }
+        if (! $this->defaultWarehouseIsUsable($defaultWarehouseId)) {
+            throw ValidationException::withMessages([
+                'defaultWarehouseId' => ['The selected warehouse is not active or is outside the current facility scope.'],
+            ]);
+        }
 
         $catalogTypeFilter = (is_array($catalogTypes) && $catalogTypes !== [])
             ? $catalogTypes
@@ -286,6 +299,19 @@ class BulkCreateInventoryItemsFromCatalogUseCase
     {
         return $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
             || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
+    }
+
+    private function defaultWarehouseIsUsable(string $warehouseId): bool
+    {
+        $query = InventoryWarehouseModel::query()
+            ->whereKey($warehouseId)
+            ->where('status', InventoryWarehouseStatus::ACTIVE->value);
+
+        if ($this->isPlatformScopingEnabled()) {
+            app(PlatformScopeQueryApplier::class)->apply($query);
+        }
+
+        return $query->exists();
     }
 
     /**

@@ -1361,14 +1361,14 @@ class InventoryExtendedController extends Controller
         $validated = $request->validate([
             'catalogItemIds' => ['nullable', 'array'],
             'catalogItemIds.*' => ['string', 'uuid'],
-            'defaultWarehouseId' => ['nullable', 'uuid'],
+            'defaultWarehouseId' => ['required', 'uuid'],
             'defaultSupplierId' => ['nullable', 'uuid'],
         ]);
 
         try {
             $result = $useCase->execute(
                 catalogItemIds: $validated['catalogItemIds'] ?? null,
-                defaultWarehouseId: $validated['defaultWarehouseId'] ?? null,
+                defaultWarehouseId: $validated['defaultWarehouseId'],
                 defaultSupplierId: $validated['defaultSupplierId'] ?? null,
                 actorId: $request->user()?->id,
             );
