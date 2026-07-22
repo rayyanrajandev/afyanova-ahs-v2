@@ -308,10 +308,11 @@ const ws = useSupplyChainPageApi();
                         <p v-if="ws.fieldError(ws.itemCreateErrors, 'binLocation')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'binLocation') }}</p>
                     </div>
                     <div class="grid gap-2">
-                        <Label>Default Warehouse</Label>
+                        <Label for="inv-item-default-warehouse">Default Warehouse</Label>
                         <Popover :open="ws.createItemWarehouseOpen" @update:open="ws.createItemWarehouseOpen = $event">
                             <PopoverTrigger as-child>
                                 <Button
+                                    id="inv-item-default-warehouse"
                                     type="button"
                                     variant="outline"
                                     :disabled="ws.itemCreateSubmitting"
@@ -356,10 +357,11 @@ const ws = useSupplyChainPageApi();
                         <p v-if="ws.fieldError(ws.itemCreateErrors, 'defaultWarehouseId')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'defaultWarehouseId') }}</p>
                     </div>
                     <div class="grid gap-2">
-                        <Label>Default Supplier</Label>
+                        <Label for="inv-item-default-supplier">Default Supplier</Label>
                         <Popover :open="ws.createItemSupplierOpen" @update:open="ws.createItemSupplierOpen = $event">
                             <PopoverTrigger as-child>
                                 <Button
+                                    id="inv-item-default-supplier"
                                     type="button"
                                     variant="outline"
                                     :disabled="ws.itemCreateSubmitting"

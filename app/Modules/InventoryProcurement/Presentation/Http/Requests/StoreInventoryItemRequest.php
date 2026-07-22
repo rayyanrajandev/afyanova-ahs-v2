@@ -4,6 +4,8 @@ namespace App\Modules\InventoryProcurement\Presentation\Http\Requests;
 
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryVenClassification;
+use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryWarehouseStatus;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryWarehouseModel;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogItemStatus;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
@@ -61,7 +63,7 @@ class StoreInventoryItemRequest extends FormRequest
             'controlledSubstanceSchedule' => ['nullable', 'string', 'max:20', 'required_if:isControlledSubstance,true'],
             'reorderLevel' => ['nullable', 'numeric', 'min:0'],
             'maxStockLevel' => ['nullable', 'numeric', 'min:0'],
-            'defaultWarehouseId' => ['nullable', 'uuid'],
+            'defaultWarehouseId' => ['required', 'uuid'],
             'defaultSupplierId' => ['nullable', 'uuid'],
         ];
     }
@@ -95,6 +97,11 @@ class StoreInventoryItemRequest extends FormRequest
 
             if ($hasCatalogLink && ! $this->clinicalCatalogItemIsUsable($clinicalCatalogItemId)) {
                 $validator->errors()->add('clinicalCatalogItemId', 'The selected clinical medicine is not active or is outside the current facility scope.');
+            }
+
+            $defaultWarehouseId = trim((string) $this->input('defaultWarehouseId', ''));
+            if ($defaultWarehouseId !== '' && ! $this->defaultWarehouseIsUsable($defaultWarehouseId)) {
+                $validator->errors()->add('defaultWarehouseId', 'The selected warehouse is not active or is outside the current facility scope.');
             }
 
             // When linked to a clinical catalog, identity fields are sourced from the catalog.
@@ -140,6 +147,19 @@ class StoreInventoryItemRequest extends FormRequest
         $value = $this->input('category');
 
         return is_string($value) ? InventoryItemCategory::tryFrom($value) : null;
+    }
+
+    private function defaultWarehouseIsUsable(string $warehouseId): bool
+    {
+        $query = InventoryWarehouseModel::query()
+            ->whereKey($warehouseId)
+            ->where('status', InventoryWarehouseStatus::ACTIVE->value);
+
+        if ($this->isPlatformScopingEnabled()) {
+            app(PlatformScopeQueryApplier::class)->apply($query);
+        }
+
+        return $query->exists();
     }
 
     private function clinicalCatalogItemIsUsable(string $clinicalCatalogItemId): bool
