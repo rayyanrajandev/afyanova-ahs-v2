@@ -66,7 +66,7 @@ type CorporatePayerContractSelection = {
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
     { title: 'Corporate Billing', href: '/billing-corporate' },
 ];
 
@@ -400,7 +400,7 @@ onMounted(async () => {
                         <Link href="/billing-payer-contracts">Payer Contracts</Link>
                     </Button>
                     <Button variant="outline" as-child>
-                        <Link href="/billing-invoices">Billing Invoices</Link>
+                        <Link href="/billing">Billing Invoices</Link>
                     </Button>
                     <Button variant="outline" as-child>
                         <Link href="/billing-financial-reports">Financial Reports</Link>
@@ -582,7 +582,7 @@ onMounted(async () => {
                                                     <td class="py-2 pr-4"><Badge :variant="statusVariant(invoice.status)">{{ formatStatusLabel(invoice.status) }}</Badge></td>
                                                     <td class="py-2 pr-4">
                                                         <Button size="sm" variant="outline" as-child>
-                                                            <Link href="/billing-invoices">Open billing</Link>
+                                                            <Link href="/billing">Open billing</Link>
                                                         </Button>
                                                     </td>
                                                 </tr>

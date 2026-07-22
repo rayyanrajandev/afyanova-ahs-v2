@@ -14,9 +14,9 @@ return [
 
     const actions = (() => {
 return [
-            { label: 'Billing drafts', icon: 'receipt', variant: 'default', href: '/billing-invoices?status=draft' },
+            { label: 'Billing drafts', icon: 'receipt', variant: 'default', href: '/billing?status=draft' },
             { label: 'Claim exceptions', icon: 'alert-triangle', variant: 'outline', href: '/claims-insurance?reconciliationExceptionStatus=open' },
-            { label: 'All invoices', icon: 'receipt', variant: 'outline', href: '/billing-invoices' },
+            { label: 'All invoices', icon: 'receipt', variant: 'outline', href: '/billing' },
         ];
     })();
 
@@ -27,7 +27,7 @@ return (lists.draftInvoices ?? []).slice(0, 3).map((item: any) => ({
             subtitle: runtime.formatMoney(item.totalAmount, item.currencyCode),
             meta: item.paymentDueAt ? `Due ${runtime.formatDateTime(item.paymentDueAt)}` : `Created ${runtime.formatDateTime(item.createdAt)}`,
             status: runtime.formatEnumLabel(String(item.status ?? 'draft')),
-            href: '/billing-invoices?status=draft',
+            href: '/billing?status=draft',
             actionLabel: 'Open billing',
         }));
     })();
@@ -59,9 +59,9 @@ const openClaims = helpers.numberValue(counts.claimOpen, 'total');
                 : 'Review invoice drafts and partially paid balances next.',
             primaryAction: {
                 label: Number(openClaims ?? 0) > 0 ? 'Open claim queue' : 'Open billing drafts',
-                href: Number(openClaims ?? 0) > 0 ? '/claims-insurance?reconciliationExceptionStatus=open' : '/billing-invoices?status=draft',
+                href: Number(openClaims ?? 0) > 0 ? '/claims-insurance?reconciliationExceptionStatus=open' : '/billing?status=draft',
             },
-            secondaryAction: { label: 'Open billing', href: '/billing-invoices' },
+            secondaryAction: { label: 'Open billing', href: '/billing' },
             chips: [
                 { label: 'Open claims', value: openClaims },
                 { label: 'Draft invoices', value: draftInvoices },
@@ -84,7 +84,7 @@ return [
                 label: 'Draft invoices awaiting issue',
                 note: 'Revenue still depends on invoice completion or release.',
                 value: helpers.numberValue(counts.billing, 'draft'),
-                href: '/billing-invoices?status=draft',
+                href: '/billing?status=draft',
                 actionLabel: 'Open billing drafts',
                 icon: 'receipt',
             },
@@ -92,7 +92,7 @@ return [
                 label: 'Partially paid invoices',
                 note: 'Outstanding balances still need cashier follow-up.',
                 value: helpers.numberValue(counts.billing, 'partially_paid'),
-                href: '/billing-invoices',
+                href: '/billing',
                 actionLabel: 'Open billing',
                 icon: 'receipt',
             },

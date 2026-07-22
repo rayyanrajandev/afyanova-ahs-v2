@@ -62,7 +62,7 @@ const item = computed<CatalogItem | null>(() => detail.data.value ?? null);
 const payerImpact = useServiceCatalogPayerImpact(() => activeItemId.value, canReadPayerContracts);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
     { title: 'Billing Service Catalog', href: '/billing-service-catalog' },
     { title: item.value?.serviceName || 'Service price', href: '#' },
 ]);

@@ -99,7 +99,7 @@ type DepartmentFilterOption = {
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
     { title: 'Financial Reports', href: '/billing-financial-reports' },
 ];
 
@@ -391,11 +391,11 @@ async function loadReports(): Promise<void> {
     try {
         const [controlsResponse, revenueResponse] = await Promise.all([
             fetchJson<ApiResponse<FinancialControlsSummary>>(
-                '/billing-invoices/financial-controls/summary',
+                '/billing/financial-controls/summary',
                 queryParams(true),
             ),
             fetchJson<ApiResponse<RevenueRecognitionSummary>>(
-                '/billing-invoices/financial-controls/revenue-recognition-summary',
+                '/billing/financial-controls/revenue-recognition-summary',
                 queryParams(false),
             ),
         ]);
@@ -420,7 +420,7 @@ async function loadDepartmentOptions(): Promise<void> {
 
     try {
         const response = await fetchJson<ApiResponse<DepartmentFilterOption[]>>(
-            '/billing-invoices/financial-controls/department-options',
+            '/billing/financial-controls/department-options',
             new URLSearchParams(),
         );
         departmentOptions.value = response.data;
@@ -453,7 +453,7 @@ function resetFilters(): void {
 }
 
 function exportControlsCsv(): void {
-    const url = new URL('/api/v1/billing-invoices/financial-controls/summary/export', window.location.origin);
+    const url = new URL('/api/v1/billing/financial-controls/summary/export', window.location.origin);
     queryParams(true).forEach((value, key) => url.searchParams.set(key, value));
     window.open(url.toString(), '_blank', 'noopener');
 }

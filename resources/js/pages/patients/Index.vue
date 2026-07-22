@@ -1343,7 +1343,7 @@ const visitHandoffPrimaryHref = computed(() => {
 
     if (visitHandoffMode.value === 'billing') {
         const appointment = visitHandoffActiveAppointment.value;
-        return patientTimelineHref('/billing-invoices', patient.id, {
+        return patientTimelineHref('/billing', patient.id, {
             appointmentId: appointment?.id ?? null,
         });
     }
@@ -6619,7 +6619,7 @@ onMounted(() => {
                                                     <Link
                                                         :href="
                                                             patientContextHref(
-                                                                '/billing-invoices',
+                                                                '/billing',
                                                                 patient,
                                                             )
                                                         "
@@ -8837,7 +8837,7 @@ onMounted(() => {
                                             <Link
                                                 :href="
                                                     patientTimelineHref(
-                                                        '/billing-invoices',
+                                                        '/billing',
                                                         visitHandoffPatient.id,
                                                         {
                                                             appointmentId:

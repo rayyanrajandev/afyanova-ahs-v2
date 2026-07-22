@@ -781,7 +781,7 @@ class BillingInvoiceController extends Controller
         $downloadUrl = null;
         if ($auditExportJob->status === 'completed' && $auditExportJob->file_path) {
             $downloadUrl = sprintf(
-                '/api/v1/billing-invoices/%s/audit-logs/export-jobs/%s/download',
+                '/api/v1/billing/%s/audit-logs/export-jobs/%s/download',
                 $resourceId,
                 $auditExportJob->id,
             );

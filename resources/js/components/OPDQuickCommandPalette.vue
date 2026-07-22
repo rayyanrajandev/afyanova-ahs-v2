@@ -113,7 +113,7 @@ const routes: CommandRoute[] = [
     },
     {
         label: 'Billing Invoices',
-        href: '/billing-invoices',
+        href: '/billing',
         icon: 'receipt',
         shortcut: 'G B',
     },
@@ -338,7 +338,7 @@ const createWorkflowRoutes: CommandRoute[] = [
     },
     {
         label: 'New Billing Invoice',
-        href: '/billing-invoices',
+        href: '/billing',
         icon: 'receipt',
         shortcut: 'C B',
     },
@@ -582,7 +582,7 @@ const queuePresets = computed<CommandPreset[]>(() => {
         },
         {
             label: 'Billing - Today Collections',
-            href: buildHref('/billing-invoices', {
+            href: buildHref('/billing', {
                 paymentActivityFrom: today,
                 paymentActivityTo: today,
             }),
@@ -590,7 +590,7 @@ const queuePresets = computed<CommandPreset[]>(() => {
         },
         {
             label: 'Billing - Outstanding (Issued + Partial)',
-            href: buildHref('/billing-invoices', {
+            href: buildHref('/billing', {
                 'statusIn[]': ['issued', 'partially_paid'],
                 from: today,
             }),
@@ -598,17 +598,17 @@ const queuePresets = computed<CommandPreset[]>(() => {
         },
         {
             label: 'Billing - Issued Invoices',
-            href: buildHref('/billing-invoices', { status: 'issued', from: today }),
+            href: buildHref('/billing', { status: 'issued', from: today }),
             icon: 'receipt',
         },
         {
             label: 'Billing - Draft Invoices',
-            href: buildHref('/billing-invoices', { status: 'draft', from: today }),
+            href: buildHref('/billing', { status: 'draft', from: today }),
             icon: 'receipt',
         },
         {
             label: 'Billing - Partially Paid',
-            href: buildHref('/billing-invoices', {
+            href: buildHref('/billing', {
                 status: 'partially_paid',
                 from: today,
             }),
@@ -616,7 +616,7 @@ const queuePresets = computed<CommandPreset[]>(() => {
         },
         {
             label: 'Billing - Paid Invoices',
-            href: buildHref('/billing-invoices', { status: 'paid', from: today }),
+            href: buildHref('/billing', { status: 'paid', from: today }),
             icon: 'receipt',
         },
         {
@@ -759,7 +759,7 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
         },
         {
             label: 'Open Billing - Today Collections (Compact)',
-            href: buildHref('/billing-invoices', {
+            href: buildHref('/billing', {
                 paymentActivityFrom: today,
                 paymentActivityTo: today,
             }),
@@ -768,7 +768,7 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
         },
         {
             label: 'Open Billing - Outstanding This Week (Compact)',
-            href: buildHref('/billing-invoices', {
+            href: buildHref('/billing', {
                 'statusIn[]': ['issued', 'partially_paid'],
                 from: today,
                 to: weekAhead,
@@ -778,7 +778,7 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
         },
         {
             label: 'Open Billing - Issued This Week (Compact)',
-            href: buildHref('/billing-invoices', {
+            href: buildHref('/billing', {
                 status: 'issued',
                 from: today,
                 to: weekAhead,
@@ -788,7 +788,7 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
         },
         {
             label: 'Open Billing - Partially Paid Today (Compact)',
-            href: buildHref('/billing-invoices', {
+            href: buildHref('/billing', {
                 status: 'partially_paid',
                 from: today,
                 to: today,

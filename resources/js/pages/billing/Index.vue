@@ -47,7 +47,7 @@ import type { BreadcrumbItem } from '@/types';
 const { scope: platformScope } = usePlatformAccess();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
 ];
 
 const DRAFT_STORAGE_KEY = 'billing.payment-draft.v1';
@@ -156,7 +156,7 @@ const undoTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const mobileView = ref<'queue' | 'detail'>('queue');
 const isMobile = ref(false);
 
-// Deep-link support from patientChartModuleHref('/billing-invoices', ..., {
+// Deep-link support from patientChartModuleHref('/billing', ..., {
 // focusInvoiceId }) — see loadPatientByIdDirect() below.
 const deepLinkParams = new URLSearchParams(window.location.search);
 const deepLinkPatientId = deepLinkParams.get('patientId');
@@ -228,7 +228,7 @@ async function loadQueue() {
     try {
         const response = await apiRequest<CashierQueueResponse>(
             'GET',
-            '/billing-invoices/cashier-queue',
+            '/billing/cashier-queue',
             {
                 query: {
                     q: searchQuery.value.trim() || null,
@@ -269,7 +269,7 @@ async function selectPatient(entry: CashierQueueEntry) {
 
     try {
         const [invoicesResponse, candidatesResponse] = await Promise.all([
-            apiRequest<{ data: Invoice[] }>('GET', '/billing-invoices', {
+            apiRequest<{ data: Invoice[] }>('GET', '/billing', {
                 query: {
                     patientId: entry.patientId,
                     perPage: 50,
@@ -277,7 +277,7 @@ async function selectPatient(entry: CashierQueueEntry) {
                     sortDir: 'desc',
                 },
             }),
-            apiRequest<{ data: any[] }>('GET', '/billing-invoices/charge-capture-candidates', {
+            apiRequest<{ data: any[] }>('GET', '/billing/charge-capture-candidates', {
                 query: {
                     patientId: entry.patientId,
                     includeInvoiced: 'false',
@@ -301,7 +301,7 @@ async function selectPatient(entry: CashierQueueEntry) {
 }
 
 /**
- * Deep-link entry point from patientChartModuleHref('/billing-invoices',
+ * Deep-link entry point from patientChartModuleHref('/billing',
  * ..., { focusInvoiceId }) — the Patient Chart's Billing tab links straight
  * to one invoice. The cashier queue only lists patients with pending
  * payment/unbilled activity (see ListCashierQueueUseCase),
@@ -326,7 +326,7 @@ async function loadPatientByIdDirect(targetPatientId: string): Promise<void> {
                 'GET',
                 `/patients/${targetPatientId}`,
             ).catch(() => null),
-            apiRequest<{ data: Invoice[] }>('GET', '/billing-invoices', {
+            apiRequest<{ data: Invoice[] }>('GET', '/billing', {
                 query: {
                     patientId: targetPatientId,
                     perPage: 50,
@@ -334,7 +334,7 @@ async function loadPatientByIdDirect(targetPatientId: string): Promise<void> {
                     sortDir: 'desc',
                 },
             }),
-            apiRequest<{ data: any[] }>('GET', '/billing-invoices/charge-capture-candidates', {
+            apiRequest<{ data: any[] }>('GET', '/billing/charge-capture-candidates', {
                 query: {
                     patientId: targetPatientId,
                     includeInvoiced: 'false',
@@ -547,7 +547,7 @@ async function undoLastPayment() {
     notifySuccess('Payment reversed.');
 
     try {
-        await apiRequest('POST', `/billing-invoices/${entry.invoiceId}/payments/undo`, {
+        await apiRequest('POST', `/billing/${entry.invoiceId}/payments/undo`, {
             body: { amount: entry.amount, paymentMethod: entry.method },
         });
         if (patient) await selectPatient(patient);
@@ -598,7 +598,7 @@ async function recordPayment() {
     try {
         await apiRequest<PaymentResponse>(
             'POST',
-            `/billing-invoices/${invoice.id}/payments`,
+            `/billing/${invoice.id}/payments`,
             {
                 body: {
                     amount,
@@ -678,7 +678,7 @@ async function recordBulkPayment() {
     try {
         for (const inv of invoices) {
             const perInvoiceAmount = totalAmount / invoices.length;
-            await apiRequest('POST', `/billing-invoices/${inv.id}/payments`, {
+            await apiRequest('POST', `/billing/${inv.id}/payments`, {
                 body: {
                     amount: perInvoiceAmount,
                     payerType: 'self_pay',
@@ -716,13 +716,13 @@ async function addCandidateToInvoice(candidate: any) {
 
     try {
         if (draftInvoice) {
-            await apiRequest('PATCH', `/billing-invoices/${draftInvoice.id}`, {
+            await apiRequest('PATCH', `/billing/${draftInvoice.id}`, {
                 body: {
                     lineItems: [...draftInvoice.lineItems, lineItem],
                 },
             });
         } else {
-            await apiRequest('POST', '/billing-invoices', {
+            await apiRequest('POST', '/billing', {
                 body: {
                     patientId: patient.patientId,
                     invoiceDate: new Date().toISOString().slice(0, 10),
@@ -752,7 +752,7 @@ async function addCandidateToInvoice(candidate: any) {
  * payment yet — RecordBillingInvoicePaymentUseCase rejects any invoice whose
  * status isn't 'issued'. There was no UI action anywhere in this page to
  * make that transition, even though the backend already supports it via
- * PATCH /billing-invoices/{id}/status — so every draft invoice was
+ * PATCH /billing/{id}/status — so every draft invoice was
  * permanently stuck unpayable. This finalizes the draft so Record Payment
  * (and bulk payment) can proceed.
  */
@@ -763,7 +763,7 @@ async function issueInvoice(invoice: Invoice) {
     issuingInvoiceIds.value = new Set(issuingInvoiceIds.value).add(invoice.id);
 
     try {
-        await apiRequest('PATCH', `/billing-invoices/${invoice.id}/status`, {
+        await apiRequest('PATCH', `/billing/${invoice.id}/status`, {
             body: { status: 'issued' },
         });
         notifySuccess(`${invoice.invoiceNumber || 'Invoice'} issued.`);

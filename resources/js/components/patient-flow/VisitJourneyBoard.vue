@@ -290,7 +290,7 @@ function columnStats(entries: VisitJourneyEntry[]): { averageLabel: string; long
 
                 <Link
                     v-if="entry.billingStatus === 'pending'"
-                    :href="entry.patientId ? `/billing-invoices?patientId=${entry.patientId}` : '/billing-invoices'"
+                    :href="entry.patientId ? `/billing?patientId=${entry.patientId}` : '/billing'"
                     class="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 hover:underline dark:text-amber-300"
                 >
                     <span aria-hidden="true">💰</span> Billing pending

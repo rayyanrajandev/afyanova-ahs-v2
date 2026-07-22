@@ -84,13 +84,13 @@ export function useBillingPatientInvoices(
         queryFn: async () => {
             const id = toValue(patientId);
             const [invoicesResponse, candidatesResponse] = await Promise.all([
-                apiGet<{ data: BillingInvoice[] }>('/billing-invoices', {
+                apiGet<{ data: BillingInvoice[] }>('/billing', {
                     patientId: id,
                     perPage: 50,
                     sortBy: 'invoiceDate',
                     sortDir: 'desc',
                 }),
-                apiGet<{ data: ChargeCaptureCandidate[] }>('/billing-invoices/charge-capture-candidates', {
+                apiGet<{ data: ChargeCaptureCandidate[] }>('/billing/charge-capture-candidates', {
                     patientId: id,
                     includeInvoiced: 'false',
                     limit: 100,

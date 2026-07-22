@@ -16,7 +16,7 @@ import { messageFromUnknown, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Invoices', href: '/billing-invoices' },
+    { title: 'Invoices', href: '/billing' },
     { title: 'Refunds', href: '/billing-refunds' },
 ];
 

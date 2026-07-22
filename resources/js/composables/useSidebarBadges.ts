@@ -82,7 +82,7 @@ export function useSidebarBadges() {
 
     const billing = useQuery({
         queryKey: ['sidebar-billing-status-counts'],
-        queryFn: async () => (await apiGet<StatusCountsResponse<BillingInvoiceStatusCounts>>('/billing-invoices/status-counts')).data,
+        queryFn: async () => (await apiGet<StatusCountsResponse<BillingInvoiceStatusCounts>>('/billing/status-counts')).data,
         refetchInterval: 30_000,
     });
 
@@ -94,7 +94,7 @@ export function useSidebarBadges() {
         'laboratory': sumFields(lab.data.value, 'ordered', 'collected', 'in_progress'),
         'radiology': sumFields(radiology.data.value, 'ordered', 'in_progress'),
         'pharmacy': sumFields(pharmacy.data.value, 'pending', 'in_preparation', 'partially_dispensed'),
-        'billing-invoices': sumFields(billing.data.value, 'issued', 'partially_paid'),
+        'billing': sumFields(billing.data.value, 'issued', 'partially_paid'),
         'pending-approvals': 0,
     }));
 

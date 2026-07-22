@@ -128,7 +128,7 @@ function printDocument() {
                 Print
             </Button>
             <Button as-child variant="outline" class="print:hidden">
-                <a :href="`/billing-invoices/${invoice.id}/payments/${payment.id}/receipt/pdf`" class="inline-flex items-center gap-2">
+                <a :href="`/billing/${invoice.id}/payments/${payment.id}/receipt/pdf`" class="inline-flex items-center gap-2">
                     <AppIcon name="download" class="size-3.5" />
                     Download PDF
                 </a>

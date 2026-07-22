@@ -157,7 +157,7 @@ function handlePaymentComplete(): void {
                     Preview
                 </Button>
                 <Button size="sm" variant="ghost" class="gap-1.5" as-child>
-                    <a :href="`/billing-invoices/${invoice.id}/print`" target="_blank" rel="noopener">
+                    <a :href="`/billing/${invoice.id}/print`" target="_blank" rel="noopener">
                         <AppIcon name="printer" class="size-3.5" />
                         Print
                     </a>

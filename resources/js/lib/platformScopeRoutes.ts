@@ -12,7 +12,7 @@ export const operationalFacilityScopePathPrefixes = [
     '/theatre-procedures',
     '/billing',
     '/billing-cash',
-    '/billing-invoices',
+    '/billing',
     '/billing-payment-plans',
     '/billing-refunds',
     '/billing-discounts',

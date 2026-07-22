@@ -46,7 +46,6 @@ use App\Modules\MedicalRecord\Presentation\Http\Transformers\MedicalRecordVersio
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MedicalRecordController extends Controller
@@ -171,7 +170,13 @@ class MedicalRecordController extends Controller
 
         abort_if($record === null, 404, 'Medical record not found.');
 
-        Gate::authorize('updateDraft', $record);
+        // Auth is already enforced pre-write by route middleware
+        // (can:medical.records.draft.update,id) and UpdateMedicalRecordRequest.
+        // A post-write Gate::authorize('updateDraft', $record) is wrong here:
+        // $record is an array, not a MedicalRecordModel, so Gate spreads its
+        // keys as named args ("Unknown named parameter $id") after the draft
+        // has already been saved — leaving the client with a stale
+        // expectedUpdatedAt and a false 409 conflict on the next autosave.
 
         return response()->json([
             'data' => MedicalRecordResponseTransformer::transform($record),

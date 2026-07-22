@@ -248,7 +248,7 @@ export function appendWorkflowBatchEntries(
         case 'cashier':
             batch.push(
                 ['billingCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Billing counts', 'billing.invoices.read', () => apiGet('/billing-invoices/status-counts')),
+                    guardedRequest<ApiEnvelope<any>>('Billing counts', 'billing.invoices.read', () => apiGet('/billing/status-counts')),
                 ],
                 [
                     'claimOpenCounts',
@@ -268,7 +268,7 @@ export function appendWorkflowBatchEntries(
                     'draftInvoices',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Draft invoices', 'billing.invoices.read', () =>
-                            apiGet('/billing-invoices', { status: 'draft', perPage: 3 }),
+                            apiGet('/billing', { status: 'draft', perPage: 3 }),
                         ),
                 ],
             );

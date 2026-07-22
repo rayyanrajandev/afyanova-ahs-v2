@@ -32,7 +32,7 @@ export function usePatientBillingInvoices(
     patientId: Ref<string>,
     enabled: Ref<boolean>,
 ): PatientChartOrderStream<PatientChartBillingInvoice, PatientChartBillingInvoiceStatusCounts> {
-    return usePatientChartOrderStream('/billing-invoices', {
+    return usePatientChartOrderStream('/billing', {
         patientId,
         enabled,
         sortBy: 'invoiceDate',

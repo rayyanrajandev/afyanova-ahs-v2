@@ -30,7 +30,7 @@ type ExportBillingFinancialControlsOptions = {
 
 function buildFinancialControlsSummaryExportUrl(searchForm: SearchForm): string {
     const url = new URL(
-        '/api/v1/billing-invoices/financial-controls/summary/export',
+        '/api/v1/billing/financial-controls/summary/export',
         window.location.origin,
     );
 
@@ -72,7 +72,7 @@ export function useBillingFinancialControls() {
         try {
             const response = await options.apiRequest<{
                 data: BillingFinancialControlsSummary;
-            }>('GET', '/billing-invoices/financial-controls/summary', {
+            }>('GET', '/billing/financial-controls/summary', {
                 query: {
                     currencyCode:
                         options.searchForm.currencyCode.trim() || null,

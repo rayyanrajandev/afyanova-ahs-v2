@@ -175,7 +175,7 @@ async function searchInvoices(force = false): Promise<void> {
     lookupError.value = null;
 
     try {
-        const response = await apiRequest<BillingInvoiceListResponse>('/billing-invoices', {
+        const response = await apiRequest<BillingInvoiceListResponse>('/billing', {
             q: query,
             statusIn: normalizedStatuses.value.length > 0 ? normalizedStatuses.value.join(',') : null,
             page: 1,
@@ -215,7 +215,7 @@ async function hydrateSelected(id: string): Promise<void> {
     lookupError.value = null;
 
     try {
-        const response = await apiRequest<BillingInvoiceItemResponse>(`/billing-invoices/${id}`);
+        const response = await apiRequest<BillingInvoiceItemResponse>(`/billing/${id}`);
         selectedInvoice.value = response.data;
         emit('selected', response.data);
     } catch (error) {

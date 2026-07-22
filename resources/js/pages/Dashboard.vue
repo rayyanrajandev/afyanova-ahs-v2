@@ -1823,7 +1823,7 @@ const queueViewAllHref = computed(() => {
     if (activePresetKey.value === 'nursing') return triageQueueHref();
     if (activePresetKey.value === 'emergency') return triageQueueHref();
     if (activePresetKey.value === 'direct_service') return directServiceModuleHref(primaryDirectServiceModule.value);
-    if (activePresetKey.value === 'cashier') return '/billing-invoices?status=draft';
+    if (activePresetKey.value === 'cashier') return '/billing?status=draft';
     return '#';
 });
 

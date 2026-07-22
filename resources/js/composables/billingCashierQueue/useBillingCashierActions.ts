@@ -51,7 +51,7 @@ export function useBillingCashierActions() {
 
     const recordPayment = useMutation({
         mutationFn: ({ invoiceId, amount, paymentMethod, paymentReference }: RecordPaymentInput) =>
-            apiPost<PaymentResponse>(`/billing-invoices/${invoiceId}/payments`, {
+            apiPost<PaymentResponse>(`/billing/${invoiceId}/payments`, {
                 body: {
                     amount,
                     payerType: 'self_pay',
@@ -62,10 +62,10 @@ export function useBillingCashierActions() {
     });
 
     /**
-     * `/billing-invoices/{id}/payments/undo` (what the legacy Cashier Queue
+     * `/billing/{id}/payments/undo` (what the legacy Cashier Queue
      * called) doesn't exist server-side — grepped routes/api.php and
      * BillingInvoiceController, no such route or method. The only real
-     * reversal path is `/billing-invoices/{id}/payments/{paymentId}/reversals`
+     * reversal path is `/billing/{id}/payments/{paymentId}/reversals`
      * (permission billing.payments.reverse, distinct from
      * billing.payments.record), which requires an audited `reason` — see
      * ReverseBillingInvoicePaymentRequest::rules(). billing/IndexV2.vue gates
@@ -84,23 +84,23 @@ export function useBillingCashierActions() {
             amount: number;
             reason: string;
         }) =>
-            apiPost(`/billing-invoices/${invoiceId}/payments/${paymentId}/reversals`, {
+            apiPost(`/billing/${invoiceId}/payments/${paymentId}/reversals`, {
                 body: { amount, reason },
             }),
     });
 
     const issueInvoice = useMutation({
         mutationFn: (invoiceId: string) =>
-            apiPatch(`/billing-invoices/${invoiceId}/status`, { body: { status: 'issued' } }),
+            apiPatch(`/billing/${invoiceId}/status`, { body: { status: 'issued' } }),
     });
 
     const addChargeCandidateToDraft = useMutation({
         mutationFn: ({ draftInvoiceId, lineItems }: { draftInvoiceId: string; lineItems: Record<string, unknown>[] }) =>
-            apiPatch(`/billing-invoices/${draftInvoiceId}`, { body: { lineItems } }),
+            apiPatch(`/billing/${draftInvoiceId}`, { body: { lineItems } }),
     });
 
     const createInvoiceFromCandidate = useMutation({
-        mutationFn: (body: Record<string, unknown>) => apiPost('/billing-invoices', { body }),
+        mutationFn: (body: Record<string, unknown>) => apiPost('/billing', { body }),
     });
 
     async function fetchPatientSummary(patientId: string) {

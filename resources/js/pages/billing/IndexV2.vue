@@ -83,7 +83,7 @@ const canRecordPayments = computed(() => hasAccess('billing.payments.record'));
 const canReverseBillingPayments = computed(() => hasAccess('billing.payments.reverse'));
 const canCreateInvoices = computed(() => hasAccess('billing.invoices.create'));
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Billing', href: '/billing-invoices' }];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Billing', href: '/billing' }];
 
 const DRAFT_STORAGE_KEY = 'billing.payment-draft.v1';
 const PER_PAGE_STORAGE_KEY = 'billing.queue-per-page.v1';
@@ -155,7 +155,7 @@ const compactRows = useLocalStorageBoolean('billing.queue-compact-rows.v1', fals
 const mobileView = ref<'queue' | 'detail'>('queue');
 const isMobile = useMediaQuery('(max-width: 767px)');
 
-// Deep-link support from patientChartModuleHref('/billing-invoices', ..., {
+// Deep-link support from patientChartModuleHref('/billing', ..., {
 // focusInvoiceId }) — see loadPatientByIdDirect() below.
 const deepLinkParams = new URLSearchParams(window.location.search);
 const deepLinkPatientId = deepLinkParams.get('patientId');
@@ -245,7 +245,7 @@ function selectPatient(entry: CashierQueueEntry): void {
 }
 
 /**
- * Deep-link entry point from patientChartModuleHref('/billing-invoices',
+ * Deep-link entry point from patientChartModuleHref('/billing',
  * ..., { focusInvoiceId }) — the Patient Chart's Billing tab links straight
  * to one invoice. The cashier queue only lists patients with pending
  * payment/unbilled activity, so a fully-paid patient's

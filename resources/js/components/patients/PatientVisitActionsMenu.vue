@@ -134,7 +134,7 @@ async function startVisit(arrivalMode: WalkInArrivalMode): Promise<void> {
             </DropdownMenuItem>
             <DropdownMenuSeparator v-if="(canStartVisit || canCreateServiceRequest) && canCreateInvoice" />
             <DropdownMenuItem v-if="canCreateInvoice" class="cursor-pointer text-sm" as-child>
-                <Link :href="patientChartModuleHref('/billing-invoices', patient.id, null, { includeAppointment: false, includeTabNew: true })">
+                <Link :href="patientChartModuleHref('/billing', patient.id, null, { includeAppointment: false, includeTabNew: true })">
                     Create invoice
                 </Link>
             </DropdownMenuItem>

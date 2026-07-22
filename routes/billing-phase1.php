@@ -107,7 +107,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
             ->name('billing-refunds.process');
     });
 
-    Route::get('billing-invoices/{invoiceId}/refunds', [BillingRefundController::class, 'getInvoiceRefunds'])
+    Route::get('billing/{invoiceId}/refunds', [BillingRefundController::class, 'getInvoiceRefunds'])
         ->middleware('can:billing.refunds.read')
         ->name('billing-refunds.invoice-index');
 

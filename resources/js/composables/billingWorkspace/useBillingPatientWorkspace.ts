@@ -39,7 +39,7 @@ export function useBillingPatientWorkspace(
 
             const [workspaceResponse, candidatesResponse] = await Promise.all([
                 apiGet<{ data: { patient: BillingPatientSummary | null; invoices: BillingInvoice[]; summary: BillingWorkspaceSummary } }>(`/billing/${id}/workspace`),
-                apiGet<{ data: ChargeCaptureCandidate[] }>('/billing-invoices/charge-capture-candidates', {
+                apiGet<{ data: ChargeCaptureCandidate[] }>('/billing/charge-capture-candidates', {
                     patientId: id,
                     includeInvoiced: 'false',
                     limit: 100,

@@ -47,7 +47,7 @@ describe('useDischargeReadiness', () => {
             if (url === '/medical-records') return { data: [] };
             if (url === '/laboratory-orders') return { data: [{ admissionId: 'adm-1', patientId: 'pat-1', orderedAt: '2026-01-01T09:00:00Z', status: 'ordered' }] };
             if (url === '/pharmacy-orders') return { data: [] };
-            if (url === '/billing-invoices') return { data: [] };
+            if (url === '/billing') return { data: [] };
             return { data: [] };
         });
 
@@ -66,7 +66,7 @@ describe('useDischargeReadiness', () => {
             }
             if (url === '/laboratory-orders') return { data: [] };
             if (url === '/pharmacy-orders') return { data: [] };
-            if (url === '/billing-invoices') return { data: [] };
+            if (url === '/billing') return { data: [] };
             return { data: [] };
         });
 

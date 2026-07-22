@@ -316,8 +316,8 @@ const claimQueueDetailsActionLabel = computed(() =>
 
 function claimInvoiceHref(invoiceId: string | null | undefined): string {
     const resolvedId = String(invoiceId ?? '').trim();
-    if (!resolvedId) return '/billing-invoices';
-    const url = new URL('/billing-invoices', window.location.origin);
+    if (!resolvedId) return '/billing';
+    const url = new URL('/billing', window.location.origin);
     url.searchParams.set('focusInvoiceId', resolvedId);
     url.searchParams.set('from', 'claims');
     return `${url.pathname}${url.search}`;
@@ -435,7 +435,7 @@ async function loadCreateInvoicePreview(invoiceId: string): Promise<void> {
     try {
         const response = await apiRequest<{ data: BillingInvoicePreview }>(
             'GET',
-            `/billing-invoices/${invoiceId}`,
+            `/billing/${invoiceId}`,
         );
         createInvoicePreview.value = response.data;
 

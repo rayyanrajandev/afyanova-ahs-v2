@@ -4,7 +4,7 @@ import { apiGet } from '@/lib/apiClient';
 
 /**
  * One billable service captured for an encounter — a "charge capture candidate"
- * from GET /billing-invoices/charge-capture-candidates. Each row is a priced
+ * from GET /billing/charge-capture-candidates. Each row is a priced
  * service (consultation, lab, radiology, pharmacy, theatre) sourced from the
  * encounter's own orders/appointment, flagged pending vs. already-invoiced.
  * Shape mirrors ListBillingChargeCaptureCandidatesUseCase::buildCandidate().
@@ -81,7 +81,7 @@ export function useEncounterCharges(
             }
 
             return apiGet<EncounterChargesResponse>(
-                '/billing-invoices/charge-capture-candidates',
+                '/billing/charge-capture-candidates',
                 { patientId: pid, encounterId: eid, includeInvoiced: true },
             );
         },

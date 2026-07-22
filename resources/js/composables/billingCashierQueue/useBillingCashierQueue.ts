@@ -37,7 +37,7 @@ export function useBillingCashierQueue(
     return useQuery({
         queryKey: ['billing-cashier-queue', computed(() => ({ ...filters }))],
         queryFn: () =>
-            apiGet<CashierQueueResponse>('/billing-invoices/cashier-queue', {
+            apiGet<CashierQueueResponse>('/billing/cashier-queue', {
                 q: filters.q.trim() || null,
                 status: filters.status === 'all' ? null : filters.status,
                 page: filters.page,

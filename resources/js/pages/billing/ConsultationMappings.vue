@@ -23,7 +23,7 @@ import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
     { title: 'Consultation Mappings', href: '/billing-consultation-mappings' },
 ];
 

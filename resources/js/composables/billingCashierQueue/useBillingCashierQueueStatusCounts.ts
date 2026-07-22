@@ -15,7 +15,7 @@ type CashierQueueResponse = { meta: { total: number } };
  * Mirrors usePatientStatusCounts.ts's shape (search-aware, status-independent
  * counts for the status Tabs) but has no dedicated counts endpoint to call —
  * ListCashierQueueUseCase doesn't expose one. Reuses
- * /billing-invoices/cashier-queue itself with perPage=1 for each status
+ * /billing/cashier-queue itself with perPage=1 for each status
  * value and reads meta.total, which is the full filtered-set size regardless
  * of page size (see ListCashierQueueUseCase::execute — total is computed
  * before slicing), so this is accurate without adding a backend endpoint.
@@ -30,9 +30,9 @@ export function useBillingCashierQueueStatusCounts(
         queryFn: async () => {
             const q = filters.q.trim() || null;
             const [all, unpaid, paid] = await Promise.all([
-                apiGet<CashierQueueResponse>('/billing-invoices/cashier-queue', { q, perPage: 1 }),
-                apiGet<CashierQueueResponse>('/billing-invoices/cashier-queue', { q, status: 'unpaid', perPage: 1 }),
-                apiGet<CashierQueueResponse>('/billing-invoices/cashier-queue', { q, status: 'paid', perPage: 1 }),
+                apiGet<CashierQueueResponse>('/billing/cashier-queue', { q, perPage: 1 }),
+                apiGet<CashierQueueResponse>('/billing/cashier-queue', { q, status: 'unpaid', perPage: 1 }),
+                apiGet<CashierQueueResponse>('/billing/cashier-queue', { q, status: 'paid', perPage: 1 }),
             ]);
 
             return {

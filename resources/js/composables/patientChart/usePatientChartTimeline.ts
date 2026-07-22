@@ -448,7 +448,7 @@ export function usePatientChartTimeline(params: UsePatientChartTimelineParams) {
             appointmentId: invoice.appointmentId,
             encounterId: invoice.encounterId,
             href: params.canReadBillingInvoices.value
-                ? patientChartModuleHref('/billing-invoices', params.patientId.value, primaryVisit.value?.id ?? null, {
+                ? patientChartModuleHref('/billing', params.patientId.value, primaryVisit.value?.id ?? null, {
                       includeAppointment: false,
                       focusInvoiceId: invoice.id,
                   })

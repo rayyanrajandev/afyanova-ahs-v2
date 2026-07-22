@@ -18,7 +18,7 @@ export function useBillingInvoiceStatusCounts(): UseQueryReturnType<BillingInvoi
     return useQuery({
         queryKey: ['sidebar-billing-invoice-status-counts'],
         queryFn: async () => {
-            const response = await apiGet<BillingInvoiceStatusCountsResponse>('/billing-invoices/status-counts');
+            const response = await apiGet<BillingInvoiceStatusCountsResponse>('/billing/status-counts');
             return response.data;
         },
         refetchInterval: 30_000,

@@ -1087,7 +1087,7 @@ function buildFollowUpModuleHref(key: FollowUpRailModuleKey): string | null {
             ? '/pharmacy-orders'
             : key === 'radiology'
                 ? '/radiology-orders'
-                : '/billing-invoices';
+                : '/billing';
 
     const query = params.toString();
     return query ? `${basePath}?${query}` : basePath;

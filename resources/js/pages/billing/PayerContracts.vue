@@ -250,7 +250,7 @@ type PolicySummary = {
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing Invoices', href: '/billing-invoices' },
+    { title: 'Billing Invoices', href: '/billing' },
     { title: 'Payer Contracts', href: '/billing-payer-contracts' },
 ];
 
@@ -2924,7 +2924,7 @@ onMounted(refreshPage);
                         </Link>
                     </Button>
                     <Button size="sm" variant="outline" as-child class="gap-1.5">
-                        <Link href="/billing-invoices">
+                        <Link href="/billing">
                             <AppIcon name="receipt" class="size-3.5" />
                             Billing Invoices
                         </Link>

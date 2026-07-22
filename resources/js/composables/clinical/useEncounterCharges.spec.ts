@@ -61,7 +61,7 @@ describe('useEncounterCharges', () => {
         });
 
         expect(apiGetSpy).toHaveBeenCalledWith(
-            '/billing-invoices/charge-capture-candidates',
+            '/billing/charge-capture-candidates',
             { patientId: 'pat-1', encounterId: 'enc-1', includeInvoiced: true },
         );
         expect(screen.getByTestId('charge-count').textContent).toBe('2');

@@ -7018,7 +7018,7 @@ watchDebounced(
                                                                         </Link>
                                                                     </DropdownMenuItem>
                                                                     <DropdownMenuItem v-if="canReadBilling" as-child>
-                                                                        <Link :href="relatedCreateWorkflowHref('/billing-invoices', detailsAppointment)" class="flex items-center gap-2">
+                                                                        <Link :href="relatedCreateWorkflowHref('/billing', detailsAppointment)" class="flex items-center gap-2">
                                                                             <AppIcon name="receipt" class="size-3.5" />
                                                                             Billing
                                                                         </Link>

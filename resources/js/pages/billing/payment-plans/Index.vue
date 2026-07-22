@@ -91,7 +91,7 @@ type CashBillingAccountLookupSummary = {
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
     { title: 'Payment Plans', href: '/billing-payment-plans' },
 ];
 
@@ -266,7 +266,7 @@ function handleCreateCashAccountSelected(account: CashBillingAccountLookupSummar
 
 const selectedSourceHref = computed(() => {
     if (!selectedPlan.value) return null;
-    if (selectedPlan.value.billingInvoiceId) return '/billing-invoices';
+    if (selectedPlan.value.billingInvoiceId) return '/billing';
     if (selectedPlan.value.cashBillingAccountId) return '/billing-cash';
     return null;
 });
@@ -639,7 +639,7 @@ onMounted(() => {
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <Button variant="outline" as-child>
-                        <Link href="/billing-invoices">Billing Invoices</Link>
+                        <Link href="/billing">Billing Invoices</Link>
                     </Button>
                     <Button variant="outline" as-child>
                         <Link href="/billing-cash">Cash Billing</Link>

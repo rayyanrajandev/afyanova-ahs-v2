@@ -25,7 +25,7 @@ export const FACILITY_WEB_PATH_RULES: readonly FacilityWebPathRule[] = [
     { pathPrefix: '/inventory-procurement', requiredAll: ['inventory.procurement'] },
     { pathPrefix: '/inpatient-ward/discharge-checklists', requiredAll: ['inpatient.care_plans'] },
     { pathPrefix: '/inpatient-ward', requiredAll: ['inpatient.ward'] },
-    { pathPrefix: '/billing-invoices', requiredAll: ['billing.invoices'] },
+    { pathPrefix: '/billing', requiredAll: ['billing.invoices'] },
     { pathPrefix: '/billing', requiredAll: ['billing.invoices'] },
     { pathPrefix: '/billing-payment-plans', requiredAll: ['billing.payment_plans'] },
     { pathPrefix: '/billing-cash', requiredAll: ['billing.cash_accounts'] },

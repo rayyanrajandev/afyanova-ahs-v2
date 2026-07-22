@@ -12,7 +12,7 @@ interface InvoiceViewTab {
 }
 
 const allTabs: InvoiceViewTab[] = [
-    { value: 'queue', label: 'Invoices', href: '/billing-invoices', permission: 'billing.invoices.read' },
+    { value: 'queue', label: 'Invoices', href: '/billing', permission: 'billing.invoices.read' },
 ];
 
 const { hasPermission, hasUniversalAdminAccess } = usePlatformAccess();
@@ -26,7 +26,7 @@ const url = computed(() => page.url);
 
 const activeTab = computed(() => {
     const u = url.value;
-    if (u.startsWith('/billing-invoices')) {
+    if (u.startsWith('/billing')) {
         const params = new URLSearchParams(u.includes('?') ? u.split('?')[1] : '');
         if (params.get('tab') === 'board') return 'board';
         if (params.get('tab') === 'new') return 'new';

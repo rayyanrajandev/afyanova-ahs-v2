@@ -1379,7 +1379,7 @@ const timelineEvents = computed<ChartTimelineEvent[]>(() => {
         status: invoice.status || 'draft',
         appointmentId: invoice.appointmentId,
         href: canReadBillingInvoices.value
-            ? clinicalModuleHref('/billing-invoices', {
+            ? clinicalModuleHref('/billing', {
                 includeAppointment: false,
                 focusInvoiceId: invoice.id,
             })
@@ -1680,7 +1680,7 @@ const visitHandoffPrimaryHref = computed(() => {
     }
 
     if (visitHandoffMode.value === 'billing') {
-        return clinicalModuleHref('/billing-invoices', {
+        return clinicalModuleHref('/billing', {
             includeAppointment: Boolean(visitHandoffActiveVisit.value?.id),
             includeTabNew: true,
         });
@@ -2366,13 +2366,13 @@ async function loadBillingInvoices() {
     billingInvoicesError.value = null;
     try {
         const [listResponse, countsResponse] = await Promise.all([
-            apiRequest<ApiListResponse<BillingInvoice>>('/billing-invoices', {
+            apiRequest<ApiListResponse<BillingInvoice>>('/billing', {
                 patientId: props.patientId,
                 sortBy: 'invoiceDate',
                 sortDir: 'desc',
                 perPage: 3,
             }),
-            apiRequest<BillingInvoiceStatusCountsResponse>('/billing-invoices/status-counts', {
+            apiRequest<BillingInvoiceStatusCountsResponse>('/billing/status-counts', {
                 patientId: props.patientId,
             }),
         ]);
@@ -6144,10 +6144,10 @@ onMounted(() => {
                                         </div>
                                         <div class="flex flex-wrap gap-2">
                                             <Button v-if="canCreateBillingInvoices" size="sm" class="gap-1.5" as-child>
-                                                <Link :href="clinicalModuleHref('/billing-invoices', { includeTabNew: true })"><AppIcon name="receipt" class="size-3.5" />Create invoice</Link>
+                                                <Link :href="clinicalModuleHref('/billing', { includeTabNew: true })"><AppIcon name="receipt" class="size-3.5" />Create invoice</Link>
                                             </Button>
                                             <Button v-if="canReadBillingInvoices" size="sm" variant="outline" class="gap-1.5" as-child>
-                                                <Link :href="clinicalModuleHref('/billing-invoices', { includeAppointment: false })"><AppIcon name="book-open" class="size-3.5" />Open billing list</Link>
+                                                <Link :href="clinicalModuleHref('/billing', { includeAppointment: false })"><AppIcon name="book-open" class="size-3.5" />Open billing list</Link>
                                             </Button>
                                         </div>
                                     </div>

@@ -57,7 +57,7 @@ const BADGE_HREF_MAP: Record<string, string> = {
     '/laboratory-orders': 'laboratory',
     '/radiology-orders': 'radiology',
     '/pharmacy-orders': 'pharmacy',
-    '/billing': 'billing-invoices',
+    '/billing': 'billing',
 };
 
 const BADGE_CLASS_MAP: Record<string, string> = {
@@ -68,7 +68,7 @@ const BADGE_CLASS_MAP: Record<string, string> = {
     laboratory: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
     radiology: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
     pharmacy: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-    'billing-invoices': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    'billing': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
 };
 
 function badgeForHref(href: string): number | undefined {

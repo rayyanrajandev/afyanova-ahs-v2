@@ -70,7 +70,7 @@ function handleReversalComplete(): void {
                     <div v-if="!billingPaymentIsReversal(payment)" class="mt-1 flex items-center justify-end gap-1.5">
                         <Button size="sm" variant="ghost" class="h-7 gap-1 text-[10px]" as-child>
                             <a
-                                :href="`/billing-invoices/${payment.billingInvoiceId}/payments/${payment.id}/receipt`"
+                                :href="`/billing/${payment.billingInvoiceId}/payments/${payment.id}/receipt`"
                                 target="_blank"
                                 rel="noopener"
                             >

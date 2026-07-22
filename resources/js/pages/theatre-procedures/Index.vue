@@ -1029,7 +1029,7 @@ function procedureWorkflowHref(
     if (options?.addOnToOrderId?.trim()) {
         params.set('addOnToOrderId', options.addOnToOrderId.trim());
     }
-    if (path === '/billing-invoices') {
+    if (path === '/billing') {
         params.set('sourceWorkflowKind', 'theatre_procedure');
         params.set('sourceWorkflowId', procedure.id);
         const label =
@@ -5455,7 +5455,7 @@ onMounted(async () => {
                         as-child
                         class="gap-1.5"
                     >
-                        <Link :href="contextCreateHref('/billing-invoices', { includeTabNew: true })"><AppIcon name="receipt" class="size-3.5" />New Billing Invoice</Link>
+                        <Link :href="contextCreateHref('/billing', { includeTabNew: true })"><AppIcon name="receipt" class="size-3.5" />New Billing Invoice</Link>
                     </Button>
                 </div>
             </div>
@@ -6233,7 +6233,7 @@ onMounted(async () => {
                                 as-child
                                 class="justify-start gap-1.5"
                             >
-                                <Link :href="procedureWorkflowHref('/billing-invoices', detailsProcedure, { includeTabNew: true })">
+                                <Link :href="procedureWorkflowHref('/billing', detailsProcedure, { includeTabNew: true })">
                                     <AppIcon name="receipt-text" class="size-3.5" />
                                     New Billing Invoice
                                 </Link>

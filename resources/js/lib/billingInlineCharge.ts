@@ -53,7 +53,7 @@ type ChargeCaptureCandidatesResponse = { data: BillingChargeCaptureCandidate[] }
 export async function fetchEncounterChargeCaptureCandidates(
     context: EncounterOrderContext,
 ): Promise<BillingChargeCaptureCandidate[]> {
-    const response = await apiGet<ChargeCaptureCandidatesResponse>('/billing-invoices/charge-capture-candidates', {
+    const response = await apiGet<ChargeCaptureCandidatesResponse>('/billing/charge-capture-candidates', {
         patientId: context.patientId.trim(),
         encounterId: context.encounterId?.trim() || null,
         includeInvoiced: 'false',
@@ -78,7 +78,7 @@ export async function addChargeCandidateToInvoice(
     const patientId = context.patientId.trim();
     const lineItem = candidate.suggestedLineItem;
 
-    const invoicesResponse = await apiGet<InvoiceListResponse>('/billing-invoices', {
+    const invoicesResponse = await apiGet<InvoiceListResponse>('/billing', {
         patientId,
         perPage: 50,
         sortBy: 'invoiceDate',
@@ -90,7 +90,7 @@ export async function addChargeCandidateToInvoice(
     );
 
     if (draftInvoice) {
-        await apiPatch(`/billing-invoices/${draftInvoice.id}`, {
+        await apiPatch(`/billing/${draftInvoice.id}`, {
             body: {
                 lineItems: [...draftInvoice.lineItems, lineItem],
             },
@@ -98,7 +98,7 @@ export async function addChargeCandidateToInvoice(
         return;
     }
 
-    await apiPost('/billing-invoices', {
+    await apiPost('/billing', {
         body: {
             patientId,
             invoiceDate: new Date().toISOString().slice(0, 10),

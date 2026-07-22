@@ -127,7 +127,7 @@ const totalRows = computed(() => [
             <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
                 <Button variant="outline" @click="emit('close')">Close</Button>
                 <Button as-child>
-                    <a :href="`/billing-invoices/${invoice.id}/print`" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5">
+                    <a :href="`/billing/${invoice.id}/print`" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5">
                         <AppIcon name="printer" class="size-3.5" />
                         Print
                     </a>

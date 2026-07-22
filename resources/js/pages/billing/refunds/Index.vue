@@ -75,7 +75,7 @@ type CollectionResponse<T> = { success: boolean; data: T[] };
 type ItemResponse<T> = { success: boolean; data: T };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
     { title: 'Refund Operations', href: '/billing-refunds' },
 ];
 
@@ -894,7 +894,7 @@ onMounted(async () => {
                                     <Button
                                         variant="outline"
                                         class="gap-2"
-                                        @click="router.visit(`/billing-invoices?search=${encodeURIComponent(selectedRefund.invoice?.invoice_number || '')}`)"
+                                        @click="router.visit(`/billing?search=${encodeURIComponent(selectedRefund.invoice?.invoice_number || '')}`)"
                                     >
                                         <AppIcon name="receipt" class="size-4" />
                                         Open invoice queue

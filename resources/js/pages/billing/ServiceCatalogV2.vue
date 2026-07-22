@@ -46,7 +46,7 @@ import BillingServiceCatalogSyncDialog from '@/pages/billing/BillingServiceCatal
 import { type BreadcrumbItem } from '@/types';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
     { title: 'Billing Service Catalog', href: '/billing-service-catalog' },
 ];
 

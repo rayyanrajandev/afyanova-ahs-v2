@@ -1642,10 +1642,10 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <Button v-if="canCreateBillingInvoices" size="sm" class="gap-1.5" as-child>
-                                    <Link :href="patientChartModuleHref('/billing-invoices', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="receipt" class="size-3.5" />Create invoice</Link>
+                                    <Link :href="patientChartModuleHref('/billing', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="receipt" class="size-3.5" />Create invoice</Link>
                                 </Button>
                                 <Button v-if="canReadBillingInvoices" size="sm" variant="outline" class="gap-1.5" as-child>
-                                    <Link :href="patientChartModuleHref('/billing-invoices', props.patientId, primaryVisit?.id ?? null, { includeAppointment: false })"><AppIcon name="book-open" class="size-3.5" />Open billing list</Link>
+                                    <Link :href="patientChartModuleHref('/billing', props.patientId, primaryVisit?.id ?? null, { includeAppointment: false })"><AppIcon name="book-open" class="size-3.5" />Open billing list</Link>
                                 </Button>
                             </div>
                         </div>
@@ -1692,7 +1692,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                             <Link
                                                 v-for="invoice in billingInvoices"
                                                 :key="`chart-billing-invoice-${invoice.id}`"
-                                                :href="patientChartModuleHref('/billing-invoices', props.patientId, primaryVisit?.id ?? null, { includeAppointment: false, focusInvoiceId: invoice.id })"
+                                                :href="patientChartModuleHref('/billing', props.patientId, primaryVisit?.id ?? null, { includeAppointment: false, focusInvoiceId: invoice.id })"
                                                 class="block rounded-lg border bg-background px-3 py-2.5 transition hover:border-primary/40 hover:bg-primary/5"
                                             >
                                                 <div class="flex items-start justify-between gap-2">

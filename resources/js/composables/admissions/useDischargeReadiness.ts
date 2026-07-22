@@ -132,7 +132,7 @@ export function useDischargeReadiness(admission: Ref<DischargeReadinessAdmission
                 ? apiGet<{ data: PharmacyOrderSummary[] }>('/pharmacy-orders', { patientId, from, page: 1, perPage: 50, sortBy: 'orderedAt', sortDir: 'desc' })
                 : Promise.reject(new Error('Pharmacy Orders access is not available.')),
             canReadBillingInvoices.value
-                ? apiGet<{ data: BillingInvoiceSummary[] }>('/billing-invoices', { patientId, from, page: 1, perPage: 50, sortBy: 'invoiceDate', sortDir: 'desc' })
+                ? apiGet<{ data: BillingInvoiceSummary[] }>('/billing', { patientId, from, page: 1, perPage: 50, sortBy: 'invoiceDate', sortDir: 'desc' })
                 : Promise.reject(new Error('Billing access is not available.')),
         ]);
 
@@ -258,7 +258,7 @@ export function useDischargeReadiness(admission: Ref<DischargeReadinessAdmission
                         complete: !issues.value.billingInvoices && issuedInvoices.length > 0,
                         source: issues.value.billingInvoices ? 'unavailable' : 'live',
                         actionLabel: canReadBillingInvoices.value ? 'Open billing' : undefined,
-                        actionHref: canReadBillingInvoices.value ? `/billing-invoices?patientId=${current.patientId}` : undefined,
+                        actionHref: canReadBillingInvoices.value ? `/billing?patientId=${current.patientId}` : undefined,
                     },
                     {
                         key: 'payment-settled',
@@ -277,7 +277,7 @@ export function useDischargeReadiness(admission: Ref<DischargeReadinessAdmission
                         source: issues.value.billingInvoices ? 'unavailable' : settledInvoice ? 'mixed' : 'manual',
                         manualKey: settledInvoice ? undefined : 'paymentPlanConfirmed',
                         actionLabel: canReadBillingInvoices.value ? 'Open billing' : undefined,
-                        actionHref: canReadBillingInvoices.value ? `/billing-invoices?patientId=${current.patientId}` : undefined,
+                        actionHref: canReadBillingInvoices.value ? `/billing?patientId=${current.patientId}` : undefined,
                     },
                 ],
             },

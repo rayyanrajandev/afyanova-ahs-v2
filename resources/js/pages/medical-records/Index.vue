@@ -4606,7 +4606,7 @@ onMounted(() => {
                                                                         </DropdownMenuItem>
                                                                         <DropdownMenuSeparator v-if="canOpenBillingWorkflow" />
                                                                         <DropdownMenuItem v-if="canOpenBillingWorkflow" as-child>
-                                                                            <Link :href="recordContextHref('/billing-invoices', record)" class="flex items-center gap-2">
+                                                                            <Link :href="recordContextHref('/billing', record)" class="flex items-center gap-2">
                                                                                 <AppIcon name="receipt" class="size-3.5" />Open Billing
                                                                             </Link>
                                                                         </DropdownMenuItem>
@@ -5438,7 +5438,7 @@ onMounted(() => {
                                                 <Link :href="recordContextHref('/theatre-procedures', detailsSheetRecord, { includeTabNew: true })"><AppIcon name="scissors" class="size-3.5" />Schedule Procedure</Link>
                                             </Button>
                                             <Button v-if="detailsSheetRecord.patientId && canCreateBillingWorkflow" size="sm" variant="secondary" as-child class="gap-1.5">
-                                                <Link :href="recordContextHref('/billing-invoices', detailsSheetRecord)"><AppIcon name="file-text" class="size-3.5" />New Billing Invoice</Link>
+                                                <Link :href="recordContextHref('/billing', detailsSheetRecord)"><AppIcon name="file-text" class="size-3.5" />New Billing Invoice</Link>
                                             </Button>
                                         </div>
                                     </div>

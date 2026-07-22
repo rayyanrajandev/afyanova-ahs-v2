@@ -68,7 +68,7 @@ type CollectionResponse<T> = { success: boolean; data: T[] };
 type ItemResponse<T> = { success: boolean; data: T };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Billing', href: '/billing' },
     { title: 'Discount Policies', href: '/billing-discounts' },
 ];
 
@@ -732,7 +732,7 @@ onMounted(async () => {
                                         <AppIcon name="receipt" class="size-4" />
                                         Apply to invoice
                                     </Button>
-                                    <Button variant="outline" class="gap-2" @click="window.location.href = '/billing-invoices'">
+                                    <Button variant="outline" class="gap-2" @click="window.location.href = '/billing'">
                                         <AppIcon name="arrow-right" class="size-4" />
                                         Open invoice board
                                     </Button>

@@ -46,7 +46,7 @@ const props = defineProps<{
     /**
      * Opt-in, additive-only: when true, the Billing button triggers an
      * inline charge-capture flow (like lab/pharmacy/radiology/theatre)
-     * instead of linking out to /billing-invoices. Defaults to
+     * instead of linking out to /billing. Defaults to
      * undefined/falsy so the existing encounters/{id} Workspace.vue page
      * (which doesn't pass this) keeps its current Link-only behavior.
      */
@@ -525,7 +525,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             >
                 <Link
                     :href="
-                        contextCreateHref('/billing-invoices', {
+                        contextCreateHref('/billing', {
                             includeTabNew: true,
                         })
                     "

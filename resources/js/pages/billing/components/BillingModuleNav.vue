@@ -31,9 +31,9 @@ const url = computed(() => page.url);
 function isActive(value: string): boolean {
     const u = url.value;
     // '/billing' is segment-matched (exact, or '/billing/...') so it doesn't
-    // also light up for '/billing-cash' or '/billing-refunds'. '/billing-invoices'
+    // also light up for '/billing-cash' or '/billing-refunds'. '/billing'
     // (the pre-cutover master-detail page) still counts as the Invoices tab.
-    if (value === 'invoices') return u === '/billing' || u.startsWith('/billing/') || u.startsWith('/billing-invoices');
+    if (value === 'invoices') return u === '/billing' || u.startsWith('/billing/');
     if (value === 'cash') return u.startsWith('/billing-cash');
     if (value === 'refunds') return u.startsWith('/billing-refunds');
     return false;
