@@ -4,8 +4,10 @@ import { apiGet, apiPatch, apiPost } from '@/lib/apiClient';
 export type RecordPaymentInput = {
     invoiceId: string;
     amount: number;
+    payerType: string;
     paymentMethod: string;
     paymentReference: string;
+    note?: string;
 };
 
 type PaymentResponse = {
@@ -50,13 +52,14 @@ export function useBillingCashierActions() {
     }
 
     const recordPayment = useMutation({
-        mutationFn: ({ invoiceId, amount, paymentMethod, paymentReference }: RecordPaymentInput) =>
+        mutationFn: ({ invoiceId, amount, payerType, paymentMethod, paymentReference, note }: RecordPaymentInput) =>
             apiPost<PaymentResponse>(`/billing/${invoiceId}/payments`, {
                 body: {
                     amount,
-                    payerType: 'self_pay',
+                    payerType,
                     paymentMethod,
                     paymentReference: paymentReference || null,
+                    note: note || null,
                 },
             }),
     });

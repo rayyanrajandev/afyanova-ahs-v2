@@ -14,7 +14,14 @@ const props = defineProps<{
     invoices: BillingInvoice[];
     patientId: string;
     focusInvoiceId?: string | null;
-    recordPayment: (input: { invoiceId: string; amount: number; paymentMethod: string; paymentReference: string }) => Promise<any>;
+    recordPayment: (input: {
+        invoiceId: string;
+        amount: number;
+        payerType: string;
+        paymentMethod: string;
+        paymentReference: string;
+        note?: string;
+    }) => Promise<any>;
     issueInvoice: (invoiceId: string) => Promise<any>;
     invalidate: (patientId: string | null) => void;
 }>();

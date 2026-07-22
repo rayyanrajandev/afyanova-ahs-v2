@@ -28,7 +28,103 @@ export const billingPaymentMethodsRequiringReference = new Set([
     'bank_transfer',
     'insurance_claim',
     'cheque',
+    'waiver',
 ]);
+
+export const billingPaymentMethodsRequiringNote = new Set(['waiver']);
+
+export function billingPaymentReferenceRequired(paymentMethod: string): boolean {
+    return billingPaymentMethodsRequiringReference.has(paymentMethod.trim().toLowerCase());
+}
+
+export function billingPaymentNoteRequired(paymentMethod: string): boolean {
+    return billingPaymentMethodsRequiringNote.has(paymentMethod.trim().toLowerCase());
+}
+
+export function billingPaymentReferenceLabel(paymentMethod: string): string {
+    const method = paymentMethod.trim().toLowerCase();
+
+    if (method === 'cash' || method === 'other') {
+        return 'Reference (optional)';
+    }
+    if (method === 'waiver') {
+        return 'Approval reference (required)';
+    }
+    if (method === 'mobile_money' || method === 'lipa_namba') {
+        return 'Transaction ID (required)';
+    }
+    if (method === 'card') {
+        return 'Auth code / receipt # (required)';
+    }
+    if (method === 'bank_transfer') {
+        return 'Bank reference (required)';
+    }
+    if (method === 'cheque') {
+        return 'Cheque number (required)';
+    }
+    if (method === 'insurance_claim') {
+        return 'Claim / control number (required)';
+    }
+
+    return billingPaymentReferenceRequired(method) ? 'Reference (required)' : 'Reference (optional)';
+}
+
+export function billingPaymentReferencePlaceholder(
+    paymentMethod: string,
+    payerType?: string | null,
+): string {
+    const method = paymentMethod.trim().toLowerCase();
+    const payer = (payerType ?? '').trim().toLowerCase();
+
+    if (method === 'mobile_money') {
+        return 'M-PESA-TXN-001';
+    }
+    if (method === 'lipa_namba') {
+        return 'LIPA-NAMBA-TXN-001';
+    }
+    if (method === 'card') {
+        return 'Auth code or terminal receipt #';
+    }
+    if (method === 'bank_transfer') {
+        return 'Bank ref / remittance advice #';
+    }
+    if (method === 'cheque') {
+        return 'Cheque number';
+    }
+    if (method === 'insurance_claim') {
+        if (payer === 'government') {
+            return 'GOV/2026/00412';
+        }
+        return 'INS-2026-000123';
+    }
+    if (method === 'waiver') {
+        return 'Supervisor approval or waiver authority ref';
+    }
+    if (method === 'cash') {
+        return 'Receipt number (optional)';
+    }
+
+    return 'Receipt number, transaction ID...';
+}
+
+export function billingDefaultPayerTypeFromInvoice(invoice?: {
+    payerSummary?: { payerType?: string | null } | null;
+    lastPaymentPayerType?: string | null;
+} | null): string {
+    const candidates = [
+        invoice?.payerSummary?.payerType,
+        invoice?.lastPaymentPayerType,
+    ];
+
+    for (const candidate of candidates) {
+        const normalized = (candidate ?? '').trim().toLowerCase();
+        if (billingPaymentPayerTypeOptions.some((option) => option.value === normalized)) {
+            return normalized;
+        }
+    }
+
+    return 'self_pay';
+}
 
 export const billingPayerTypesRequiringClaimReference = new Set([
     'insurance',

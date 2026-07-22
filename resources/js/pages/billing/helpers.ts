@@ -10,7 +10,14 @@ import {
     billingClaimReferencePlaceholderTokens,
     billingClaimReferenceValidationPolicyDefaults,
     billingPaymentMethodOptions,
+    billingPaymentMethodsRequiringReference,
+    billingPaymentNoteRequired,
     billingPaymentPayerTypeOptions,
+    billingPaymentReferenceLabel,
+    billingPaymentReferencePlaceholder,
+    billingPaymentReferenceRequired,
+    billingPayerTypesRequiringClaimReference,
+    billingClaimReferenceFormatPattern,
 } from './constants';
 import type {
     AuditExportStatusGroup,
@@ -587,6 +594,67 @@ export function billingPaymentMethodLabel(value: string | null | undefined): str
     );
 
     return match?.label ?? formatEnumLabel(normalized);
+}
+
+export function validateBillingRecordPaymentForm(input: {
+    amount: number;
+    payerType: string;
+    paymentMethod: string;
+    paymentReference: string;
+    note?: string;
+}): { valid: true } | { valid: false; message: string } {
+    if (!Number.isFinite(input.amount) || input.amount <= 0) {
+        return { valid: false, message: 'Enter an amount greater than zero.' };
+    }
+
+    const method = input.paymentMethod.trim().toLowerCase();
+    const reference = input.paymentReference.trim();
+    const note = (input.note ?? '').trim();
+    const payerType = input.payerType.trim().toLowerCase();
+
+    if (billingPaymentReferenceRequired(method) && reference === '') {
+        return {
+            valid: false,
+            message: `${billingPaymentReferenceLabel(method)} is required for this payment method.`,
+        };
+    }
+
+    if (billingPaymentNoteRequired(method) && note === '') {
+        return {
+            valid: false,
+            message: 'A note explaining the waiver is required.',
+        };
+    }
+
+    if (
+        reference !== ''
+        && (billingPayerTypesRequiringClaimReference.has(payerType) || method === 'insurance_claim')
+        && !billingClaimReferenceFormatPattern.test(reference)
+    ) {
+        return {
+            valid: false,
+            message: 'Reference must be 6–120 characters using letters, numbers, and - _ / . : only.',
+        };
+    }
+
+    if (reference !== '' && isTemplateLikeClaimReference(reference, payerType)) {
+        return {
+            valid: false,
+            message: 'Replace the sample reference with the real payer or transaction reference.',
+        };
+    }
+
+    return { valid: true };
+}
+
+export function billingRecordPaymentFormIsValid(input: {
+    amount: number;
+    payerType: string;
+    paymentMethod: string;
+    paymentReference: string;
+    note?: string;
+}): boolean {
+    return validateBillingRecordPaymentForm(input).valid;
 }
 
 export function billingPaymentOperationalProofText(

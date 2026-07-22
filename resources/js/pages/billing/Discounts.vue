@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { refDebounced, useDebounceFn } from '@vueuse/core';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
@@ -12,7 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -82,11 +85,9 @@ const actionLoading = ref(false);
 const booting = ref(true);
 const pageError = ref<string | null>(null);
 
-const filters = reactive({
-    q: '',
-    status: 'all',
-    availability: 'all',
-});
+const searchInputRaw = ref('');
+const searchInputDebounced = refDebounced(searchInputRaw, 250);
+const statusFilter = ref('all');
 
 const policies = ref<DiscountPolicy[]>([]);
 const selectedPolicyId = ref<string | null>(null);
@@ -120,12 +121,20 @@ const applyForm = reactive({
     reason: '',
 });
 
-const policySummary = computed(() => {
-    const total = policies.value.length;
-    const active = policies.value.filter((item) => item.status === 'active').length;
-    const autoApply = policies.value.filter((item) => item.auto_apply).length;
-    return `${total} policies in view | ${active} active | ${autoApply} auto-apply`;
+const statusCounts = computed(() => {
+    const all = policies.value.length;
+    const active = policies.value.filter((p) => p.status === 'active').length;
+    const inactive = policies.value.filter((p) => p.status === 'inactive').length;
+    return { all, active, inactive };
 });
+
+const hasActiveFilters = computed(() => statusFilter.value !== 'all' || searchInputRaw.value.trim() !== '');
+
+function clearAllFilters(): void {
+    searchInputRaw.value = '';
+    statusFilter.value = 'all';
+    loadPolicies(false);
+}
 
 const leadPolicyAction = computed(() => {
     if (!selectedPolicy.value) return 'Create or select a discount policy to control invoice concessions safely.';
@@ -229,6 +238,20 @@ const {
     blockBrowserUnload: false,
 });
 
+watch(searchInputDebounced, () => {
+    loadPolicies(false);
+});
+
+function submitSearchNow(): void {
+    if (searchInputRaw.value === searchInputDebounced.value) loadPolicies(false);
+    else searchInputDebounced.value = searchInputRaw.value;
+}
+
+function setStatus(value: string | number): void {
+    statusFilter.value = String(value);
+    loadPolicies(false);
+}
+
 function discountFinanceSetupMissing(application: DiscountApplication | null | undefined): boolean {
     return Boolean(application?.financePosting?.infrastructure && !application.financePosting.infrastructure.revenueRecognitionReady);
 }
@@ -236,13 +259,6 @@ function discountFinanceSetupMissing(application: DiscountApplication | null | u
 function discountFinanceMissingTables(application: DiscountApplication | null | undefined): string {
     return application?.financePosting?.infrastructure?.missingTables?.join(', ') || 'revenue_recognition_records';
 }
-
-watch(
-    () => [filters.status, filters.availability],
-    () => {
-        loadPolicies(false);
-    },
-);
 
 function formatCurrency(value: number | string | null | undefined, currency = 'TZS'): string {
     const numeric = Number(value ?? 0);
@@ -328,9 +344,8 @@ async function loadPolicies(preserveSelection = true) {
     try {
         const response = await apiRequest<CollectionResponse<DiscountPolicy>>('GET', '/discount-policies', {
             query: {
-                q: filters.q.trim() || null,
-                status: filters.status,
-                availability: filters.availability,
+                q: searchInputRaw.value.trim() || null,
+                status: statusFilter.value,
             },
         });
 
@@ -488,8 +503,7 @@ async function submitCreatePolicy() {
         createDialogOpen.value = false;
         resetCreateForm();
         rotateCreatePolicyRequestKey();
-        filters.status = 'all';
-        filters.availability = 'all';
+        statusFilter.value = 'all';
         await loadPolicies(false);
         if (response.data.id) selectPolicy(response.data.id);
     } catch (error) {
@@ -536,313 +550,324 @@ async function submitApplyPolicy() {
 onMounted(async () => {
     await loadPolicies(false);
 });
+
+const { scrollContainerHeight } = useStickyScrollContainer();
 </script>
 
 <template>
     <Head title="Discount Policies" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
-            <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div class="min-w-0">
-                    <div class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="file-text" class="size-6 text-muted-foreground" />
-                        <span>Discount Policies</span>
+        <div ref="scrollContainer" class="flex flex-col overflow-x-hidden overflow-y-auto rounded-lg" :style="{ height: scrollContainerHeight }">
+            <Tabs :model-value="statusFilter" class="contents" @update:model-value="setStatus">
+                <div class="sticky top-0 z-10 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex items-center gap-2">
+                                <h1 class="text-lg font-bold tracking-tight md:text-xl">Discount Policies</h1>
+                                <Badge v-if="policies.length > 0" variant="secondary">{{ policies.length }} policies</Badge>
+                            </div>
+                            <p class="text-xs text-muted-foreground">Finance governance board for concessions, waivers, and controlled invoice discounts.</p>
+                        </div>
+                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                            <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="openCreateDialog">
+                                <AppIcon name="plus" class="size-3.5" />
+                                New policy
+                            </Button>
+                            <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="listLoading" @click="loadPolicies()">
+                                <AppIcon name="refresh-cw" class="size-3.5" />
+                                Refresh
+                            </Button>
+                            <Button v-if="hasActiveFilters" size="sm" variant="outline" class="h-8 gap-1.5" @click="clearAllFilters">
+                                Clear filters
+                            </Button>
+                        </div>
                     </div>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Finance governance board for concessions, waivers, and controlled invoice discounts.
-                    </p>
-                    <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <Badge variant="outline">Policy control</Badge>
-                        <Badge variant="outline">Invoice-number apply</Badge>
-                        <Badge variant="outline">Approval threshold</Badge>
+
+                    <div class="mt-3 grid grid-cols-3 gap-2">
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">All</p>
+                            <p class="text-sm font-bold tabular-nums">{{ statusCounts.all }}</p>
+                        </div>
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Active</p>
+                            <p class="text-sm font-bold tabular-nums">{{ statusCounts.active }}</p>
+                        </div>
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Inactive</p>
+                            <p class="text-sm font-bold tabular-nums">{{ statusCounts.inactive }}</p>
+                        </div>
+                    </div>
+
+                    <TabsList class="mt-3 grid w-full grid-cols-3">
+                        <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
+                            All
+                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.all }}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="active" class="inline-flex items-center gap-1.5">
+                            Active
+                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.active }}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="inactive" class="inline-flex items-center gap-1.5">
+                            Inactive
+                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.inactive }}</Badge>
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                        <div class="relative min-w-0 flex-1">
+                            <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input v-model="searchInputRaw" placeholder="Search code, policy name, or description..." class="h-9 pl-9" @keyup.enter="submitSearchNow" />
+                        </div>
                     </div>
                 </div>
 
-                <div class="flex flex-wrap gap-2">
-                    <Button v-if="canManage" class="gap-2" @click="openCreateDialog">
-                        <AppIcon name="plus" class="size-4" />
-                        New policy
-                    </Button>
-                    <Button variant="outline" class="gap-2" :disabled="listLoading" @click="loadPolicies()">
-                        <AppIcon name="refresh-cw" class="size-4" />
-                        Refresh board
-                    </Button>
-                </div>
-            </div>
+                <div class="space-y-4 px-4 pb-6 md:px-6">
+                    <Alert v-if="!canRead" variant="destructive" class="rounded-lg">
+                        <AppIcon name="shield-check" class="size-4" />
+                        <AlertTitle>Discount policy access is restricted</AlertTitle>
+                        <AlertDescription>This account does not have permission to read billing discount policies.</AlertDescription>
+                    </Alert>
 
-            <Alert v-if="!canRead" variant="destructive" class="rounded-lg">
-                <AppIcon name="shield-check" class="size-4" />
-                <AlertTitle>Discount policy access is restricted</AlertTitle>
-                <AlertDescription>This account does not have permission to read billing discount policies.</AlertDescription>
-            </Alert>
+                    <Alert v-else class="rounded-lg border-sidebar-border/70">
+                        <AppIcon name="receipt" class="size-4" />
+                        <AlertTitle>Discount governance posture</AlertTitle>
+                        <AlertDescription>{{ leadPolicyAction }}</AlertDescription>
+                    </Alert>
 
-            <Alert v-else class="rounded-lg border-sidebar-border/70">
-                <AppIcon name="receipt" class="size-4" />
-                <AlertTitle>Discount governance posture</AlertTitle>
-                <AlertDescription>{{ leadPolicyAction }}</AlertDescription>
-            </Alert>
-
-            <div v-if="canRead" class="grid min-h-0 flex-1 gap-4 xl:grid-cols-[24rem_minmax(0,1fr)]">
-                <Card class="flex min-h-0 flex-col rounded-lg border-sidebar-border/70">
-                    <CardHeader class="gap-3">
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <CardTitle>Policy queue</CardTitle>
-                                <CardDescription>{{ policySummary }}</CardDescription>
+                    <div v-if="pageError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+                        <div class="flex items-start gap-2.5">
+                            <AppIcon name="alert-triangle" class="mt-0.5 size-4 shrink-0 text-destructive" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-destructive">Unable to load discount policies</p>
+                                <p class="mt-1 text-xs break-all text-muted-foreground">{{ pageError }}</p>
                             </div>
-                            <Badge variant="outline">{{ policies.length }}</Badge>
                         </div>
+                    </div>
 
-                        <div class="grid gap-3">
-                            <Input
-                                v-model="filters.q"
-                                placeholder="Search code, policy name, or description"
-                                @keydown.enter.prevent="loadPolicies(false)"
-                            />
-
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <Select v-model="filters.status">
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="All statuses" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All statuses</SelectItem>
-                                        <SelectItem value="active">Active</SelectItem>
-                                        <SelectItem value="inactive">Inactive</SelectItem>
-                                    </SelectContent>
-                                </Select>
-
-                                <Select v-model="filters.availability">
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="All availability" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All availability</SelectItem>
-                                        <SelectItem value="current">Current</SelectItem>
-                                        <SelectItem value="scheduled">Scheduled</SelectItem>
-                                        <SelectItem value="expired">Expired</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <Button variant="outline" :disabled="listLoading" @click="loadPolicies(false)">Search</Button>
-                        </div>
-                    </CardHeader>
-
-                    <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
-                        <div v-if="pageError" class="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">
-                            {{ pageError }}
-                        </div>
-
-                        <ScrollArea class="min-h-0 flex-1 pr-3">
-                            <div class="space-y-3">
-                                <template v-if="booting || listLoading">
-                                    <div v-for="index in 5" :key="`discount-policy-skeleton-${index}`" class="rounded-lg border border-sidebar-border/70 p-3">
-                                        <div class="h-4 w-2/3 rounded bg-muted"></div>
-                                        <div class="mt-2 h-3 w-1/2 rounded bg-muted"></div>
-                                        <div class="mt-3 h-8 w-full rounded bg-muted"></div>
-                                    </div>
-                                </template>
-
-                                <template v-else-if="policies.length > 0">
-                                    <button
-                                        v-for="policy in policies"
-                                        :key="policy.id"
-                                        type="button"
-                                        class="w-full rounded-lg border p-3 text-left transition-colors"
-                                        :class="policy.id === selectedPolicyId ? 'border-primary bg-primary/5' : 'border-sidebar-border/70 hover:bg-muted/50'"
-                                        @click="selectPolicy(policy.id)"
-                                    >
-                                        <div class="flex items-start justify-between gap-3">
-                                            <div class="min-w-0">
-                                                <p class="truncate text-sm font-medium">{{ policy.name || policy.code || 'Discount policy' }}</p>
-                                                <p class="truncate text-xs text-muted-foreground">{{ policy.code || 'No code' }}</p>
-                                            </div>
-                                            <Badge :variant="policyBadgeVariant(policy.status)">{{ formatStatusLabel(policy.status) }}</Badge>
-                                        </div>
-
-                                        <div class="mt-3 grid gap-2 text-xs text-muted-foreground">
-                                            <div>
-                                                <span class="block text-[11px] uppercase tracking-[0.16em]">Policy value</span>
-                                                <span class="text-sm font-semibold text-foreground">{{ policyValueLabel(policy) }}</span>
-                                            </div>
-                                            <div>
-                                                <span class="block text-[11px] uppercase tracking-[0.16em]">Active from</span>
-                                                <span class="text-sm text-foreground">{{ formatDateTime(policy.active_from_date) }}</span>
-                                            </div>
-                                        </div>
-                                    </button>
-                                </template>
-
-                                <div v-else class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                                    No discount policies match the current work filters.
-                                </div>
-                            </div>
-                        </ScrollArea>
-                    </CardContent>
-                </Card>
-
-                <div class="flex min-h-0 flex-col gap-4">
-                    <template v-if="selectedPolicy">
-                        <Card class="rounded-lg border-sidebar-border/70">
+                    <div v-if="canRead" class="grid min-h-0 flex-1 gap-4 xl:grid-cols-[24rem_minmax(0,1fr)]">
+                        <Card class="flex min-h-0 flex-col rounded-lg border-sidebar-border/70">
                             <CardHeader class="gap-3">
-                                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                    <div class="min-w-0">
-                                        <CardTitle class="truncate">{{ selectedPolicy.name || selectedPolicy.code || 'Discount policy' }}</CardTitle>
-                                        <CardDescription class="mt-1">{{ selectedPolicy.code || 'No policy code' }}</CardDescription>
+                                <div class="flex items-start justify-between gap-3">
+                                    <div>
+                                        <CardTitle>Policy queue</CardTitle>
+                                        <CardDescription>{{ policies.length }} policies in view</CardDescription>
                                     </div>
-                                    <div class="flex flex-wrap gap-2">
-                                        <Badge :variant="policyBadgeVariant(selectedPolicy.status)">{{ formatStatusLabel(selectedPolicy.status) }}</Badge>
-                                        <Badge variant="outline">{{ policyValueLabel(selectedPolicy) }}</Badge>
-                                        <Badge
-                                            v-if="lastApplication && lastApplication.billing_discount_policy_id === selectedPolicy.id"
-                                            :variant="discountFinanceSetupMissing(lastApplication) ? 'destructive' : (lastApplication.financePosting?.recognition.status === 'recognized' ? 'secondary' : 'outline')"
-                                        >
-                                            {{
-                                                discountFinanceSetupMissing(lastApplication)
-                                                    ? 'Finance setup missing'
-                                                    : (lastApplication.financePosting?.recognition.status === 'recognized'
-                                                        ? 'Recognition synced'
-                                                        : 'Recognition pending')
-                                            }}
-                                        </Badge>
-                                    </div>
-                                </div>
-
-                                <div class="grid gap-3 sm:grid-cols-3">
-                                    <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                        <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Type</p>
-                                        <p class="mt-1 text-lg font-semibold">{{ formatStatusLabel(selectedPolicy.discount_type) }}</p>
-                                    </div>
-                                    <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                        <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Approval threshold</p>
-                                        <p class="mt-1 text-lg font-semibold">
-                                            {{ selectedPolicy.requires_approval_above_amount ? formatCurrency(selectedPolicy.requires_approval_above_amount) : 'No threshold' }}
-                                        </p>
-                                    </div>
-                                    <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                        <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Auto apply</p>
-                                        <p class="mt-1 text-lg font-semibold">{{ selectedPolicy.auto_apply ? 'Enabled' : 'Manual only' }}</p>
-                                    </div>
-                                </div>
-
-                                <div class="flex flex-wrap gap-2">
-                                    <Button v-if="canManage && selectedPolicy.status === 'active'" class="gap-2" @click="openApplyDialog">
-                                        <AppIcon name="receipt" class="size-4" />
-                                        Apply to invoice
-                                    </Button>
-                                    <Button variant="outline" class="gap-2" @click="window.location.href = '/billing'">
-                                        <AppIcon name="arrow-right" class="size-4" />
-                                        Open invoice board
-                                    </Button>
+                                    <Badge variant="outline">{{ policies.length }}</Badge>
                                 </div>
                             </CardHeader>
+
+                            <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
+                                <ScrollArea class="min-h-0 flex-1 pr-3">
+                                    <div class="space-y-3">
+                                        <template v-if="booting || listLoading">
+                                            <div v-for="index in 5" :key="`discount-policy-skeleton-${index}`" class="rounded-lg border border-sidebar-border/70 p-3">
+                                                <div class="h-4 w-2/3 rounded bg-muted"></div>
+                                                <div class="mt-2 h-3 w-1/2 rounded bg-muted"></div>
+                                                <div class="mt-3 h-8 w-full rounded bg-muted"></div>
+                                            </div>
+                                        </template>
+
+                                        <template v-else-if="policies.length > 0">
+                                            <button
+                                                v-for="policy in policies"
+                                                :key="policy.id"
+                                                type="button"
+                                                class="w-full rounded-lg border p-3 text-left transition-colors"
+                                                :class="policy.id === selectedPolicyId ? 'border-primary bg-primary/5' : 'border-sidebar-border/70 hover:bg-muted/50'"
+                                                @click="selectPolicy(policy.id)"
+                                            >
+                                                <div class="flex items-start justify-between gap-3">
+                                                    <div class="min-w-0">
+                                                        <p class="truncate text-sm font-medium">{{ policy.name || policy.code || 'Discount policy' }}</p>
+                                                        <p class="truncate text-xs text-muted-foreground">{{ policy.code || 'No code' }}</p>
+                                                    </div>
+                                                    <Badge :variant="policyBadgeVariant(policy.status)">{{ formatStatusLabel(policy.status) }}</Badge>
+                                                </div>
+
+                                                <div class="mt-3 grid gap-2 text-xs text-muted-foreground">
+                                                    <div>
+                                                        <span class="block text-[11px] uppercase tracking-[0.16em]">Policy value</span>
+                                                        <span class="text-sm font-semibold text-foreground">{{ policyValueLabel(policy) }}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span class="block text-[11px] uppercase tracking-[0.16em]">Active from</span>
+                                                        <span class="text-sm text-foreground">{{ formatDateTime(policy.active_from_date) }}</span>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        </template>
+
+                                        <div v-else class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                                            No discount policies match the current work filters.
+                                        </div>
+                                    </div>
+                                </ScrollArea>
+                            </CardContent>
                         </Card>
 
-                        <div class="grid gap-4 xl:grid-cols-2">
-                            <Card class="rounded-lg border-sidebar-border/70">
-                                <CardHeader>
-                                    <CardTitle>Policy posture</CardTitle>
-                                    <CardDescription>Business shape and operational limits for this concession.</CardDescription>
-                                </CardHeader>
-                                <CardContent class="grid gap-3 text-sm">
-                                    <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                        <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Description</p>
-                                        <p class="mt-1 font-medium">{{ selectedPolicy.description || 'No description recorded.' }}</p>
-                                    </div>
-                                    <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                        <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Active window</p>
-                                        <p class="mt-1 font-medium">
-                                            {{ formatDateTime(selectedPolicy.active_from_date) }} to
-                                            {{ selectedPolicy.active_to_date ? formatDateTime(selectedPolicy.active_to_date) : 'Open ended' }}
+                        <div class="flex min-h-0 flex-col gap-4">
+                            <template v-if="selectedPolicy">
+                                <Card class="rounded-lg border-sidebar-border/70">
+                                    <CardHeader class="gap-3">
+                                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                            <div class="min-w-0">
+                                                <CardTitle class="truncate">{{ selectedPolicy.name || selectedPolicy.code || 'Discount policy' }}</CardTitle>
+                                                <CardDescription class="mt-1">{{ selectedPolicy.code || 'No policy code' }}</CardDescription>
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <Badge :variant="policyBadgeVariant(selectedPolicy.status)">{{ formatStatusLabel(selectedPolicy.status) }}</Badge>
+                                                <Badge variant="outline">{{ policyValueLabel(selectedPolicy) }}</Badge>
+                                                <Badge
+                                                    v-if="lastApplication && lastApplication.billing_discount_policy_id === selectedPolicy.id"
+                                                    :variant="discountFinanceSetupMissing(lastApplication) ? 'destructive' : (lastApplication.financePosting?.recognition.status === 'recognized' ? 'secondary' : 'outline')"
+                                                >
+                                                    {{
+                                                        discountFinanceSetupMissing(lastApplication)
+                                                            ? 'Finance setup missing'
+                                                            : (lastApplication.financePosting?.recognition.status === 'recognized'
+                                                                ? 'Recognition synced'
+                                                                : 'Recognition pending')
+                                                    }}
+                                                </Badge>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid gap-3 sm:grid-cols-3">
+                                            <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Type</p>
+                                                <p class="mt-1 text-lg font-semibold">{{ formatStatusLabel(selectedPolicy.discount_type) }}</p>
+                                            </div>
+                                            <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Approval threshold</p>
+                                                <p class="mt-1 text-lg font-semibold">
+                                                    {{ selectedPolicy.requires_approval_above_amount ? formatCurrency(selectedPolicy.requires_approval_above_amount) : 'No threshold' }}
+                                                </p>
+                                            </div>
+                                            <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Auto apply</p>
+                                                <p class="mt-1 text-lg font-semibold">{{ selectedPolicy.auto_apply ? 'Enabled' : 'Manual only' }}</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-wrap gap-2">
+                                            <Button v-if="canManage && selectedPolicy.status === 'active'" class="gap-2" @click="openApplyDialog">
+                                                <AppIcon name="receipt" class="size-4" />
+                                                Apply to invoice
+                                            </Button>
+                                            <Button variant="outline" class="gap-2" @click="window.location.href = '/billing'">
+                                                <AppIcon name="arrow-right" class="size-4" />
+                                                Open invoice board
+                                            </Button>
+                                        </div>
+                                    </CardHeader>
+                                </Card>
+
+                                <div class="grid gap-4 xl:grid-cols-2">
+                                    <Card class="rounded-lg border-sidebar-border/70">
+                                        <CardHeader>
+                                            <CardTitle>Policy posture</CardTitle>
+                                            <CardDescription>Business shape and operational limits for this concession.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent class="grid gap-3 text-sm">
+                                            <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Description</p>
+                                                <p class="mt-1 font-medium">{{ selectedPolicy.description || 'No description recorded.' }}</p>
+                                            </div>
+                                            <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Active window</p>
+                                                <p class="mt-1 font-medium">
+                                                    {{ formatDateTime(selectedPolicy.active_from_date) }} to
+                                                    {{ selectedPolicy.active_to_date ? formatDateTime(selectedPolicy.active_to_date) : 'Open ended' }}
+                                                </p>
+                                            </div>
+                                            <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Applicable services</p>
+                                                <p class="mt-1 font-medium">
+                                                    {{ selectedPolicy.applicable_services?.length ? selectedPolicy.applicable_services.join(', ') : 'General invoice scope' }}
+                                                </p>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card class="rounded-lg border-sidebar-border/70">
+                                        <CardHeader>
+                                            <CardTitle>Latest application</CardTitle>
+                                            <CardDescription>Most recent discount application posted from this workboard session.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent class="grid gap-3 text-sm">
+                                            <template v-if="lastApplication && lastApplication.billing_discount_policy_id === selectedPolicy.id">
+                                                <Alert v-if="discountFinanceSetupMissing(lastApplication)" variant="destructive" class="rounded-lg">
+                                                    <AppIcon name="triangle-alert" class="size-4" />
+                                                    <AlertTitle>Finance ledger setup is incomplete</AlertTitle>
+                                                    <AlertDescription>
+                                                        Discount recognition is using fallback values because these tables are not available yet:
+                                                        {{ discountFinanceMissingTables(lastApplication) }}.
+                                                    </AlertDescription>
+                                                </Alert>
+
+                                                <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                    <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Original total</p>
+                                                    <p class="mt-1 font-medium">{{ formatCurrency(lastApplication.original_total) }}</p>
+                                                </div>
+                                                <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                    <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Discount applied</p>
+                                                    <p class="mt-1 font-medium">{{ formatCurrency(lastApplication.discount_applied) }}</p>
+                                                </div>
+                                                <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                    <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">New total</p>
+                                                    <p class="mt-1 font-medium">{{ formatCurrency(lastApplication.new_total) }}</p>
+                                                </div>
+                                                <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                    <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Reason</p>
+                                                    <p class="mt-1 font-medium">{{ lastApplication.reason || 'No reason recorded.' }}</p>
+                                                </div>
+                                                <div class="rounded-lg border border-sidebar-border/70 p-3">
+                                                    <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Recognition sync</p>
+                                                    <p class="mt-1 font-medium">
+                                                        {{
+                                                            discountFinanceSetupMissing(lastApplication)
+                                                                ? 'Setup missing'
+                                                                : (lastApplication.financePosting?.recognition.status === 'recognized'
+                                                                    ? 'Recognized'
+                                                                    : 'Pending')
+                                                        }}
+                                                    </p>
+                                                    <p class="mt-1 text-xs text-muted-foreground">
+                                                        {{
+                                                            discountFinanceSetupMissing(lastApplication)
+                                                                ? `Revenue recognition is using fallback values because these tables are not available yet: ${discountFinanceMissingTables(lastApplication)}.`
+                                                                : (lastApplication.financePosting?.recognition.status === 'recognized'
+                                                                    ? `${formatCurrency(lastApplication.financePosting?.recognition.netRevenue)} net revenue | ${formatDateTime(lastApplication.financePosting?.recognition.recognizedAt)}`
+                                                                    : 'Invoice recognition has not been synchronized yet.')
+                                                        }}
+                                                    </p>
+                                                </div>
+                                            </template>
+                                            <div v-else class="rounded-lg border border-dashed p-4 text-muted-foreground">
+                                                No discount application has been posted from this board session yet.
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            </template>
+
+                            <Card v-else class="rounded-lg border-sidebar-border/70">
+                                <CardContent class="flex min-h-[24rem] flex-col items-center justify-center gap-3 text-center">
+                                    <AppIcon name="file-text" class="size-8 text-muted-foreground" />
+                                    <div>
+                                        <p class="text-base font-medium">No policy selected</p>
+                                        <p class="mt-1 text-sm text-muted-foreground">
+                                            Choose a discount policy from the board or create a new one for finance operations.
                                         </p>
                                     </div>
-                                    <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                        <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Applicable services</p>
-                                        <p class="mt-1 font-medium">
-                                            {{ selectedPolicy.applicable_services?.length ? selectedPolicy.applicable_services.join(', ') : 'General invoice scope' }}
-                                        </p>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card class="rounded-lg border-sidebar-border/70">
-                                <CardHeader>
-                                    <CardTitle>Latest application</CardTitle>
-                                    <CardDescription>Most recent discount application posted from this workboard session.</CardDescription>
-                                </CardHeader>
-                                <CardContent class="grid gap-3 text-sm">
-                                    <template v-if="lastApplication && lastApplication.billing_discount_policy_id === selectedPolicy.id">
-                                        <Alert v-if="discountFinanceSetupMissing(lastApplication)" variant="destructive" class="rounded-lg">
-                                            <AppIcon name="triangle-alert" class="size-4" />
-                                            <AlertTitle>Finance ledger setup is incomplete</AlertTitle>
-                                            <AlertDescription>
-                                                Discount recognition is using fallback values because these tables are not available yet:
-                                                {{ discountFinanceMissingTables(lastApplication) }}.
-                                            </AlertDescription>
-                                        </Alert>
-
-                                        <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                            <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Original total</p>
-                                            <p class="mt-1 font-medium">{{ formatCurrency(lastApplication.original_total) }}</p>
-                                        </div>
-                                        <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                            <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Discount applied</p>
-                                            <p class="mt-1 font-medium">{{ formatCurrency(lastApplication.discount_applied) }}</p>
-                                        </div>
-                                        <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                            <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">New total</p>
-                                            <p class="mt-1 font-medium">{{ formatCurrency(lastApplication.new_total) }}</p>
-                                        </div>
-                                        <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                            <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Reason</p>
-                                            <p class="mt-1 font-medium">{{ lastApplication.reason || 'No reason recorded.' }}</p>
-                                        </div>
-                                        <div class="rounded-lg border border-sidebar-border/70 p-3">
-                                            <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">Recognition sync</p>
-                                            <p class="mt-1 font-medium">
-                                                {{
-                                                    discountFinanceSetupMissing(lastApplication)
-                                                        ? 'Setup missing'
-                                                        : (lastApplication.financePosting?.recognition.status === 'recognized'
-                                                            ? 'Recognized'
-                                                            : 'Pending')
-                                                }}
-                                            </p>
-                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                {{
-                                                    discountFinanceSetupMissing(lastApplication)
-                                                        ? `Revenue recognition is using fallback values because these tables are not available yet: ${discountFinanceMissingTables(lastApplication)}.`
-                                                        : (lastApplication.financePosting?.recognition.status === 'recognized'
-                                                            ? `${formatCurrency(lastApplication.financePosting?.recognition.netRevenue)} net revenue | ${formatDateTime(lastApplication.financePosting?.recognition.recognizedAt)}`
-                                                            : 'Invoice recognition has not been synchronized yet.')
-                                                }}
-                                            </p>
-                                        </div>
-                                    </template>
-                                    <div v-else class="rounded-lg border border-dashed p-4 text-muted-foreground">
-                                        No discount application has been posted from this board session yet.
-                                    </div>
+                                    <Button v-if="canManage" @click="openCreateDialog">New policy</Button>
                                 </CardContent>
                             </Card>
                         </div>
-                    </template>
-
-                    <Card v-else class="rounded-lg border-sidebar-border/70">
-                        <CardContent class="flex min-h-[24rem] flex-col items-center justify-center gap-3 text-center">
-                            <AppIcon name="file-text" class="size-8 text-muted-foreground" />
-                            <div>
-                                <p class="text-base font-medium">No policy selected</p>
-                                <p class="mt-1 text-sm text-muted-foreground">
-                                    Choose a discount policy from the board or create a new one for finance operations.
-                                </p>
-                            </div>
-                            <Button v-if="canManage" @click="openCreateDialog">New policy</Button>
-                        </CardContent>
-                    </Card>
+                    </div>
                 </div>
-            </div>
+            </Tabs>
         </div>
 
         <Dialog :open="createDialogOpen" @update:open="requestCreateDialogOpenChange">
@@ -886,7 +911,7 @@ onMounted(async () => {
                         <div class="grid gap-2">
                             <Label>Discount type</Label>
                             <Select v-model="createForm.discountType">
-                                <SelectTrigger>
+                                <SelectTrigger class="w-full">
                                     <SelectValue placeholder="Select type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -910,7 +935,7 @@ onMounted(async () => {
                         <div class="grid gap-2">
                             <Label>Auto apply</Label>
                             <Select v-model="createForm.autoApply">
-                                <SelectTrigger>
+                                <SelectTrigger class="w-full">
                                     <SelectValue placeholder="Select mode" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1026,4 +1051,3 @@ onMounted(async () => {
         />
     </AppLayout>
 </template>
-

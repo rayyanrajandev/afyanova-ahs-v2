@@ -21,13 +21,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import {
     Sheet,
@@ -52,7 +45,9 @@ import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { billingPaymentMethodOptions } from './constants';
+import BillingRecordPaymentForm from '@/pages/billing/components/BillingRecordPaymentForm.vue';
+import { billingDefaultPayerTypeFromInvoice } from './constants';
+import { billingRecordPaymentFormIsValid, validateBillingRecordPaymentForm } from './helpers';
 import { formatEnumLabel } from '@/lib/labels';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
@@ -131,6 +126,8 @@ const showBulkPaymentDialog = ref(false);
 const bulkPaymentAmount = ref(0);
 const bulkPaymentMethod = ref('cash');
 const bulkPaymentReference = ref('');
+const bulkPaymentPayerType = ref('self_pay');
+const bulkPaymentNote = ref('');
 const bulkPaymentSaving = ref(false);
 
 const showPaymentDialog = ref(false);
@@ -138,6 +135,8 @@ const paymentInvoice = ref<BillingInvoice | null>(null);
 const paymentAmount = ref(0);
 const paymentMethod = ref('cash');
 const paymentReference = ref('');
+const paymentPayerType = ref('self_pay');
+const paymentNote = ref('');
 const paymentSaving = ref(false);
 
 const capturingCandidateIds = ref<Set<string>>(new Set());
@@ -272,6 +271,8 @@ function openPaymentDialog(invoice: BillingInvoice): void {
     paymentAmount.value = invoice.balanceAmount;
     paymentMethod.value = 'cash';
     paymentReference.value = '';
+    paymentPayerType.value = billingDefaultPayerTypeFromInvoice(invoice);
+    paymentNote.value = '';
     showPaymentDialog.value = true;
 }
 
@@ -279,11 +280,13 @@ function loadDraftPayment(): void {
     try {
         const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
         if (!raw) return;
-        const draft = JSON.parse(raw) as { invoiceId?: string; amount?: number; method?: string; reference?: string };
+        const draft = JSON.parse(raw) as { invoiceId?: string; amount?: number; method?: string; reference?: string; payerType?: string; note?: string };
         if (draft.invoiceId && paymentInvoice.value?.id === draft.invoiceId) {
             if (draft.amount !== undefined && draft.amount > 0) paymentAmount.value = draft.amount;
             if (draft.method) paymentMethod.value = draft.method;
             if (draft.reference !== undefined) paymentReference.value = draft.reference;
+            if (draft.payerType) paymentPayerType.value = draft.payerType;
+            if (draft.note !== undefined) paymentNote.value = draft.note;
         }
     } catch {
         /* ignore corrupted draft */
@@ -300,6 +303,8 @@ function saveDraftPayment(): void {
                 amount: paymentAmount.value,
                 method: paymentMethod.value,
                 reference: paymentReference.value,
+                payerType: paymentPayerType.value,
+                note: paymentNote.value,
             }),
         );
     } catch {
@@ -434,10 +439,24 @@ function showUndoToastMessage(): void {
 async function recordPayment(): Promise<void> {
     if (!paymentInvoice.value || paymentAmount.value <= 0 || !selectedPatientId.value) return;
 
+    const validation = validateBillingRecordPaymentForm({
+        amount: paymentAmount.value,
+        payerType: paymentPayerType.value,
+        paymentMethod: paymentMethod.value,
+        paymentReference: paymentReference.value,
+        note: paymentNote.value,
+    });
+    if (!validation.valid) {
+        notifyError(validation.message);
+        return;
+    }
+
     const invoice = paymentInvoice.value;
     const amount = paymentAmount.value;
     const method = paymentMethod.value;
     const reference = paymentReference.value;
+    const payerType = paymentPayerType.value;
+    const note = paymentNote.value;
     const patientId = selectedPatientId.value;
 
     showPaymentDialog.value = false;
@@ -453,7 +472,7 @@ async function recordPayment(): Promise<void> {
     patchQueueCache(patientId, (entry) => updateQueueForPatient(entry, updatedInvoices));
 
     try {
-        const response = await actions.recordPayment.mutateAsync({ invoiceId: invoice.id, amount, paymentMethod: method, paymentReference: reference });
+        const response = await actions.recordPayment.mutateAsync({ invoiceId: invoice.id, amount, payerType, paymentMethod: method, paymentReference: reference, note: note.trim() || undefined });
         undoStack.value.push({
             invoiceId: invoice.id,
             paymentId: response.data.id,
@@ -500,16 +519,32 @@ function openBulkPaymentDialog(): void {
     bulkPaymentAmount.value = bulkTotalAmount.value;
     bulkPaymentMethod.value = 'cash';
     bulkPaymentReference.value = '';
+    bulkPaymentPayerType.value = billingDefaultPayerTypeFromInvoice(selectedUnpaidInvoices.value[0]);
+    bulkPaymentNote.value = '';
     showBulkPaymentDialog.value = true;
 }
 
 async function recordBulkPayment(): Promise<void> {
     if (selectedUnpaidInvoices.value.length === 0 || bulkPaymentAmount.value <= 0 || !selectedPatientId.value) return;
 
+    const validation = validateBillingRecordPaymentForm({
+        amount: bulkPaymentAmount.value,
+        payerType: bulkPaymentPayerType.value,
+        paymentMethod: bulkPaymentMethod.value,
+        paymentReference: bulkPaymentReference.value,
+        note: bulkPaymentNote.value,
+    });
+    if (!validation.valid) {
+        notifyError(validation.message);
+        return;
+    }
+
     const invoices = [...selectedUnpaidInvoices.value];
     const totalAmount = bulkPaymentAmount.value;
     const method = bulkPaymentMethod.value;
     const reference = bulkPaymentReference.value;
+    const payerType = bulkPaymentPayerType.value;
+    const note = bulkPaymentNote.value;
     const patientId = selectedPatientId.value;
     const perInvoiceAmount = totalAmount / invoices.length;
 
@@ -526,7 +561,7 @@ async function recordBulkPayment(): Promise<void> {
 
     try {
         for (const inv of invoices) {
-            await actions.recordPayment.mutateAsync({ invoiceId: inv.id, amount: perInvoiceAmount, paymentMethod: method, paymentReference: reference });
+            await actions.recordPayment.mutateAsync({ invoiceId: inv.id, amount: perInvoiceAmount, payerType, paymentMethod: method, paymentReference: reference, note: note.trim() || undefined });
         }
         actions.invalidate(patientId);
     } catch (error) {
@@ -1079,28 +1114,16 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <SheetDescription>{{ paymentInvoice?.invoiceNumber || 'Draft invoice' }} — Balance: {{ formatMoney(paymentInvoice?.balanceAmount || 0, paymentInvoice?.currencyCode) }}</SheetDescription>
                 </SheetHeader>
 
-                <div class="flex-1 space-y-4 overflow-y-auto p-4">
-                    <div>
-                        <Label for="paymentAmount">Amount</Label>
-                        <Input id="paymentAmount" v-model.number="paymentAmount" type="number" min="1" :max="paymentInvoice?.balanceAmount || 0" class="mt-1" />
-                    </div>
-
-                    <div>
-                        <Label for="paymentMethod">Payment Method</Label>
-                        <Select v-model="paymentMethod">
-                            <SelectTrigger class="mt-1"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem v-for="opt in billingPaymentMethodOptions" :key="opt.value" :value="opt.value">
-                                    {{ opt.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div>
-                        <Label for="paymentReference">Reference (optional)</Label>
-                        <Input id="paymentReference" v-model="paymentReference" placeholder="Receipt number, transaction ID..." class="mt-1" />
-                    </div>
+                <div class="flex-1 overflow-y-auto p-4">
+                    <BillingRecordPaymentForm
+                        v-model:amount="paymentAmount"
+                        v-model:payer-type="paymentPayerType"
+                        v-model:payment-method="paymentMethod"
+                        v-model:payment-reference="paymentReference"
+                        v-model:note="paymentNote"
+                        id-prefix="payment"
+                        :max-amount="paymentInvoice?.balanceAmount || 0"
+                    />
                 </div>
 
                 <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
@@ -1116,7 +1139,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         "
                         >Cancel</Button
                     >
-                    <Button :disabled="paymentAmount <= 0" @click="recordPayment()">Record Payment</Button>
+                    <Button :disabled="paymentSaving" @click="recordPayment()">Record Payment</Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet>
@@ -1129,33 +1152,21 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <SheetDescription>{{ selectedUnpaidInvoices.length }} invoices selected — Total: {{ formatMoney(bulkTotalAmount, selectedUnpaidInvoices[0]?.currencyCode) }}</SheetDescription>
                 </SheetHeader>
 
-                <div class="flex-1 space-y-4 overflow-y-auto p-4">
-                    <div>
-                        <Label for="bulkPaymentAmount">Amount</Label>
-                        <Input id="bulkPaymentAmount" v-model.number="bulkPaymentAmount" type="number" min="1" :max="bulkTotalAmount" class="mt-1" />
-                    </div>
-
-                    <div>
-                        <Label for="bulkPaymentMethod">Payment Method</Label>
-                        <Select v-model="bulkPaymentMethod">
-                            <SelectTrigger class="mt-1"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem v-for="opt in billingPaymentMethodOptions" :key="opt.value" :value="opt.value">
-                                    {{ opt.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div>
-                        <Label for="bulkPaymentReference">Reference (optional)</Label>
-                        <Input id="bulkPaymentReference" v-model="bulkPaymentReference" placeholder="Receipt number, transaction ID..." class="mt-1" />
-                    </div>
+                <div class="flex-1 overflow-y-auto p-4">
+                    <BillingRecordPaymentForm
+                        v-model:amount="bulkPaymentAmount"
+                        v-model:payer-type="bulkPaymentPayerType"
+                        v-model:payment-method="bulkPaymentMethod"
+                        v-model:payment-reference="bulkPaymentReference"
+                        v-model:note="bulkPaymentNote"
+                        id-prefix="bulk-payment"
+                        :max-amount="bulkTotalAmount"
+                    />
                 </div>
 
                 <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
                     <Button variant="outline" @click="showBulkPaymentDialog = false">Cancel</Button>
-                    <Button :disabled="bulkPaymentAmount <= 0" @click="recordBulkPayment()">Record Bulk Payment</Button>
+                    <Button :disabled="bulkPaymentSaving" @click="recordBulkPayment()">Record Bulk Payment</Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet>

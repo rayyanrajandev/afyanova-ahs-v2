@@ -315,7 +315,7 @@ Route::get('direct-service/queue', function () {
 // Billing invoice queue — rebuilt Cashier Queue (V2 pages architecture:
 // TanStack Query composables, URL-synced filters, sticky search bar).
 Route::get('billing', function () {
-    return Inertia::render('billing/IndexV2');
+    return Inertia::render('billing/List');
 })->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing.page');
 
 // Billing Patient Workspace — analogue of the Encounter module's

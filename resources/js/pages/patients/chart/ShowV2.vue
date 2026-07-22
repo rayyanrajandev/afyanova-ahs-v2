@@ -275,8 +275,17 @@ const auditLogs = computed(() => auditLogQuery.data.value?.data ?? []);
 
 const encountersQuery = usePatientEncounters(patientIdRef);
 const encounters = computed(() => encountersQuery.data.value?.data ?? []);
+const closedVisits = computed<Record<string, true | undefined>>(() => {
+    const map: Record<string, true | undefined> = {};
+    for (const enc of encounters.value) {
+        if (enc.appointmentId && (enc.status === 'closed' || enc.closedAt)) {
+            map[enc.appointmentId] = true;
+        }
+    }
+    return map;
+});
 
-const primaryVisit = computed(() => resolvePrimaryVisit(appointments.value, focusedAppointmentId.value));
+const primaryVisit = computed(() => resolvePrimaryVisit(appointments.value, focusedAppointmentId.value, closedVisits.value));
 
 const visitScope = useVisitScope({
     canReadAppointments,
@@ -291,6 +300,7 @@ const timeline = usePatientChartTimeline({
     patientId: patientIdRef,
     primaryVisit,
     focusedEncounterId: visitScope.focusedEncounterId,
+    closedVisits,
     canReadAppointments,
     canRecordOpdTriage,
     canStartConsultation,
@@ -1086,8 +1096,8 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     <div class="flex flex-wrap gap-2">
                                         <Button v-if="focusedAppointmentId" size="sm" variant="ghost" @click="focusedAppointmentId = ''">Auto-select</Button>
                                         <Button size="sm" class="gap-1.5" as-child>
-                                            <Link :href="appointmentPrimaryActionHref(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation)">
-                                                <AppIcon :name="appointmentPrimaryActionIcon(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation)" class="size-3.5" />{{ appointmentPrimaryActionLabel(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation) }}
+                                            <Link :href="appointmentPrimaryActionHref(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation, closedVisits)">
+                                                <AppIcon :name="appointmentPrimaryActionIcon(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation, closedVisits)" class="size-3.5" />{{ appointmentPrimaryActionLabel(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation, closedVisits) }}
                                             </Link>
                                         </Button>
                                     </div>
@@ -1123,8 +1133,8 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                             {{ timeline.primaryVisit.value?.id === appointment.id ? 'In chart focus' : 'Focus in chart' }}
                                         </Button>
                                         <Button size="sm" variant="outline" class="gap-1.5" as-child>
-                                            <Link :href="appointmentPrimaryActionHref(appointment, canRecordOpdTriage, canStartConsultation)">
-                                                <AppIcon :name="appointmentPrimaryActionIcon(appointment, canRecordOpdTriage, canStartConsultation)" class="size-3.5" />{{ appointmentPrimaryActionLabel(appointment, canRecordOpdTriage, canStartConsultation) }}
+                                            <Link :href="appointmentPrimaryActionHref(appointment, canRecordOpdTriage, canStartConsultation, closedVisits)">
+                                                <AppIcon :name="appointmentPrimaryActionIcon(appointment, canRecordOpdTriage, canStartConsultation, closedVisits)" class="size-3.5" />{{ appointmentPrimaryActionLabel(appointment, canRecordOpdTriage, canStartConsultation, closedVisits) }}
                                             </Link>
                                         </Button>
                                     </div>

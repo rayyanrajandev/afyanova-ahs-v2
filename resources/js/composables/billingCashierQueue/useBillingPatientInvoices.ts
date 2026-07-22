@@ -23,6 +23,8 @@ export type BillingInvoice = {
     invoiceDate: string;
     paymentDueAt: string | null;
     notes?: string | null;
+    lastPaymentPayerType?: string | null;
+    payerSummary?: { payerType?: string | null; contractName?: string | null } | null;
     lineItems: BillingInvoiceLineItem[] | null;
 };
 

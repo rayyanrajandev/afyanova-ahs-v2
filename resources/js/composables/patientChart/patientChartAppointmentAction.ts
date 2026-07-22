@@ -12,13 +12,14 @@ export type AppointmentWorkspaceAction = 'details' | 'triage' | 'consultation';
 export function resolvePrimaryVisit(
     appointments: PatientChartAppointment[],
     focusedAppointmentId: string,
+    closedVisits?: Record<string, true | undefined>,
 ): PatientChartAppointment | null {
     if (focusedAppointmentId) {
         return appointments.find((appointment) => appointment.id === focusedAppointmentId) ?? null;
     }
 
     return (
-        appointments.find((appointment) => activeVisitStatuses.includes(appointment.status || '')) ??
+        appointments.find((appointment) => activeVisitStatuses.includes(appointment.status || '') && !closedVisits?.[appointment.id]) ??
         appointments.find((appointment) => appointment.status === 'scheduled') ??
         appointments[0] ??
         null
@@ -56,9 +57,12 @@ export function appointmentWorkflowAction(
     appointment: PatientChartAppointment | null,
     canRecordOpdTriage: boolean,
     canStartConsultation: boolean,
+    closedVisits?: Record<string, true | undefined>,
 ): AppointmentWorkspaceAction {
-    if (appointment?.status === 'waiting_triage' && canRecordOpdTriage) return 'triage';
-    if ((appointment?.status === 'waiting_provider' || appointment?.status === 'in_consultation') && canStartConsultation) return 'consultation';
+    if (!appointment) return 'details';
+    if (closedVisits?.[appointment.id]) return 'details';
+    if (appointment.status === 'waiting_triage' && canRecordOpdTriage) return 'triage';
+    if ((appointment.status === 'waiting_provider' || appointment.status === 'in_consultation') && canStartConsultation) return 'consultation';
     return 'details';
 }
 
@@ -66,20 +70,27 @@ export function appointmentWorkflowHref(
     appointment: PatientChartAppointment,
     canRecordOpdTriage: boolean,
     canStartConsultation: boolean,
+    closedVisits?: Record<string, true | undefined>,
 ): string {
-    return appointmentWorkspaceHref(appointment, appointmentWorkflowAction(appointment, canRecordOpdTriage, canStartConsultation));
+    return appointmentWorkspaceHref(appointment, appointmentWorkflowAction(appointment, canRecordOpdTriage, canStartConsultation, closedVisits));
 }
 
-export function shouldShowAppointmentCareAction(appointment: PatientChartAppointment | null): boolean {
-    return Boolean(appointment && activeVisitStatuses.includes(appointment.status || ''));
+export function shouldShowAppointmentCareAction(
+    appointment: PatientChartAppointment | null,
+    closedVisits?: Record<string, true | undefined>,
+): boolean {
+    if (!appointment) return false;
+    if (closedVisits?.[appointment.id]) return false;
+    return activeVisitStatuses.includes(appointment.status || '');
 }
 
 export function appointmentActionLabel(
     appointment: PatientChartAppointment | null,
     canRecordOpdTriage: boolean,
     canStartConsultation: boolean,
+    closedVisits?: Record<string, true | undefined>,
 ): string {
-    const action = appointmentWorkflowAction(appointment, canRecordOpdTriage, canStartConsultation);
+    const action = appointmentWorkflowAction(appointment, canRecordOpdTriage, canStartConsultation, closedVisits);
     if (action === 'triage') return 'Open triage';
     if (action === 'consultation') {
         return appointment?.status === 'in_consultation' ? 'Resume consultation' : 'Start consultation';
@@ -91,9 +102,10 @@ export function appointmentPrimaryActionHref(
     appointment: PatientChartAppointment,
     canRecordOpdTriage: boolean,
     canStartConsultation: boolean,
+    closedVisits?: Record<string, true | undefined>,
 ): string {
-    return shouldShowAppointmentCareAction(appointment)
-        ? appointmentWorkflowHref(appointment, canRecordOpdTriage, canStartConsultation)
+    return shouldShowAppointmentCareAction(appointment, closedVisits)
+        ? appointmentWorkflowHref(appointment, canRecordOpdTriage, canStartConsultation, closedVisits)
         : appointmentDetailsHref(appointment);
 }
 
@@ -101,9 +113,10 @@ export function appointmentPrimaryActionLabel(
     appointment: PatientChartAppointment,
     canRecordOpdTriage: boolean,
     canStartConsultation: boolean,
+    closedVisits?: Record<string, true | undefined>,
 ): string {
-    return shouldShowAppointmentCareAction(appointment)
-        ? appointmentActionLabel(appointment, canRecordOpdTriage, canStartConsultation)
+    return shouldShowAppointmentCareAction(appointment, closedVisits)
+        ? appointmentActionLabel(appointment, canRecordOpdTriage, canStartConsultation, closedVisits)
         : 'Open visit';
 }
 
@@ -111,9 +124,11 @@ export function appointmentPrimaryActionIcon(
     appointment: PatientChartAppointment,
     canRecordOpdTriage: boolean,
     canStartConsultation: boolean,
+    closedVisits?: Record<string, true | undefined>,
 ): string {
-    if (!shouldShowAppointmentCareAction(appointment)) return 'calendar-clock';
-    const action = appointmentWorkflowAction(appointment, canRecordOpdTriage, canStartConsultation);
+    if (closedVisits?.[appointment.id]) return 'calendar-clock';
+    if (!shouldShowAppointmentCareAction(appointment, closedVisits)) return 'calendar-clock';
+    const action = appointmentWorkflowAction(appointment, canRecordOpdTriage, canStartConsultation, closedVisits);
     if (action === 'triage') return 'heart-pulse';
     if (action === 'consultation') return 'stethoscope';
     return 'calendar-clock';

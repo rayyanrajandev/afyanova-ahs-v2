@@ -63,6 +63,15 @@ class EloquentEmergencyTriageCaseRepository implements EmergencyTriageCaseReposi
             ->exists();
     }
 
+    public function findByAppointmentId(string $appointmentId): ?array
+    {
+        $case = EmergencyTriageCaseModel::query()
+            ->where('appointment_id', $appointmentId)
+            ->first();
+
+        return $case?->toArray();
+    }
+
     public function findActiveForPatient(string $patientId): ?array
     {
         $query = EmergencyTriageCaseModel::query()

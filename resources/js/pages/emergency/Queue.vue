@@ -16,6 +16,7 @@ import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
 import EmergencyCaseCreateSheet from '@/components/emergency/EmergencyCaseCreateSheet.vue';
 import EmergencyCaseTransfersPanel from '@/components/emergency/EmergencyCaseTransfersPanel.vue';
 import EmergencyStatusDialog, { type EmergencyStatusTarget } from '@/components/emergency/EmergencyStatusDialog.vue';
+import EmergencyTriageSheet from '@/components/emergency/EmergencyTriageSheet.vue';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import ElapsedTimeBadge from '@/components/shared/ElapsedTimeBadge.vue';
 import { useEmergencyCaseAuditLog } from '@/composables/emergency/useEmergencyCaseAuditLog';
@@ -233,13 +234,25 @@ const statusDialogOpen = ref(false);
 const statusDialogTarget = ref<EmergencyStatusTarget | null>(null);
 const statusDialogAction = ref<EmergencyCaseStatusTarget | null>(null);
 
+const triageSheetOpen = ref(false);
+const triageSheetCase = ref<EmergencyCase | null>(null);
+
 function openStatusDialog(item: EmergencyCase, action: EmergencyCaseStatusTarget): void {
+    if (action === 'triaged') {
+        triageSheetCase.value = item;
+        triageSheetOpen.value = true;
+        return;
+    }
     statusDialogTarget.value = { caseId: item.id, caseNumber: item.caseNumber };
     statusDialogAction.value = action;
     statusDialogOpen.value = true;
 }
 
 async function onStatusUpdated(): Promise<void> {
+    await invalidateQueueAndCounts();
+}
+
+async function onTriageRecorded(): Promise<void> {
     await invalidateQueueAndCounts();
 }
 
@@ -486,6 +499,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
             :target="statusDialogTarget"
             :action="statusDialogAction"
             @updated="onStatusUpdated"
+        />
+
+        <EmergencyTriageSheet
+            v-model:open="triageSheetOpen"
+            :emergency-case="triageSheetCase"
+            @recorded="onTriageRecorded"
         />
 
         <EmergencyCaseCreateSheet v-model:open="createSheetOpen" @created="onCaseCreated" />

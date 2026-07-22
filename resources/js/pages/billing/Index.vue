@@ -1557,7 +1557,7 @@ watch(showPaymentDialog, (open) => {
                                 <SelectItem value="mobile_money">Mobile Money</SelectItem>
                                 <SelectItem value="lipa_namba">Lipa Namba</SelectItem>
                                 <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                                <SelectItem value="insurance">Insurance</SelectItem>
+                                <SelectItem value="insurance_claim">Insurance</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -1621,7 +1621,7 @@ watch(showPaymentDialog, (open) => {
                                 <SelectItem value="mobile_money">Mobile Money</SelectItem>
                                 <SelectItem value="lipa_namba">Lipa Namba</SelectItem>
                                 <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                                <SelectItem value="insurance">Insurance</SelectItem>
+                                <SelectItem value="insurance_claim">Insurance</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>

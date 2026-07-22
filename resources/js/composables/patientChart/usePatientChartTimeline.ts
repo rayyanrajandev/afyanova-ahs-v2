@@ -215,6 +215,7 @@ export type UsePatientChartTimelineParams = {
     patientId: Ref<string>;
     primaryVisit: ComputedRef<PatientChartAppointment | null>;
     focusedEncounterId: Ref<string | null>;
+    closedVisits: Ref<Record<string, true | undefined>>;
     canReadAppointments: Ref<boolean>;
     canRecordOpdTriage: Ref<boolean>;
     canStartConsultation: Ref<boolean>;
@@ -265,27 +266,27 @@ export function usePatientChartTimeline(params: UsePatientChartTimelineParams) {
     const latestRecord = computed(() => params.records.value[0] ?? null);
 
     const openVisitStatuses = ['scheduled', ...activeVisitStatuses];
-    const hasOpenVisitInChart = computed(() => Boolean(primaryVisit.value && openVisitStatuses.includes(primaryVisit.value.status || '')));
+    const hasOpenVisitInChart = computed(() => Boolean(primaryVisit.value && !params.closedVisits.value?.[primaryVisit.value.id] && openVisitStatuses.includes(primaryVisit.value.status || '')));
 
     const visitPrimaryActionHref = computed(() => {
         if (!primaryVisit.value) {
             return `/appointments?${new URLSearchParams({ patientId: params.patientId.value, open: 'schedule', from: 'patient-chart' }).toString()}`;
         }
         return hasOpenVisitInChart.value
-            ? appointmentPrimaryActionHref(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value)
+            ? appointmentPrimaryActionHref(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value, params.closedVisits.value)
             : appointmentDetailsHref(primaryVisit.value);
     });
     const visitPrimaryActionLabel = computed(() => {
         if (!primaryVisit.value) return 'Schedule appointment';
         if (hasOpenVisitInChart.value) {
-            return appointmentPrimaryActionLabel(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value);
+            return appointmentPrimaryActionLabel(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value, params.closedVisits.value);
         }
         return 'Open visit';
     });
     const visitPrimaryActionIcon = computed(() => {
         if (!primaryVisit.value) return 'calendar-plus-2';
         if (hasOpenVisitInChart.value) {
-            return appointmentPrimaryActionIcon(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value);
+            return appointmentPrimaryActionIcon(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value, params.closedVisits.value);
         }
         return 'calendar-clock';
     });
