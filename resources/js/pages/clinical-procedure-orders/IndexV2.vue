@@ -48,7 +48,7 @@ const canRead = computed(() => hasAccess('clinical-procedure.orders.read'));
 const canUpdateStatus = computed(() => hasAccess('clinical-procedure.perform'));
 const canApplyLifecycleAction = computed(() => hasAccess('clinical-procedure.order'));
 const canCreate = computed(() => hasAccess('clinical-procedure.order'));
-const canViewAuditLogs = computed(() => hasAccess('clinical-procedure.orders.audit-logs.view'));
+const canViewAuditLogs = computed(() => hasAccess('clinical-procedure.orders.view-audit-logs'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Clinical procedure worklist', href: '/clinical-procedure-orders' },

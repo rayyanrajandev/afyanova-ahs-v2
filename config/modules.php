@@ -74,7 +74,7 @@ return [
                 'href' => '/clinical-procedure-orders',
                 'icon' => 'layers',
                 'section' => 'clinical_care',
-                'permission_prefixes' => ['clinical_procedure.orders.', 'clinical-procedure-orders.'],
+                'permission_prefixes' => ['clinical-procedure.'],
                 'help_note' => 'Nursing and bedside procedure orders',
             ],
             'entitlement_key' => 'clinical_procedure.orders',
@@ -83,14 +83,14 @@ return [
                 ['path_prefix' => '/clinical-procedure-orders', 'required_all' => ['clinical_procedure.orders']],
             ],
             'dashboard_widgets' => [
-                ['workflow' => 'direct_service', 'id' => 'clinical_procedures', 'label' => 'Clinical Procedures', 'permission' => 'clinical_procedure.orders.read'],
+                ['workflow' => 'direct_service', 'id' => 'clinical_procedures', 'label' => 'Clinical Procedures', 'permission' => 'clinical-procedure.orders.read'],
             ],
             'permissions' => [
-                'clinical_procedure.orders.read',
-                'clinical_procedure.orders.create',
-                'clinical_procedure.orders.update',
-                'clinical_procedure.orders.update-status',
-                'clinical_procedure.orders.view-audit-logs',
+                'clinical-procedure.orders.read',
+                'clinical-procedure.order',
+                'clinical-procedure.orders.update',
+                'clinical-procedure.perform',
+                'clinical-procedure.orders.view-audit-logs',
             ],
             'entitlement_seeding' => [
                 'label' => 'Clinical procedure orders, worklist, and results',
@@ -294,6 +294,8 @@ return [
             'route_prefixes' => ['staff.'],
             'facility_path_rules' => [
                 ['path_prefix' => '/staff', 'required_all' => ['staff.profiles']],
+                ['path_prefix' => '/staff-credentialing', 'required_all' => ['staff.credentialing']],
+                ['path_prefix' => '/staff-privileges', 'required_all' => ['staff.privileges']],
             ],
         ],
     ],
@@ -350,7 +352,6 @@ return [
             'widgets' => [
                 ['id' => 'appointments', 'label' => 'Consultation queue', 'permission' => 'appointments.read'],
                 ['id' => 'medical_records', 'label' => 'Medical records', 'permission' => 'medical.records.read'],
-                ['id' => 'orders', 'label' => 'Downstream orders', 'permission' => 'laboratory.orders.read'],
             ],
             'facility_entitlements' => [
                 'any' => ['medical_records.core', 'appointments.scheduling'],
@@ -365,7 +366,6 @@ return [
             'widgets' => [
                 ['id' => 'triage', 'label' => 'Triage queue', 'permission' => 'appointments.read'],
                 ['id' => 'ward', 'label' => 'Inpatient ward', 'permission' => 'inpatient.ward.read'],
-                ['id' => 'orders', 'label' => 'Stat orders', 'permission' => 'laboratory.orders.read'],
             ],
             'facility_entitlements' => [
                 'any' => ['inpatient.ward', 'appointments.scheduling'],
@@ -380,7 +380,6 @@ return [
             'widgets' => [
                 ['id' => 'triage', 'label' => 'ED triage', 'permission' => 'emergency.triage.read'],
                 ['id' => 'admissions', 'label' => 'Admissions', 'permission' => 'admissions.read'],
-                ['id' => 'orders', 'label' => 'Stat orders', 'permission' => 'laboratory.orders.read'],
             ],
             'facility_entitlements' => [
                 'any' => ['emergency.triage', 'appointments.scheduling'],

@@ -384,7 +384,8 @@ return [
             'platform.clinical-catalog.read',
             'platform.resources.read',
             'inventory.procurement.read',
-            'clinical_procedure.orders.audit-logs.view',
+            'clinical-procedure.orders.read',
+            'clinical-procedure.orders.view-audit-logs',
         ],
     ],
 

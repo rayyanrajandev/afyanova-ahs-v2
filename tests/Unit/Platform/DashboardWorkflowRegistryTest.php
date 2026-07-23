@@ -1,10 +1,16 @@
 <?php
 
 use App\Modules\Platform\Application\Services\DashboardWorkflowRegistry;
+use App\Modules\Platform\Application\Services\ModuleRegistryService;
 use App\Modules\Platform\Domain\ValueObjects\DashboardSessionContext;
 
+// DashboardWorkflowRegistry now reads its workflow catalog from config/modules.php via
+// ModuleRegistryService, so this "unit" test needs the app container booted (for the
+// config() helper) even though it doesn't touch the database.
+uses(Tests\TestCase::class);
+
 it('prioritizes operations for HR role', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $context = new DashboardSessionContext(
         roleCodesUpper: ['ADMIN.HR'],
@@ -22,7 +28,7 @@ it('prioritizes operations for HR role', function (): void {
 });
 
 it('prioritizes records for medical records officer without clinical roles', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $context = new DashboardSessionContext(
         roleCodesUpper: ['ADMIN.MEDICAL.RECORDS'],
@@ -40,7 +46,7 @@ it('prioritizes records for medical records officer without clinical roles', fun
 });
 
 it('does not add records workflow for nursing role with medical records read', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $context = new DashboardSessionContext(
         roleCodesUpper: ['CLINICAL.NURSE'],
@@ -57,7 +63,7 @@ it('does not add records workflow for nursing role with medical records read', f
 });
 
 it('adds supply workflow from inventory procurement permission', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $context = new DashboardSessionContext(
         roleCodesUpper: ['INVENTORY.STAFF'],
@@ -71,7 +77,7 @@ it('adds supply workflow from inventory procurement permission', function (): vo
 });
 
 it('filters workflows when facility subscription entitlements are missing', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $keys = $registry->filterWorkflowKeysByFacilitySubscription(
         ['operations', 'supply', 'front_desk'],
@@ -83,7 +89,7 @@ it('filters workflows when facility subscription entitlements are missing', func
 });
 
 it('includes permission-gated widgets in workflow definitions', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $context = new DashboardSessionContext(
         roleCodesUpper: ['ADMIN.HR'],
@@ -101,7 +107,7 @@ it('includes permission-gated widgets in workflow definitions', function (): voi
 });
 
 it('prioritizes laboratory dashboard for lab user and excludes supply chain', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $context = new DashboardSessionContext(
         roleCodesUpper: ['LAB.STAFF'],
@@ -127,7 +133,7 @@ it('prioritizes laboratory dashboard for lab user and excludes supply chain', fu
 });
 
 it('prioritizes clinician dashboard and excludes front desk and supply chain noise', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $clinicalPermissions = [
         'patients.read',
@@ -177,7 +183,7 @@ it('prioritizes clinician dashboard and excludes front desk and supply chain noi
 });
 
 it('does not add supply workflow for nursing role with procurement requisition permission', function (): void {
-    $registry = new DashboardWorkflowRegistry;
+    $registry = new DashboardWorkflowRegistry(new ModuleRegistryService);
 
     $context = new DashboardSessionContext(
         roleCodesUpper: ['CLINICAL.NURSE'],

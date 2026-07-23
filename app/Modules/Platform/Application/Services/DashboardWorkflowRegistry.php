@@ -65,7 +65,7 @@ final class DashboardWorkflowRegistry
         $moduleWidgets = $this->moduleRegistry->buildWorkflowWidgets();
 
         foreach ($this->moduleRegistry->workflowDefinitions() as $key => $wf) {
-            $widgets = $moduleWidgets[$key] ?? [];
+            $widgets = array_merge((array) ($wf['widgets'] ?? []), $moduleWidgets[$key] ?? []);
 
             $catalog[] = [
                 'key' => $key,
@@ -90,7 +90,7 @@ final class DashboardWorkflowRegistry
             $roleCodes = (array) ($wf['role_codes'] ?? []);
             $evaluated = false;
 
-            if ($context->isFacilitySuperAdmin || $context->isPlatformSuperAdmin) {
+            if ($key === self::WORKFLOW_ADMIN && ($context->isFacilitySuperAdmin || $context->isPlatformSuperAdmin)) {
                 $allow[$key] = true;
                 continue;
             }

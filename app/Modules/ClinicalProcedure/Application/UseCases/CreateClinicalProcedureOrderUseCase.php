@@ -8,7 +8,10 @@ use App\Modules\ClinicalProcedure\Application\Exceptions\ClinicalProcedureOrderP
 use App\Modules\ClinicalProcedure\Application\Exceptions\PatientNotEligibleForClinicalProcedureOrderException;
 use App\Modules\ClinicalProcedure\Domain\Repositories\ClinicalProcedureOrderAuditLogRepositoryInterface;
 use App\Modules\ClinicalProcedure\Domain\Repositories\ClinicalProcedureOrderRepositoryInterface;
+use App\Modules\ClinicalProcedure\Domain\Services\AdmissionLookupServiceInterface;
+use App\Modules\ClinicalProcedure\Domain\Services\AppointmentLookupServiceInterface;
 use App\Modules\ClinicalProcedure\Domain\Services\ClinicalProcedureCatalogLookupServiceInterface;
+use App\Modules\ClinicalProcedure\Domain\Services\PatientLookupServiceInterface;
 use App\Modules\ClinicalProcedure\Domain\ValueObjects\ClinicalProcedureOrderStatus;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
