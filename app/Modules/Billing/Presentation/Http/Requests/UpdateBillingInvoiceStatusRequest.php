@@ -29,7 +29,25 @@ class UpdateBillingInvoiceStatusRequest extends FormRequest
             return $user->can('billing.invoices.cancel');
         }
 
-        return true;
+        if (
+            $status === BillingInvoiceStatus::PAID->value
+            || $status === BillingInvoiceStatus::PARTIALLY_PAID->value
+        ) {
+            // Marking an invoice paid/partially-paid through this generic status
+            // endpoint has the same financial effect as the dedicated payment
+            // endpoint (it creates a real payment record — see
+            // UpdateBillingInvoiceStatusUseCase) and must require the same
+            // permission that endpoint already requires.
+            return $user->can('billing.payments.record');
+        }
+
+        if ($status === BillingInvoiceStatus::DRAFT->value) {
+            // Reverting an invoice back to draft is an edit, same permission as
+            // the sibling PATCH billing/{id} (general update) route.
+            return $user->can('billing.invoices.update-draft');
+        }
+
+        return false;
     }
 
     /**

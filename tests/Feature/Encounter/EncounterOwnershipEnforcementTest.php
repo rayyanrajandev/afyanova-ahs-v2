@@ -120,6 +120,26 @@ function ownershipEncounter(string $patientId, array $overrides = []): Encounter
     ], $overrides));
 }
 
+it('forbids closing an encounter without medical.records.finalize/amend permission, even when unclaimed', function (): void {
+    // RBAC_Remediation_Plan.md Task 3.4: the ownership check above is layered
+    // on top of a real permission floor in UpdateEncounterStatusRequest::
+    // authorize() (requires medical.records.read plus finalize/amend
+    // depending on the target status) — this proves the floor holds even for
+    // an encounter with no owner yet, where the ownership check alone would
+    // let anyone through.
+    $user = User::factory()->create();
+    $user->givePermissionTo('medical.records.read');
+    $patient = ownershipEncounterPatient();
+    $encounter = ownershipEncounter($patient->id);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/encounters/'.$encounter->id.'/status', [
+            'status' => 'closed',
+            'disposition' => 'discharged',
+        ])
+        ->assertForbidden();
+});
+
 it('blocks closing an encounter owned by another clinician', function (): void {
     $owner = ownershipEncounterUser();
     $otherClinician = ownershipEncounterUser();

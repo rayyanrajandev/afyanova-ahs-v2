@@ -200,7 +200,7 @@ function grantBillingInvoiceStatusRoutePermissions(User $user): void
 it('requires authentication for billing invoice creation', function (): void {
     $patient = makeBillingPatient();
 
-    $this->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+    $this->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->assertUnauthorized();
 });
 
@@ -209,7 +209,7 @@ it('forbids billing invoice creation without create permission', function (): vo
     $patient = makeBillingPatient();
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->assertForbidden();
 });
 
@@ -217,7 +217,7 @@ it('forbids billing invoice list without read permission', function (): void {
     $user = User::factory()->create();
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices')
+        ->getJson('/api/v1/billing')
         ->assertForbidden();
 });
 
@@ -226,7 +226,7 @@ it('forbids billing invoice show without read permission', function (): void {
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($userWithCreate)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->assertCreated()
         ->json('data');
 
@@ -234,7 +234,7 @@ it('forbids billing invoice show without read permission', function (): void {
     grantBillingInvoiceCreatePermission($userWithoutRead);
 
     $this->actingAs($userWithoutRead)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'])
+        ->getJson('/api/v1/billing/'.$created['id'])
         ->assertForbidden();
 });
 
@@ -245,7 +245,7 @@ it('can create billing invoice for existing patient', function (): void {
     $admission = makeBillingAdmission($patient->id);
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'appointmentId' => $appointment->id,
             'admissionId' => $admission->id,
             'issuedByUserId' => $user->id,
@@ -267,7 +267,7 @@ it('auto-links the single active outpatient appointment when billing draft is cr
     ]);
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->assertCreated()
         ->assertJsonPath('data.patientId', $patient->id)
         ->assertJsonPath('data.appointmentId', $appointment->id)
@@ -299,7 +299,7 @@ it('can create billing invoice with line items and returns normalized line item 
     $patient = makeBillingPatient();
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 80000,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -336,7 +336,7 @@ it('continues the active draft for the same patient billing context instead of c
     $radiologySourceId = (string) Str::uuid();
 
     $firstDraft = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 14500,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -358,7 +358,7 @@ it('continues the active draft for the same patient billing context instead of c
         ->json('data');
 
     $continuedDraftResponse = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 74500,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -434,7 +434,7 @@ it('captures consultation visits as billable invoice source lines', function ():
     ]);
 
     $candidate = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
         ->assertOk()
         ->assertJsonPath('meta.pending', 1)
         ->assertJsonPath('meta.priced', 1)
@@ -446,7 +446,7 @@ it('captures consultation visits as billable invoice source lines', function ():
         ->and($candidate['pricingStatus'])->toBe('priced');
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'appointmentId' => $appointment->id,
             'subtotalAmount' => 35000,
             'discountAmount' => 0,
@@ -481,7 +481,7 @@ it('accepts true false query strings for billing charge capture include invoiced
     makeBillingConsultationTariff();
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS&includeInvoiced=false')
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS&includeInvoiced=false')
         ->assertOk()
         ->assertJsonPath('meta.includeInvoiced', false)
         ->assertJsonPath('meta.pending', 1);
@@ -515,7 +515,7 @@ it('prices consultation visits by clinician cadre before department fallback', f
     ]);
 
     $candidate = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
         ->assertOk()
         ->assertJsonPath('meta.pending', 1)
         ->assertJsonPath('meta.priced', 1)
@@ -593,7 +593,7 @@ it('prices specialist consultation visits by primary specialty before generic sp
     ]);
 
     $candidate = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
         ->assertOk()
         ->assertJsonPath('meta.pending', 1)
         ->assertJsonPath('meta.priced', 1)
@@ -655,7 +655,7 @@ it('prices completed radiology orders from the billing service catalog', functio
     makeBillingRadiologyTariff();
 
     $candidate = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
         ->assertOk()
         ->json('data.0');
 
@@ -671,7 +671,7 @@ it('rejects billing invoice for missing patient', function (): void {
     $user = makeBillingUser();
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload((string) Str::uuid()))
+        ->postJson('/api/v1/billing', billingInvoicePayload((string) Str::uuid()))
         ->assertStatus(422)
         ->assertJsonValidationErrors(['patientId']);
 });
@@ -687,7 +687,7 @@ it('rejects billing invoice when appointment does not belong to patient', functi
     $appointment = makeBillingAppointment($otherPatient->id);
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'appointmentId' => $appointment->id,
         ]))
         ->assertStatus(422)
@@ -705,7 +705,7 @@ it('rejects billing invoice when admission does not belong to patient', function
     $admission = makeBillingAdmission($otherPatient->id);
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'admissionId' => $admission->id,
         ]))
         ->assertStatus(422)
@@ -717,11 +717,11 @@ it('fetches billing invoice by id', function (): void {
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'])
+        ->getJson('/api/v1/billing/'.$created['id'])
         ->assertOk()
         ->assertJsonPath('data.id', $created['id']);
 });
@@ -730,7 +730,7 @@ it('returns 404 for unknown billing invoice id', function (): void {
     $user = makeBillingUser();
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/060afc03-2ce9-4b1d-a1c2-326d2722ce25')
+        ->getJson('/api/v1/billing/060afc03-2ce9-4b1d-a1c2-326d2722ce25')
         ->assertNotFound();
 });
 
@@ -740,11 +740,11 @@ it('updates billing invoice fields', function (): void {
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+        ->patchJson('/api/v1/billing/'.$created['id'], [
             'currencyCode' => 'usd',
             'notes' => 'Currency correction and notes update',
         ])
@@ -759,7 +759,7 @@ it('updates billing invoice line items and returns normalized line totals', func
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 100000,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -767,7 +767,7 @@ it('updates billing invoice line items and returns normalized line totals', func
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+        ->patchJson('/api/v1/billing/'.$created['id'], [
             'lineItems' => [
                 [
                     'description' => 'Consultation',
@@ -797,17 +797,17 @@ it('rejects billing invoice line item updates after invoice is issued', function
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'issued',
         ])
         ->assertOk();
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+        ->patchJson('/api/v1/billing/'.$created['id'], [
             'lineItems' => [
                 [
                     'description' => 'Late change after issue',
@@ -827,7 +827,7 @@ it('rejects structural billing invoice updates after invoice is issued', functio
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 100000,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -835,13 +835,13 @@ it('rejects structural billing invoice updates after invoice is issued', functio
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'issued',
         ])
         ->assertOk();
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+        ->patchJson('/api/v1/billing/'.$created['id'], [
             'subtotalAmount' => 120000,
         ])
         ->assertStatus(422)
@@ -854,11 +854,11 @@ it('rejects empty billing invoice patch payload', function (): void {
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'], [])
+        ->patchJson('/api/v1/billing/'.$created['id'], [])
         ->assertStatus(422)
         ->assertJsonValidationErrors(['payload']);
 });
@@ -868,11 +868,11 @@ it('forbids billing invoice update without update-draft permission', function ()
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+        ->patchJson('/api/v1/billing/'.$created['id'], [
             'notes' => 'Unauthorized update attempt',
         ])
         ->assertForbidden();
@@ -884,11 +884,11 @@ it('rejects billing invoice detail update when status fields are provided', func
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+        ->patchJson('/api/v1/billing/'.$created['id'], [
             'notes' => 'Detail update',
             'status' => 'cancelled',
         ])
@@ -898,10 +898,11 @@ it('rejects billing invoice detail update when status fields are provided', func
 
 it('updates billing invoice status and paid amount', function (): void {
     $user = makeBillingUser();
+    $user->givePermissionTo('billing.payments.record');
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 150,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -910,7 +911,7 @@ it('updates billing invoice status and paid amount', function (): void {
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'partially_paid',
             'paidAmount' => 50,
         ])
@@ -930,7 +931,7 @@ it('writes billing invoice status transition parity metadata in audit logs', fun
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 150,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -940,7 +941,7 @@ it('writes billing invoice status transition parity metadata in audit logs', fun
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'voided',
             'reason' => 'Duplicate invoice reference',
         ])
@@ -964,7 +965,7 @@ it('writes billing invoice status transition parity metadata in audit logs', fun
     ]);
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs?perPage=10')
+        ->getJson('/api/v1/billing/'.$created['id'].'/audit-logs?perPage=10')
         ->assertOk()
         ->assertJsonPath('meta.total', 2)
         ->assertJsonPath('data.0.action', 'billing-invoice.status.updated');
@@ -975,11 +976,11 @@ it('forbids issuing billing invoice status without issue permission', function (
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'issued',
         ])
         ->assertForbidden();
@@ -990,15 +991,79 @@ it('forbids voiding billing invoice status without void permission', function ()
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'voided',
             'reason' => 'duplicate invoice',
         ])
         ->assertForbidden();
+});
+
+it('forbids marking billing invoice paid without payment record permission', function (): void {
+    $user = makeBillingUser();
+    $patient = makeBillingPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
+            'status' => 'paid',
+        ])
+        ->assertForbidden();
+});
+
+it('forbids marking billing invoice partially paid without payment record permission', function (): void {
+    $user = makeBillingUser();
+    $patient = makeBillingPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
+            'status' => 'partially_paid',
+            'paidAmount' => 10,
+        ])
+        ->assertForbidden();
+});
+
+it('forbids reverting billing invoice to draft without update-draft permission', function (): void {
+    $user = makeBillingUser();
+    $user->givePermissionTo('billing.payments.record');
+    $patient = makeBillingPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
+            'status' => 'draft',
+        ])
+        ->assertForbidden();
+});
+
+it('allows reverting billing invoice to draft with update-draft permission', function (): void {
+    $user = makeBillingUser();
+    $user->givePermissionTo('billing.invoices.update-draft');
+    $patient = makeBillingPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
+            'status' => 'draft',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'draft');
 });
 
 it('stores last payment metadata when billing invoice payment increases', function (): void {
@@ -1006,7 +1071,7 @@ it('stores last payment metadata when billing invoice payment increases', functi
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 200,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1015,7 +1080,7 @@ it('stores last payment metadata when billing invoice payment increases', functi
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'partially_paid',
             'paidAmount' => 125,
             'paymentPayerType' => 'self_pay',
@@ -1051,7 +1116,7 @@ it('lists billing invoice payment ledger entries', function (): void {
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 300,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1061,7 +1126,7 @@ it('lists billing invoice payment ledger entries', function (): void {
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'partially_paid',
             'paidAmount' => 100,
             'paymentPayerType' => 'insurance',
@@ -1071,7 +1136,7 @@ it('lists billing invoice payment ledger entries', function (): void {
         ->assertOk();
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'paid',
             'paidAmount' => 300,
             'paymentPayerType' => 'insurance',
@@ -1081,7 +1146,7 @@ it('lists billing invoice payment ledger entries', function (): void {
         ->assertOk();
 
     $response = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/payments')
+        ->getJson('/api/v1/billing/'.$created['id'].'/payments')
         ->assertOk();
 
     expect($response->json('meta.total'))->toBe(2);
@@ -1098,7 +1163,7 @@ it('forbids billing invoice payment ledger history without view-history permissi
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 300,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1108,7 +1173,7 @@ it('forbids billing invoice payment ledger history without view-history permissi
         ->json('data');
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/payments')
+        ->getJson('/api/v1/billing/'.$created['id'].'/payments')
         ->assertForbidden();
 });
 
@@ -1118,7 +1183,7 @@ it('records billing invoice payment through dedicated payment endpoint', functio
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 200,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1128,13 +1193,13 @@ it('records billing invoice payment through dedicated payment endpoint', functio
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'issued',
         ])
         ->assertOk();
 
     $response = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 80,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1181,7 +1246,7 @@ it('returns invoice finance posting summary for details workflow', function (): 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 240,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1191,13 +1256,13 @@ it('returns invoice finance posting summary for details workflow', function (): 
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'issued',
         ])
         ->assertOk();
 
     $payment = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 120,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1207,7 +1272,7 @@ it('returns invoice finance posting summary for details workflow', function (): 
         ->json('data.payment');
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/finance-posting')
+        ->getJson('/api/v1/billing/'.$created['id'].'/finance-posting')
         ->assertOk()
         ->assertJsonPath('data.infrastructure.revenueRecognitionReady', true)
         ->assertJsonPath('data.infrastructure.glPostingReady', true)
@@ -1224,7 +1289,7 @@ it('forbids dedicated payment endpoint without billing payment record permission
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 200,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1234,13 +1299,13 @@ it('forbids dedicated payment endpoint without billing payment record permission
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'issued',
         ])
         ->assertOk();
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 80,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1254,7 +1319,7 @@ it('rejects dedicated payment endpoint for draft billing invoices', function ():
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 200,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1264,7 +1329,7 @@ it('rejects dedicated payment endpoint for draft billing invoices', function ():
         ->json('data');
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 50,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1280,7 +1345,7 @@ it('reverses billing invoice payment through dedicated reversal endpoint using c
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 200,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1290,13 +1355,13 @@ it('reverses billing invoice payment through dedicated reversal endpoint using c
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'issued',
         ])
         ->assertOk();
 
     $payment = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 120,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1306,7 +1371,7 @@ it('reverses billing invoice payment through dedicated reversal endpoint using c
         ->json('data.payment');
 
     $response = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
             'amount' => 20,
             'reason' => 'Cashier posted wrong amount',
             'approvalCaseReference' => 'BILL-REV-0001',
@@ -1353,7 +1418,7 @@ it('rejects billing payment reversal when amount exceeds remaining reversible am
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 300,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1363,11 +1428,11 @@ it('rejects billing payment reversal when amount exceeds remaining reversible am
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', ['status' => 'issued'])
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', ['status' => 'issued'])
         ->assertOk();
 
     $payment = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 100,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1376,14 +1441,14 @@ it('rejects billing payment reversal when amount exceeds remaining reversible am
         ->json('data.payment');
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
             'amount' => 60,
             'reason' => 'First correction',
         ])
         ->assertCreated();
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
             'amount' => 50,
             'reason' => 'Over reversal attempt',
         ])
@@ -1398,7 +1463,7 @@ it('forbids billing payment reversal without permission', function (): void {
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 200,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1408,11 +1473,11 @@ it('forbids billing payment reversal without permission', function (): void {
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', ['status' => 'issued'])
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', ['status' => 'issued'])
         ->assertOk();
 
     $payment = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 50,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1421,7 +1486,7 @@ it('forbids billing payment reversal without permission', function (): void {
         ->json('data.payment');
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
             'amount' => 10,
             'reason' => 'Unauthorized reversal attempt',
         ])
@@ -1437,7 +1502,7 @@ it('requires approval case reference for reversal at or above configured thresho
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 200,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1447,11 +1512,11 @@ it('requires approval case reference for reversal at or above configured thresho
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', ['status' => 'issued'])
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', ['status' => 'issued'])
         ->assertOk();
 
     $payment = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 100,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1460,7 +1525,7 @@ it('requires approval case reference for reversal at or above configured thresho
         ->json('data.payment');
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
             'amount' => 30,
             'reason' => 'Supervisor correction needed',
         ])
@@ -1477,7 +1542,7 @@ it('requires approval case reference for reversals on paid invoices when policy 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 200,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1487,11 +1552,11 @@ it('requires approval case reference for reversals on paid invoices when policy 
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', ['status' => 'issued'])
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', ['status' => 'issued'])
         ->assertOk();
 
     $payment = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments', [
             'amount' => 200,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -1502,7 +1567,7 @@ it('requires approval case reference for reversals on paid invoices when policy 
     expect($payment)->not->toBeNull();
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/payments/'.$payment['id'].'/reversals', [
             'amount' => 10,
             'reason' => 'Correction on paid invoice',
         ])
@@ -1516,7 +1581,7 @@ it('filters billing invoice payment ledger entries by method and payment date', 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 500,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1526,7 +1591,7 @@ it('filters billing invoice payment ledger entries by method and payment date', 
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'partially_paid',
             'paidAmount' => 150,
             'paymentPayerType' => 'self_pay',
@@ -1536,7 +1601,7 @@ it('filters billing invoice payment ledger entries by method and payment date', 
         ->assertOk();
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'paid',
             'paidAmount' => 500,
             'paymentPayerType' => 'insurance',
@@ -1556,7 +1621,7 @@ it('filters billing invoice payment ledger entries by method and payment date', 
     $payments[1]->forceFill(['payment_at' => '2026-02-26 14:30:00'])->save();
 
     $response = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/payments?paymentMethod=bank_transfer&from=2026-02-26&to=2026-02-26')
+        ->getJson('/api/v1/billing/'.$created['id'].'/payments?paymentMethod=bank_transfer&from=2026-02-26&to=2026-02-26')
         ->assertOk();
 
     expect($response->json('meta.total'))->toBe(1);
@@ -1566,10 +1631,11 @@ it('filters billing invoice payment ledger entries by method and payment date', 
 
 it('sets full paid amount when status becomes paid without paid amount input', function (): void {
     $user = makeBillingUser();
+    $user->givePermissionTo('billing.payments.record');
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id, [
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
             'subtotalAmount' => 100,
             'discountAmount' => 0,
             'taxAmount' => 0,
@@ -1578,7 +1644,7 @@ it('sets full paid amount when status becomes paid without paid amount input', f
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'paid',
         ])
         ->assertOk()
@@ -1595,11 +1661,11 @@ it('enforces reason on cancelled billing invoice status', function (): void {
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'cancelled',
         ])
         ->assertStatus(422)
@@ -1611,11 +1677,11 @@ it('forbids cancelling billing invoice status without cancel permission', functi
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$created['id'].'/status', [
             'status' => 'cancelled',
             'reason' => 'test cancel authorization',
         ])
@@ -1629,14 +1695,14 @@ it('writes billing invoice audit logs for create update and status change', func
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
-    $this->actingAs($user)->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+    $this->actingAs($user)->patchJson('/api/v1/billing/'.$created['id'], [
         'notes' => 'audit update check',
     ])->assertOk();
 
-    $this->actingAs($user)->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+    $this->actingAs($user)->patchJson('/api/v1/billing/'.$created['id'].'/status', [
         'status' => 'issued',
     ])->assertOk();
 
@@ -1662,14 +1728,14 @@ it('lists billing invoice audit logs when authorized', function (): void {
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
-    $this->actingAs($user)->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+    $this->actingAs($user)->patchJson('/api/v1/billing/'.$created['id'], [
         'notes' => 'audit pagination check',
     ])->assertOk();
 
-    $this->actingAs($user)->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+    $this->actingAs($user)->patchJson('/api/v1/billing/'.$created['id'].'/status', [
         'status' => 'voided',
         'reason' => 'duplicate invoice',
     ])->assertOk();
@@ -1687,7 +1753,7 @@ it('lists billing invoice audit logs when authorized', function (): void {
     ]);
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs?perPage=2')
+        ->getJson('/api/v1/billing/'.$created['id'].'/audit-logs?perPage=2')
         ->assertOk()
         ->assertJsonPath('meta.total', 4)
         ->assertJsonPath('meta.perPage', 2)
@@ -1705,14 +1771,14 @@ it('filters billing invoice audit logs by action text actor type and actor id', 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
-    $this->actingAs($user)->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+    $this->actingAs($user)->patchJson('/api/v1/billing/'.$created['id'], [
         'notes' => 'audit filter update',
     ])->assertOk();
 
-    $this->actingAs($user)->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+    $this->actingAs($user)->patchJson('/api/v1/billing/'.$created['id'].'/status', [
         'status' => 'voided',
         'reason' => 'audit filter check',
     ])->assertOk();
@@ -1728,7 +1794,7 @@ it('filters billing invoice audit logs by action text actor type and actor id', 
 
     $this->actingAs($user)
         ->getJson(
-            '/api/v1/billing-invoices/'.$created['id']
+            '/api/v1/billing/'.$created['id']
                 .'/audit-logs?actorType=user&actorId='.$user->id
                 .'&action=billing-invoice.status.updated&q=STATUS',
         )
@@ -1738,7 +1804,7 @@ it('filters billing invoice audit logs by action text actor type and actor id', 
         ->assertJsonPath('data.0.actorId', $user->id);
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs?actorType=system&q=RECONCILED')
+        ->getJson('/api/v1/billing/'.$created['id'].'/audit-logs?actorType=system&q=RECONCILED')
         ->assertOk()
         ->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.action', 'billing-invoice.system.reconciled')
@@ -1753,14 +1819,14 @@ it('exports billing invoice audit logs as csv when authorized and applies filter
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
-    $this->actingAs($user)->patchJson('/api/v1/billing-invoices/'.$created['id'], [
+    $this->actingAs($user)->patchJson('/api/v1/billing/'.$created['id'], [
         'notes' => 'audit export update',
     ])->assertOk();
 
-    $this->actingAs($user)->patchJson('/api/v1/billing-invoices/'.$created['id'].'/status', [
+    $this->actingAs($user)->patchJson('/api/v1/billing/'.$created['id'].'/status', [
         'status' => 'voided',
         'reason' => 'audit export check',
     ])->assertOk();
@@ -1775,7 +1841,7 @@ it('exports billing invoice audit logs as csv when authorized and applies filter
     ]);
 
     $response = $this->actingAs($user)
-        ->get('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export?actorType=system&q=RECONCILED');
+        ->get('/api/v1/billing/'.$created['id'].'/audit-logs/export?actorType=system&q=RECONCILED');
 
     $response->assertOk();
     $response->assertHeader('X-Audit-CSV-Schema-Version', 'audit-log-csv.v1');
@@ -1795,11 +1861,11 @@ it('creates billing invoice audit log csv export job when authorized', function 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $response = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs', [
+        ->postJson('/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs', [
             'actorType' => 'system',
             'q' => 'reconciled',
         ]);
@@ -1834,7 +1900,7 @@ it('shows billing invoice audit log csv export job status for creator', function
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $job = AuditExportJobModel::query()->create([
@@ -1849,7 +1915,7 @@ it('shows billing invoice audit log csv export job status for creator', function
     ]);
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs/'.$job->id)
+        ->getJson('/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs/'.$job->id)
         ->assertOk()
         ->assertJsonPath('data.id', (string) $job->id)
         ->assertJsonPath('data.status', 'completed')
@@ -1857,7 +1923,7 @@ it('shows billing invoice audit log csv export job status for creator', function
         ->assertJsonPath('data.schemaVersion', 'audit-log-csv.v1')
         ->assertJsonPath(
             'data.downloadUrl',
-            '/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs/'.$job->id.'/download',
+            '/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs/'.$job->id.'/download',
         );
 });
 
@@ -1869,7 +1935,7 @@ it('downloads completed billing invoice audit log csv export job', function (): 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $filePath = 'audit-exports/test-billing-download.csv';
@@ -1887,7 +1953,7 @@ it('downloads completed billing invoice audit log csv export job', function (): 
     ]);
 
     $response = $this->actingAs($user)
-        ->get('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs/'.$job->id.'/download');
+        ->get('/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs/'.$job->id.'/download');
 
     $response->assertOk();
     $response->assertDownload('billing_download.csv');
@@ -1903,7 +1969,7 @@ it('returns 409 when billing invoice audit log csv export job is not ready', fun
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $job = AuditExportJobModel::query()->create([
@@ -1914,7 +1980,7 @@ it('returns 409 when billing invoice audit log csv export job is not ready', fun
     ]);
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs/'.$job->id.'/download')
+        ->getJson('/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs/'.$job->id.'/download')
         ->assertStatus(409)
         ->assertJsonPath('code', 'EXPORT_JOB_NOT_READY');
 });
@@ -1926,7 +1992,7 @@ it('lists billing invoice audit log csv export jobs for creator only', function 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $jobOne = AuditExportJobModel::query()->create([
@@ -1955,7 +2021,7 @@ it('lists billing invoice audit log csv export jobs for creator only', function 
     ]);
 
     $response = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs?perPage=10');
+        ->getJson('/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs?perPage=10');
 
     $response->assertOk()
         ->assertJsonPath('meta.total', 2)
@@ -1973,7 +2039,7 @@ it('retries billing invoice audit log csv export job when authorized', function 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $sourceJob = AuditExportJobModel::query()->create([
@@ -1994,7 +2060,7 @@ it('retries billing invoice audit log csv export job when authorized', function 
     ]);
 
     $response = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs/'.$sourceJob->id.'/retry');
+        ->postJson('/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs/'.$sourceJob->id.'/retry');
 
     $response->assertStatus(202)
         ->assertJsonPath('data.status', 'queued')
@@ -2017,11 +2083,11 @@ it('forbids billing invoice audit log access without permission', function (): v
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs')
+        ->getJson('/api/v1/billing/'.$created['id'].'/audit-logs')
         ->assertForbidden();
 });
 
@@ -2032,7 +2098,7 @@ it('forbids billing invoice audit log csv export job retry without permission', 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $sourceJob = AuditExportJobModel::query()->create([
@@ -2043,7 +2109,7 @@ it('forbids billing invoice audit log csv export job retry without permission', 
     ]);
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs/'.$sourceJob->id.'/retry')
+        ->postJson('/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs/'.$sourceJob->id.'/retry')
         ->assertForbidden();
 });
 
@@ -2054,11 +2120,11 @@ it('forbids billing invoice audit log csv export job create without permission',
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export-jobs')
+        ->postJson('/api/v1/billing/'.$created['id'].'/audit-logs/export-jobs')
         ->assertForbidden();
 });
 
@@ -2067,11 +2133,11 @@ it('forbids billing invoice audit log csv export access without permission', fun
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->get('/api/v1/billing-invoices/'.$created['id'].'/audit-logs/export')
+        ->get('/api/v1/billing/'.$created['id'].'/audit-logs/export')
         ->assertForbidden();
 });
 
@@ -2083,11 +2149,11 @@ it('forbids billing invoice audit logs when gate override denies', function (): 
     $patient = makeBillingPatient();
 
     $created = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->json('data');
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/'.$created['id'].'/audit-logs')
+        ->getJson('/api/v1/billing/'.$created['id'].'/audit-logs')
         ->assertForbidden();
 });
 
@@ -2096,7 +2162,7 @@ it('returns 404 for billing invoice audit logs of unknown id', function (): void
     $user->givePermissionTo('billing-invoices.view-audit-logs');
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices/060afc03-2ce9-4b1d-a1c2-326d2722ce25/audit-logs')
+        ->getJson('/api/v1/billing/060afc03-2ce9-4b1d-a1c2-326d2722ce25/audit-logs')
         ->assertNotFound();
 });
 
@@ -2145,7 +2211,7 @@ it('lists and filters billing invoices', function (): void {
     ]);
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices?q=Consultation&status=draft&currencyCode=TZS')
+        ->getJson('/api/v1/billing?q=Consultation&status=draft&currencyCode=TZS')
         ->assertOk()
         ->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.invoiceNumber', 'INV20260225AAAAAA')
@@ -2217,7 +2283,7 @@ it('lists billing invoices with multi-status filter using statusIn', function ()
     ]);
 
     $response = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices?statusIn[]=issued&statusIn[]=partially_paid')
+        ->getJson('/api/v1/billing?statusIn[]=issued&statusIn[]=partially_paid')
         ->assertOk();
 
     expect($response->json('meta.total'))->toBe(2);
@@ -2272,7 +2338,7 @@ it('lists billing invoices by payment activity date range', function (): void {
     ]);
 
     $response = $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices?paymentActivityFrom='.now()->startOfDay()->toDateTimeString().'&paymentActivityTo='.now()->endOfDay()->toDateTimeString())
+        ->getJson('/api/v1/billing?paymentActivityFrom='.now()->startOfDay()->toDateTimeString().'&paymentActivityTo='.now()->endOfDay()->toDateTimeString())
         ->assertOk();
 
     expect($response->json('meta.total'))->toBe(1);
@@ -2297,7 +2363,7 @@ it('stamps billing invoice tenant and facility scope when created under resolved
             'X-Tenant-Code' => 'TZB',
             'X-Facility-Code' => 'DAR-BIL',
         ])
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->assertCreated()
         ->json('data');
 
@@ -2380,7 +2446,7 @@ it('filters billing invoice reads by facility scope when platform multi facility
             'X-Tenant-Code' => 'EAH',
             'X-Facility-Code' => 'NAI-BIL',
         ])
-        ->getJson('/api/v1/billing-invoices')
+        ->getJson('/api/v1/billing')
         ->assertOk()
         ->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.id', $visible->id)
@@ -2391,7 +2457,7 @@ it('filters billing invoice reads by facility scope when platform multi facility
             'X-Tenant-Code' => 'EAH',
             'X-Facility-Code' => 'NAI-BIL',
         ])
-        ->getJson('/api/v1/billing-invoices/'.$hidden->id)
+        ->getJson('/api/v1/billing/'.$hidden->id)
         ->assertNotFound();
 
     $this->actingAs($user)
@@ -2399,7 +2465,7 @@ it('filters billing invoice reads by facility scope when platform multi facility
             'X-Tenant-Code' => 'EAH',
             'X-Facility-Code' => 'NAI-BIL',
         ])
-        ->patchJson('/api/v1/billing-invoices/'.$hidden->id, [
+        ->patchJson('/api/v1/billing/'.$hidden->id, [
             'notes' => 'Attempted cross-facility update',
         ])
         ->assertNotFound();
@@ -2488,7 +2554,7 @@ it('filters billing invoice reads by facility scope when enabled via feature fla
             'X-Tenant-Code' => 'EAH',
             'X-Facility-Code' => 'NAI-BIL',
         ])
-        ->getJson('/api/v1/billing-invoices')
+        ->getJson('/api/v1/billing')
         ->assertOk()
         ->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.id', $visible->id)
@@ -2501,18 +2567,18 @@ it('includes finance posting summary in the billing invoice queue list', functio
     $patient = makeBillingPatient();
 
     $invoice = $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->assertCreated()
         ->json('data');
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$invoice['id'].'/status', [
+        ->patchJson('/api/v1/billing/'.$invoice['id'].'/status', [
             'status' => 'issued',
         ])
         ->assertOk();
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices/'.$invoice['id'].'/payments', [
+        ->postJson('/api/v1/billing/'.$invoice['id'].'/payments', [
             'amount' => 30,
             'payerType' => 'self_pay',
             'paymentMethod' => 'cash',
@@ -2521,7 +2587,7 @@ it('includes finance posting summary in the billing invoice queue list', functio
         ->assertCreated();
 
     $this->actingAs($user)
-        ->getJson('/api/v1/billing-invoices')
+        ->getJson('/api/v1/billing')
         ->assertOk()
         ->assertJsonPath('data.0.id', $invoice['id'])
         ->assertJsonPath('data.0.financePosting.recognition.status', 'recognized')
@@ -2537,7 +2603,7 @@ it('blocks billing invoice creation in use case when tenant isolation is enabled
     $patient = makeBillingPatient();
 
     $this->actingAs($user)
-        ->postJson('/api/v1/billing-invoices', billingInvoicePayload($patient->id))
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id))
         ->assertForbidden()
         ->assertJsonPath('code', 'TENANT_SCOPE_REQUIRED');
 });
@@ -2573,7 +2639,7 @@ it('blocks billing invoice update in use case when tenant isolation is enabled a
     ]);
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$invoice->id, [
+        ->patchJson('/api/v1/billing/'.$invoice->id, [
             'notes' => 'Attempted guarded update',
         ])
         ->assertForbidden()
@@ -2611,7 +2677,7 @@ it('blocks billing invoice status update in use case when tenant isolation is en
     ]);
 
     $this->actingAs($user)
-        ->patchJson('/api/v1/billing-invoices/'.$invoice->id.'/status', [
+        ->patchJson('/api/v1/billing/'.$invoice->id.'/status', [
             'status' => 'issued',
         ])
         ->assertForbidden()
