@@ -15,6 +15,15 @@ return new class extends Migration
             return;
         }
 
+        // Trigram (pg_trgm) generated columns/indexes are Postgres-only — there is no
+        // SQLite equivalent, so this is a no-op there (e.g. the SQLite-backed test suite).
+        // EloquentPatientRepository::applySearchPredicate() querying `search_text` will
+        // not work under SQLite as a result; that is a pre-existing, separate portability
+        // gap, not something this guard attempts to fix.
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');
 
         // One generated column stands in for the 9 separate leading-wildcard

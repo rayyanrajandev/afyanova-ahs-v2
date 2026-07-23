@@ -36,9 +36,13 @@ return new class extends Migration
         foreach (LaboratoryClinicalCatalogSeeder::resultTemplates() as $code => $template) {
             $templateJson = json_encode(['resultTemplate' => $template], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-            $metadataExpr = $driver === 'pgsql'
-                ? "COALESCE(metadata::jsonb, '{}'::jsonb) || '{$templateJson}'::jsonb"
-                : "JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '{$templateJson}')";
+            $metadataExpr = match ($driver) {
+                'pgsql' => "COALESCE(metadata::jsonb, '{}'::jsonb) || '{$templateJson}'::jsonb",
+                // SQLite's json1 extension has no JSON_MERGE_PATCH; json_patch() is the
+                // RFC 7396 merge-patch equivalent, sufficient for this additive resync.
+                'sqlite' => "json_patch(COALESCE(metadata, '{}'), '{$templateJson}')",
+                default => "JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '{$templateJson}')",
+            };
 
             DB::table('platform_clinical_catalog_items')
                 ->where('catalog_type', 'lab_test')

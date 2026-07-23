@@ -19,12 +19,23 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // This repairs a Postgres-only auto-generated CHECK constraint (see class
+        // docblock) — SQLite never created an equivalent constraint for the original
+        // enum column, so there is nothing to repair there.
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::statement('ALTER TABLE cash_billing_accounts DROP CONSTRAINT IF EXISTS cash_billing_accounts_status_check');
         DB::statement("ALTER TABLE cash_billing_accounts ADD CONSTRAINT cash_billing_accounts_status_check CHECK (status IN ('active', 'settled', 'suspended', 'voided', 'converted'))");
     }
 
     public function down(): void
     {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::statement('ALTER TABLE cash_billing_accounts DROP CONSTRAINT IF EXISTS cash_billing_accounts_status_check');
         DB::statement("ALTER TABLE cash_billing_accounts ADD CONSTRAINT cash_billing_accounts_status_check CHECK (status IN ('active', 'settled', 'suspended'))");
     }

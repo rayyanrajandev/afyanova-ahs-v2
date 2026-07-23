@@ -23,6 +23,11 @@ return new class extends Migration
             if ($driver === 'pgsql') {
                 $metadataExpr = "COALESCE(metadata::jsonb, '{}'::jsonb) || '{$templateJson}'::jsonb";
                 $resultTemplateNullCheck = "metadata::jsonb->'resultTemplate' IS NULL";
+            } elseif ($driver === 'sqlite') {
+                // SQLite's json1 extension has no JSON_MERGE_PATCH/JSON_LENGTH; json_patch()
+                // is the RFC 7396 merge-patch equivalent, sufficient for this additive backfill.
+                $metadataExpr = "json_patch(COALESCE(metadata, '{}'), '{$templateJson}')";
+                $resultTemplateNullCheck = "json_extract(metadata, '$.resultTemplate') IS NULL";
             } else {
                 $metadataExpr = "JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '{$templateJson}')";
                 $resultTemplateNullCheck = "(JSON_EXTRACT(metadata, '$.resultTemplate') IS NULL OR JSON_LENGTH(metadata, '$.resultTemplate') = 0)";
