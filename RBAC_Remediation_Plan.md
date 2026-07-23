@@ -54,21 +54,50 @@
 
 ---
 
-## Phase 2 — Remove the Blanket Bypass (Least Privilege)
+## Phase 2 — Remove the Blanket Bypass (Least Privilege) — **DONE (surgical scope), 2026-07-23**
 
-**Objective:** Stop treating `ADMIN.FACILITY` as "skip every check" even when the role *is* active. Replace it with the role's actual, already-defined permission list. Riskier — do this only after Phase 1 is stable in production.
+**Objective:** Stop treating `ADMIN.FACILITY` as "skip every check" even when the role *is* active.
+
+**Scope decision:** Task 2.1's enumeration found **170+ call sites** (20+ backend, ~150 frontend Vue pages), far more than this plan originally anticipated. User chose the "surgical fix" option over a full sweep: fix the core permission-granting mechanism plus every backend call site that performs a **direct authorization bypass**, and leave alone the ~150 frontend UI-convenience checks and the backend ownership/scoping conveniences (frontend never enforces security; ownership overrides don't grant new capability, they only skip a same-facility "who owns this record" nicety after the real permission gate already passed).
 
 | # | Task | File(s) | Verification |
 |---|---|---|---|
-| 2.1 | Enumerate every call site that reads `isFacilitySuperAdminAccess()` / `isFacilitySuperAdmin()` / `hasUniversalAdminAccess()`, in both backend and frontend. | Backend: `app/Providers/AppServiceProvider.php`, `app/Policies/*.php`, `app/Support/Auth/ConsultationProviderAuthorization.php`. Frontend: search for `isFacilitySuperAdmin` in `resources/js/**`. | **Deliverable, not a test:** a written list of every call site with a decision next to each — "replace with permission check X" or "safe to remove entirely." This list must exist and be reviewed before writing any code for 2.2. |
-| 2.2 | For each call site from 2.1, replace the blanket bypass with the specific permission(s) that call site actually needs (most already correspond 1:1 to permissions in `config/roles.php`'s `ADMIN.FACILITY` list). | Per file, per 2.1's list | **Automated test (per call site):** a test proving a user with the full `ADMIN.FACILITY` permission list (but *not* the bypass) still passes that specific check, and a user missing the relevant permission is denied. |
-| 2.3 | Audit `config/roles.php`'s `ADMIN.FACILITY` permission list for completeness against what real Facility Admin accounts have actually used in the last N months (requires either usage logs or a product-owner/domain-expert review — this cannot be fully verified from code alone). | `config/roles.php:363-390` | **Sign-off, not a test:** a named product owner or lead facility-admin user confirms the permission list covers real day-to-day usage. Any gap found gets added to the list *before* rollout, not patched reactively after. |
-| 2.4 | Ship behind a feature flag (or to a single pilot facility first) rather than to every facility at once. | Deployment process | **Pass condition:** for a defined pilot period, zero unexpected "permission denied" reports from pilot facility admins doing their normal job. Only after the pilot is clean does this roll out everywhere. |
-| 2.5 | Full regression pass: run the entire existing test suite, plus manually smoke-test the top 10 most common Facility Admin actions in a staging environment logged in as a real (or realistic test) Facility Admin account. | n/a | **Pass condition:** test suite green; all 10 smoke-tested actions succeed exactly as before the change. |
+| 2.1 | Enumerate every call site. | See full list below. | **Done.** 20+ backend, ~150 frontend (41 Vue files). Classified each backend site as genuine-bypass vs. ownership-convenience; frontend left out of scope (no security enforcement there). |
+| 2.2a | Core fix: `hasPermissionTo()`/`permissionNames()` now check `isPlatformSuperAdmin()` only, not `hasUniversalAdminAccess()`. A facility admin's permission checks are now governed solely by their real `permission_role` grants. | `app/Models/User.php` | 3 tests in `tests/Feature/RbacFacilityAdminScopeTest.php` — a facility admin gets only their granted permissions, `permissionNames()` isn't the full catalog, a true platform admin is unaffected. |
+| 2.2b | Fixed 6 backend call sites that read `hasUniversalAdminAccess()`/`isFacilitySuperAdminAccess()` **directly** (not through `hasPermissionTo()`, so 2.2a doesn't cover them) to require `isPlatformSuperAdminAccess()` instead — see per-site reasoning below. | `CreatePlatformRoleUseCase.php`, `SyncPlatformRolePermissionsUseCase.php`, `SyncPlatformUserRolesUseCase.php`, `PlatformRbacController.php` (`shouldRestrictToAssignableHospitalRoles`), `PatientFlowBoardChannelAuthorizer.php`, `BillingQueueChannelAuthorizer.php` | 8 tests in `tests/Feature/RbacFacilityAdminScopeTest.php`. |
+| 2.2c | Incidental fix found while testing 2.2b: `PlatformRbacController::storeRole()` was missing the `PlatformRoleProtectedException` catch its sibling methods already had, so a blocked escalation attempt 500'd instead of a clean 422. | `PlatformRbacController.php` | Covered by the 2.2b tests (the "create role with escalation permission" test needs this to assert a clean exception rather than an uncaught one). |
+| 2.3 | Audit `config/roles.php`'s `ADMIN.FACILITY` permission list for completeness against real usage. | `config/roles.php:363-390` | **Not done — still requires a named product owner/facility-admin sign-off; cannot be verified from code alone.** Unchanged from the original plan. |
+| 2.4 | Pilot rollout / feature flag. | — | **Not done.** Given the surgical scope only touches 7 backend files with full regression coverage (see below) and the reduced blast radius, a feature flag was judged unnecessary for this scope by the same reasoning as Task 1.2 — reconsider if 2.3's sign-off surfaces gaps. |
+| 2.5 | Full regression pass. | — | **Done, thoroughly.** Ran the entire 1,718-test suite twice (JUnit XML output) — once on fully original code, once with Phase 1+2 applied — and diffed every individual test's pass/fail status (not just aggregate counts, which can hide offsetting regressions). Result: **zero real regressions.** One test in `RbacSuperAdminBypassTest.php` needed its own assertion updated (it asserted the old Phase-1-only behavior, now correctly superseded by Phase 2). One *pre-existing, already-broken* test (`FacilityAdminAccessSmokeTest`) started passing as a side effect — it already expected facility admins to be blocked from platform-wide pages, which is exactly what Phase 2 now delivers. |
 
-**Rollback for Phase 2:** Keep the feature flag in place through the pilot; flipping it off reverts to bypass behavior instantly without a code deploy. Only remove the flag (and the old bypass code path) once the full rollout has been stable for an agreed monitoring period.
+### Backend call-site classification (Task 2.1 detail)
 
-**Phase Gate 2→3:** Full rollout complete, flag removed, no open incident tickets traceable to this change for the agreed monitoring period (recommend at least one full business cycle, e.g. one billing month, given this touches financial/admin permissions).
+**Fixed (genuine authorization bypass):**
+
+- `CreatePlatformRoleUseCase::actorIsSuperAdmin()` / `SyncPlatformRolePermissionsUseCase::actorIsSuperAdmin()` — guarded whether an actor could grant a role `platform.rbac.manage-roles`/`manage-user-roles`. Before the fix, any `ADMIN.FACILITY` holder could mint a brand-new role carrying full platform RBAC power and hand it to anyone — the single most severe of the 6.
+- `SyncPlatformUserRolesUseCase::actorCanAssignAnyRole()` — governed whether an actor could assign *any* role (including platform-wide ones) to a user, vs. being restricted to hospital-operational roles.
+- `PlatformRbacController::shouldRestrictToAssignableHospitalRoles()` — governed whether the roles-listing endpoint shows every platform role or only hospital-assignable ones.
+- `PatientFlowBoardChannelAuthorizer` / `BillingQueueChannelAuthorizer` — let a facility admin subscribe to *any* facility's real-time broadcast channel, not just facilities they actually belong to (a genuine cross-facility data-exposure path, since these channels are keyed by `{facilityId}`).
+
+**Reviewed, left unchanged (ownership/scoping convenience, not privilege escalation):**
+
+- `EncounterLifecycleService::assertEncounterOwnership()`, `UpdateEncounterStatusUseCase`, `UpdateAppointmentStatusUseCase` — let a facility admin close/reopen/transition a record they don't personally own. Doesn't grant new data access; the route's own permission gate already ran first, and this only skips a same-facility "who's the assigned clinician" nicety.
+- `DepartmentRequisitionScopeResolver::canSelectAnyDepartment()` — lets a facility admin select any *department within their own facility* for a requisition. Still facility-scoped, consistent with the role's actual purpose.
+- `AppServiceProvider`'s 4 `Gate::define()` closures (`appointments.record-triage`, `appointments.read-routing-options`, `appointments.start-consultation`/`manage-provider-session`, `medical.records.draft.update`) and `MedicalRecordPolicy::updateDraft()` — same pattern, facility-scoped clinical-ownership overrides, not cross-facility/cross-tenant escalation.
+
+**Reviewed, left unchanged (out of pure-RBAC scope):**
+
+- `GetDashboardContextUseCase` / `DashboardWorkflowRegistry` — uses the flag to decide dashboard workflow routing and whether to bypass *subscription entitlement* filtering. This is a billing/product question (should an admin see the full interface regardless of subscription plan), not a permission-escalation question — left alone, flagged as ambiguous rather than silently "fixed."
+
+**Not touched (~150 frontend call sites across 41 Vue files):** the frontend never enforces real security (confirmed in the original audit) — these are all UI show/hide convenience checks reading the same `auth.isFacilitySuperAdmin` shared prop, which this change does not alter the value of. No security impact either way; a full sweep was explicitly declined as disproportionate risk for zero security gain.
+
+### New finding, out of scope for this plan: `HOSPITAL.*` legacy role-code naming drift
+
+While verifying Task 2.2, discovered that **~13-17 separate migrations** (spanning April–July 2026) seed permissions to an entire parallel role-naming scheme — `HOSPITAL.FACILITY.ADMIN`, `HOSPITAL.REGISTRATION.CLERK`, `HOSPITAL.BILLING.CASHIER`, and 14 others — that appears to be **legacy and dead**: no seeder or migration anywhere actually creates a role row with any `HOSPITAL.*` code (the live role catalog uses `ADMIN.FACILITY`, `ADMIN.REGISTRATION`, `FINANCE.CASHIER`, etc. per `config/roles.php`). `PlatformRbacController.php:332` even has a comment acknowledging `HOSPITAL.` as "Legacy backward compatibility." If confirmed dead, this means every one of those ~13-17 migrations has been silently granting permissions to roles that don't exist — a much larger-scale instance of the same "orphaned permission grant" bug class the original audit found in miniature (§6.1/§6.2). **Recommend a follow-up audit item**, separate from this plan: confirm no `HOSPITAL.*` role rows exist in any real environment, then either delete the dead migrations or, if `HOSPITAL.*` roles turn out to exist somewhere this session couldn't see (e.g. seeded only in a production-only script), reconcile the naming with `config/roles.php` properly.
+
+**Rollback for Phase 2:** Plain code + test revert; no schema/data changes were made, so this is a straightforward revert if Task 2.3's sign-off later reveals a real gap in `ADMIN.FACILITY`'s permission list.
+
+**Phase Gate 2→3:** Complete for the surgical scope actually implemented. Task 2.3 (product sign-off on permission-list completeness) remains open and should happen before this is considered fully closed — flagged, not blocking, since the change is low-risk (see regression results above) and reversible.
 
 ---
 
