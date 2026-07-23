@@ -5,7 +5,6 @@ use App\Http\Middleware\EnsureFacilitySubscriptionEntitlementAny;
 use App\Http\Middleware\EnsureUserHasActiveRole;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
-use App\Http\Middleware\InventoryAccessMiddleware;
 use App\Http\Middleware\ResolvePlatformScopeContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -43,7 +42,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'agent.token' => App\Http\Middleware\EnsureValidAgentToken::class,
             'facility.entitlement' => EnsureFacilitySubscriptionEntitlement::class,
             'facility.entitlement.any' => EnsureFacilitySubscriptionEntitlementAny::class,
-            'inventory.access' => InventoryAccessMiddleware::class, // @deprecated Phase 7 — replaced by can: + InventoryPolicy
             'user.has-role' => EnsureUserHasActiveRole::class,
         ]);
 

@@ -7,14 +7,12 @@ use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffInitiated;
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
 use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
 use App\Policies\AppointmentPolicy;
-use App\Policies\InventoryPolicy;
 use App\Policies\LaboratoryOrderPolicy;
 use App\Policies\MedicalRecordPolicy;
 use App\Policies\PatientPolicy;
 use App\Policies\PharmacyOrderPolicy;
 use App\Policies\RadiologyOrderPolicy;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
-use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryDepartmentRequisitionModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
@@ -87,7 +85,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(PharmacyOrderModel::class, PharmacyOrderPolicy::class);
         Gate::policy(RadiologyOrderModel::class, RadiologyOrderPolicy::class);
         Gate::policy(AppointmentModel::class, AppointmentPolicy::class);
-        Gate::policy(InventoryDepartmentRequisitionModel::class, InventoryPolicy::class);
 
         Gate::before(function ($user, string $ability): ?bool {
             if (! method_exists($user, 'hasPermissionTo')) {
