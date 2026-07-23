@@ -2320,7 +2320,7 @@ onBeforeUnmount(() => {
                                         :model-value="toOptionalSelectValue(registrationFilters.regulatorCode)"
                                         @update:model-value="(value) => (registrationFilters.regulatorCode = fromOptionalSelectValue(value))"
                                     >
-                                        <SelectTrigger id="profile-notes" class="w-full">
+                                        <SelectTrigger id="registration-regulator-filter" aria-label="Filter by regulator" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -2562,7 +2562,7 @@ onBeforeUnmount(() => {
                                             :model-value="toOptionalSelectValue(auditFilters.actorType)"
                                             @update:model-value="(value) => (auditFilters.actorType = fromOptionalSelectValue(value))"
                                         >
-                                            <SelectTrigger id="credentialing-alert-clinical-only" class="w-full">
+                                            <SelectTrigger id="credentialing-audit-actor-type-filter" aria-label="Filter by actor type" class="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>

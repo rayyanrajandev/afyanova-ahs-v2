@@ -96,7 +96,7 @@ function handleTransferReceiptVarianceTypeChange(line: { id: string }, value: st
                         <div class="grid gap-1">
                             <Label :for="'trf-line-item-' + idx">Item</Label>
                             <Select :model-value="ws.toSelectValue(line.itemId)" @update:model-value="ws.handleTransferLineItemChange(idx, String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger>
+                                <SelectTrigger :id="'trf-line-item-' + idx">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -112,7 +112,7 @@ function handleTransferReceiptVarianceTypeChange(line: { id: string }, value: st
                                 <span v-if="ws.transferLineUsesBatchTracking(line)" class="text-destructive">*</span>
                             </Label>
                             <Select :model-value="ws.toSelectValue(line.batchId)" @update:model-value="line.batchId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger :disabled="Boolean(ws.transferBatchLoadingByItemId[line.itemId])">
+                                <SelectTrigger :id="'trf-line-batch-' + idx" :disabled="Boolean(ws.transferBatchLoadingByItemId[line.itemId])">
                                     <SelectValue placeholder="Select" />
                                 </SelectTrigger>
                                 <SelectContent>

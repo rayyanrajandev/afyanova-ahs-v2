@@ -184,6 +184,7 @@ watch(open, (isOpen) => {
         <Popover :open="open" @update:open="open = $event">
             <PopoverTrigger as-child>
                 <Button
+                    :id="`catalog-picker-${label}`"
                     type="button"
                     variant="outline"
                     role="combobox"

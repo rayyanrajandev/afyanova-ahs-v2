@@ -1539,7 +1539,7 @@ onMounted(async () => {
                                                     <Input v-model="auditFilters.q" placeholder="Search action" class="md:col-span-2" />
                                                     <Input v-model="auditFilters.action" placeholder="Action exact match" />
                                                     <Select v-model="auditFilters.actorType">
-                                                        <SelectTrigger id="details-comment">
+                                                        <SelectTrigger id="approval-case-audit-actor-type-filter" aria-label="Filter by actor type">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
