@@ -18,7 +18,7 @@ class EnsureUserHasActiveRole
             }
 
             $hasActiveRole = $user->roles()
-                ->where('roles.status', 'active')
+                ->active()
                 ->exists();
 
             if (! $hasActiveRole) {

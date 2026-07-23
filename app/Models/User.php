@@ -251,17 +251,17 @@ class User extends Authenticatable implements MustVerifyEmail
         if ($this->relationLoaded('roles')) {
             return $this->roles->contains(function (mixed $role): bool {
                 $code = strtoupper(trim((string) ($role->code ?? '')));
-                $status = strtolower(trim((string) ($role->status ?? 'active')));
 
-                return $status === 'active'
-                    && in_array($code, self::PLATFORM_SUPER_ADMIN_ROLE_CODES, true);
+                return in_array($code, self::PLATFORM_SUPER_ADMIN_ROLE_CODES, true)
+                    && $role instanceof RoleModel
+                    && $role->isCurrentlyActive();
             });
         }
 
         try {
             return $this->roles()
                 ->whereIn('code', self::PLATFORM_SUPER_ADMIN_ROLE_CODES)
-                ->where('status', 'active')
+                ->active()
                 ->exists();
         } catch (QueryException) {
             return false;
@@ -270,9 +270,20 @@ class User extends Authenticatable implements MustVerifyEmail
 
     private function isFacilitySuperAdmin(): bool
     {
+        if ($this->relationLoaded('roles')) {
+            return $this->roles->contains(function (mixed $role): bool {
+                $code = strtoupper(trim((string) ($role->code ?? '')));
+
+                return $code === 'ADMIN.FACILITY'
+                    && $role instanceof RoleModel
+                    && $role->isCurrentlyActive();
+            });
+        }
+
         try {
             return $this->roles()
                 ->where('code', 'ADMIN.FACILITY')
+                ->active()
                 ->exists();
         } catch (QueryException) {
             return false;
