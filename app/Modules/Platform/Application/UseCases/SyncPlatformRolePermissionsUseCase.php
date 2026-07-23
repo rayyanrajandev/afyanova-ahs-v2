@@ -98,7 +98,10 @@ class SyncPlatformRolePermissionsUseCase
 
         $actor = User::query()->find($actorId);
 
-        return $actor !== null && $actor->hasUniversalAdminAccess();
+        // Platform-only: a facility-scoped admin must not be able to grant an
+        // existing role platform.rbac.manage-roles/manage-user-roles — see
+        // RBAC_Remediation_Plan.md Phase 2.
+        return $actor !== null && $actor->isPlatformSuperAdminAccess();
     }
 }
 

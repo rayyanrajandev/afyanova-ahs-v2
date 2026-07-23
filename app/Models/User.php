@@ -123,7 +123,12 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function hasPermissionTo(string $permission): bool
     {
-        if ($this->hasUniversalAdminAccess()) {
+        // Only a true platform-wide super admin gets every permission for free.
+        // A facility-scoped admin (isFacilitySuperAdmin()) must hold the actual
+        // permission via their role's grants, like anyone else — see
+        // RBAC_Remediation_Plan.md Phase 2 for why hasUniversalAdminAccess()
+        // (which also covers facility admins) is intentionally NOT used here.
+        if ($this->isPlatformSuperAdmin()) {
             return true;
         }
 
@@ -161,7 +166,8 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function permissionNames(): array
     {
-        if ($this->hasUniversalAdminAccess()) {
+        // See hasPermissionTo() — platform-only, not hasUniversalAdminAccess().
+        if ($this->isPlatformSuperAdmin()) {
             return Permission::query()
                 ->orderBy('name')
                 ->pluck('name')

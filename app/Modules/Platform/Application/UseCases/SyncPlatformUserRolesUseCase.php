@@ -104,7 +104,10 @@ class SyncPlatformUserRolesUseCase
             return false;
         }
 
-        return $actor->hasUniversalAdminAccess()
+        // Platform-only: a facility-scoped admin must not be able to assign ANY
+        // role (including platform-wide ones) to any user — see
+        // RBAC_Remediation_Plan.md Phase 2.
+        return $actor->isPlatformSuperAdminAccess()
             || $actor->hasPermissionTo('platform.rbac.manage-roles')
             || (
                 ! $this->platformScopeContext->hasFacility()

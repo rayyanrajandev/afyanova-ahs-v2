@@ -29,7 +29,10 @@ class PatientFlowBoardChannelAuthorizer
             return false;
         }
 
-        if ($user->hasUniversalAdminAccess()) {
+        // Platform-only: a facility-scoped admin must still hold an active
+        // facility_user membership to subscribe to another facility's
+        // real-time board — see RBAC_Remediation_Plan.md Phase 2.
+        if ($user->isPlatformSuperAdminAccess()) {
             return true;
         }
 

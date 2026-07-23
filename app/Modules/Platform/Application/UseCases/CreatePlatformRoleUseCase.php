@@ -187,7 +187,10 @@ class CreatePlatformRoleUseCase
 
         $actor = User::query()->find($actorId);
 
-        return $actor !== null && $actor->hasUniversalAdminAccess();
+        // Platform-only: a facility-scoped admin must not be able to mint a new
+        // role carrying platform.rbac.manage-roles/manage-user-roles and hand
+        // it to anyone — see RBAC_Remediation_Plan.md Phase 2.
+        return $actor !== null && $actor->isPlatformSuperAdminAccess();
     }
 }
 

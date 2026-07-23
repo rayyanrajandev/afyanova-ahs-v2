@@ -43,12 +43,18 @@ function userWithRole(RoleModel $role): User
 
 // --- Task 1.1: model-level bypass checks -----------------------------------
 
-it('still grants universal admin access to a user with an active ADMIN.FACILITY role', function (): void {
+it('still recognizes an active ADMIN.FACILITY role as a facility super admin', function (): void {
+    // hasUniversalAdminAccess() itself is unchanged by this fix — it still
+    // reports an active ADMIN.FACILITY role as a facility super admin (used
+    // by the ~20 ownership/scoping-convenience call sites reviewed in
+    // RBAC_Remediation_Plan.md Phase 2). What changed in Phase 2 is that
+    // hasPermissionTo()/permissionNames() no longer use this flag as a
+    // blanket "grant everything" shortcut — see RbacFacilityAdminScopeTest.
     $role = createRoleWithCode('ADMIN.FACILITY');
     $user = userWithRole($role);
 
     expect($user->hasUniversalAdminAccess())->toBeTrue()
-        ->and($user->hasPermissionTo('anything.at.all'))->toBeTrue();
+        ->and($user->hasPermissionTo('anything.at.all'))->toBeFalse();
 });
 
 it('denies universal admin access when the ADMIN.FACILITY role has been revoked', function (): void {

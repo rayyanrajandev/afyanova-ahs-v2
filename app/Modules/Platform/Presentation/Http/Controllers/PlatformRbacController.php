@@ -86,6 +86,8 @@ class PlatformRbacController extends Controller
             return $this->validationError('code', $exception->getMessage());
         } catch (UnknownPlatformRbacPermissionException $exception) {
             return $this->validationError('permissionNames', $exception->getMessage());
+        } catch (PlatformRoleProtectedException $exception) {
+            return $this->validationError('permissionNames', $exception->getMessage());
         }
 
         return response()->json([
@@ -282,7 +284,10 @@ class PlatformRbacController extends Controller
             return true;
         }
 
-        if ($actor->hasUniversalAdminAccess() || $actor->hasPermissionTo('platform.rbac.manage-roles')) {
+        // Platform-only: a facility-scoped admin must be restricted to
+        // assignable-hospital roles, not shown every platform-wide role — see
+        // RBAC_Remediation_Plan.md Phase 2.
+        if ($actor->isPlatformSuperAdminAccess() || $actor->hasPermissionTo('platform.rbac.manage-roles')) {
             return false;
         }
 
