@@ -13,7 +13,6 @@ return new class extends Migration
         $this->addEntryStateColumns('laboratory_orders', 'COALESCE(lifecycle_locked_at, ordered_at, created_at, CURRENT_TIMESTAMP)');
         $this->addEntryStateColumns('radiology_orders', 'COALESCE(lifecycle_locked_at, ordered_at, created_at, CURRENT_TIMESTAMP)');
         $this->addEntryStateColumns('theatre_procedures', 'COALESCE(lifecycle_locked_at, scheduled_at, created_at, CURRENT_TIMESTAMP)');
-        $this->addEntryStateColumns('clinical_procedure_orders', 'COALESCE(lifecycle_locked_at, ordered_at, created_at, CURRENT_TIMESTAMP)');
     }
 
     public function down(): void
@@ -22,7 +21,6 @@ return new class extends Migration
         $this->dropEntryStateColumns('laboratory_orders');
         $this->dropEntryStateColumns('radiology_orders');
         $this->dropEntryStateColumns('theatre_procedures');
-        $this->dropEntryStateColumns('clinical_procedure_orders');
     }
 
     private function addEntryStateColumns(string $tableName, string $signedTimestampSql): void

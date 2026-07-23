@@ -1,6 +1,6 @@
 import { formatEnumLabel } from '@/lib/labels';
 
-export type DirectServiceModuleKey = 'radiology' | 'laboratory' | 'pharmacy';
+export type DirectServiceModuleKey = 'radiology' | 'laboratory' | 'pharmacy' | 'clinical_procedure';
 
 export type EmbeddedPatientSummary = {
     id?: string | null;
@@ -21,6 +21,7 @@ export type DirectServiceOrderLike = {
     orderedAt?: string | null;
     studyDescription?: string | null;
     procedureCode?: string | null;
+    procedureDescription?: string | null;
     modality?: string | null;
     testCode?: string | null;
     testName?: string | null;
@@ -55,6 +56,11 @@ const OPEN_STATUS_PRIORITY: Record<DirectServiceModuleKey, Record<string, number
         pending: 1,
         in_preparation: 2,
         partially_dispensed: 3,
+    },
+    clinical_procedure: {
+        ordered: 1,
+        scheduled: 2,
+        in_progress: 3,
     },
 };
 
@@ -112,7 +118,9 @@ export function directServicePatientWorklistHref(
             ? '/radiology-orders'
             : moduleKey === 'laboratory'
                 ? '/laboratory-orders'
-                : '/pharmacy-orders';
+                : moduleKey === 'clinical_procedure'
+                    ? '/clinical-procedure-orders'
+                    : '/pharmacy-orders';
 
     const params = new URLSearchParams({
         patientId,
@@ -136,6 +144,13 @@ function orderDetailLabel(order: DirectServiceOrderLike, moduleKey: DirectServic
         const name = String(order.testName ?? '').trim();
         if (code && name) return `${code} - ${name}`;
         return name || code || 'Laboratory test';
+    }
+
+    if (moduleKey === 'clinical_procedure') {
+        const code = String(order.procedureCode ?? '').trim();
+        const name = String(order.procedureDescription ?? '').trim();
+        if (code && name) return `${code} - ${name}`;
+        return name || code || 'Clinical procedure';
     }
 
     const code = String(order.medicationCode ?? '').trim();

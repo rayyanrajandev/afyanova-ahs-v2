@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { setModulePathRules } from '@/config/facilityPageEntitlements';
 import AppIcon from '@/components/AppIcon.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -18,7 +17,9 @@ import {
     SidebarGroupLabel,
     SidebarMenuSkeleton,
 } from '@/components/ui/sidebar';
+import { useActiveRole } from '@/composables/useActiveRole';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useSidebarBadges } from '@/composables/useSidebarBadges';
 import { useSidebarFavorites } from '@/composables/useSidebarFavorites';
 
 import {
@@ -30,8 +31,7 @@ import {
     navSubGroupIcons,
     type NavSectionKey,
 } from '@/config/appNavCatalog';
-import { useActiveRole } from '@/composables/useActiveRole';
-import { useSidebarBadges } from '@/composables/useSidebarBadges';
+import { setModulePathRules } from '@/config/facilityPageEntitlements';
 import { filterSidebarNavCatalogItems } from '@/lib/routeAccess';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';

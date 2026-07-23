@@ -2,8 +2,15 @@
 import { Head } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, watch } from 'vue';
-import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import ClinicalProcedureOrderCreateSheet from '@/components/clinicalProcedureOrders/ClinicalProcedureOrderCreateSheet.vue';
+import ClinicalProcedureOrderDetailSheet from '@/components/clinicalProcedureOrders/ClinicalProcedureOrderDetailSheet.vue';
+import ClinicalProcedureStatusUpdateDialog from '@/components/clinicalProcedureOrders/ClinicalProcedureStatusUpdateDialog.vue';
+import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
+import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
+import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
+import PatientQuickSearchField from '@/components/patients/PatientQuickSearchField.vue';
+import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,18 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
-import PatientQuickSearchField from '@/components/patients/PatientQuickSearchField.vue';
-import { type PatientQuickSearchResult } from '@/composables/patients/usePatientQuickSearch';
-import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
-import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
-import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
-import ClinicalProcedureOrderCreateSheet from '@/components/clinicalProcedureOrders/ClinicalProcedureOrderCreateSheet.vue';
-import ClinicalProcedureOrderDetailSheet from '@/components/clinicalProcedureOrders/ClinicalProcedureOrderDetailSheet.vue';
-import ClinicalProcedureStatusUpdateDialog from '@/components/clinicalProcedureOrders/ClinicalProcedureStatusUpdateDialog.vue';
-import { usePatientOrderGroups } from '@/composables/usePatientOrderGroups';
-import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
+import { useApplyClinicalProcedureOrderLifecycleAction } from '@/composables/clinicalProcedureOrders/useApplyClinicalProcedureOrderLifecycleAction';
+import { useClinicalProcedureOrderAuditLog } from '@/composables/clinicalProcedureOrders/useClinicalProcedureOrderAuditLog';
 import { useClinicalProcedureOrderFilters } from '@/composables/clinicalProcedureOrders/useClinicalProcedureOrderFilters';
 import {
     useClinicalProcedureOrders,
@@ -31,9 +28,12 @@ import {
     type ClinicalProcedureOrderStatus,
 } from '@/composables/clinicalProcedureOrders/useClinicalProcedureOrders';
 import { useClinicalProcedureOrderStatusCounts } from '@/composables/clinicalProcedureOrders/useClinicalProcedureOrderStatusCounts';
-import { useClinicalProcedureOrderAuditLog } from '@/composables/clinicalProcedureOrders/useClinicalProcedureOrderAuditLog';
 import { useUpdateClinicalProcedureOrderStatus, type UpdateClinicalProcedureOrderStatusPayload } from '@/composables/clinicalProcedureOrders/useUpdateClinicalProcedureOrderStatus';
-import { useApplyClinicalProcedureOrderLifecycleAction } from '@/composables/clinicalProcedureOrders/useApplyClinicalProcedureOrderLifecycleAction';
+import { type PatientQuickSearchResult } from '@/composables/patients/usePatientQuickSearch';
+import { usePatientOrderGroups } from '@/composables/usePatientOrderGroups';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
+import AppLayout from '@/layouts/AppLayout.vue';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
