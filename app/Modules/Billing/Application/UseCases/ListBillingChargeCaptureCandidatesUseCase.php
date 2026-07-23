@@ -4,6 +4,7 @@ namespace App\Modules\Billing\Application\UseCases;
 
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
+use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
@@ -67,6 +68,7 @@ class ListBillingChargeCaptureCandidatesUseCase
         $candidates = array_merge(
             $this->consultationCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
             $this->orderCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
+            $this->admissionBedDayCandidates($patientId, $admissionId, $currencyCode, $invoicedSources),
         );
 
         usort(
@@ -190,6 +192,99 @@ class ListBillingChargeCaptureCandidatesUseCase
             $candidates = array_merge($candidates, $this->candidatesForKind(
                 $kind, $patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources,
             ));
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * One candidate per elapsed calendar day of an admission's stay (any part of a
+     * day counts as a full day, minimum 1 — the admission day is always chargeable).
+     * Each day is its own source so it can be captured/invoiced independently as the
+     * stay progresses, the same way a single lab/pharmacy order is one candidate.
+     *
+     * @param  array<string, array<string, mixed>>  $invoicedSources
+     * @return array<int, array<string, mixed>>
+     */
+    private function admissionBedDayCandidates(
+        string $patientId,
+        ?string $admissionId,
+        string $currencyCode,
+        array $invoicedSources,
+    ): array {
+        $query = AdmissionModel::query()
+            ->with('bedResource')
+            ->where('patient_id', $patientId)
+            ->whereIn('status', ['admitted', 'discharged', 'transferred']);
+
+        if ($admissionId !== null) {
+            $query->where('id', $admissionId);
+        }
+
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $admissions = $query->orderByDesc('admitted_at')->limit(50)->get();
+
+        $candidates = [];
+
+        foreach ($admissions as $admission) {
+            if ($admission->admitted_at === null) {
+                continue;
+            }
+
+            $candidates = array_merge($candidates, $this->bedDayCandidatesForAdmission(
+                $admission, $currencyCode, $invoicedSources,
+            ));
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $invoicedSources
+     * @return array<int, array<string, mixed>>
+     */
+    private function bedDayCandidatesForAdmission(
+        AdmissionModel $admission,
+        string $currencyCode,
+        array $invoicedSources,
+    ): array {
+        $admittedAt = $admission->admitted_at;
+        $endpoint = $admission->discharged_at ?? now();
+
+        $elapsedSeconds = max(0, $endpoint->getTimestamp() - $admittedAt->getTimestamp());
+        $days = min(max((int) ceil($elapsedSeconds / 86400), 1), 60);
+
+        $wardLabel = trim((string) ($admission->bedResource?->ward_name ?: $admission->ward));
+        $wardToken = $this->serviceCodeToken($wardLabel);
+        $serviceCodes = array_values(array_unique(array_filter([
+            $wardToken !== '' ? sprintf('BED-%s', $wardToken) : null,
+            'BED-DAY',
+        ])));
+        $serviceName = $wardLabel !== '' ? sprintf('Bed Charge - %s', $wardLabel) : 'Bed Charge';
+
+        $candidates = [];
+
+        for ($dayIndex = 1; $dayIndex <= $days; $dayIndex++) {
+            $performedAt = $this->dateTimeString($admittedAt->copy()->addDays($dayIndex - 1));
+
+            $candidates[] = $this->buildCandidate(
+                sourceKind: 'admission_bed_day',
+                sourceId: sprintf('%s:%d', $admission->id, $dayIndex),
+                patientId: (string) $admission->patient_id,
+                appointmentId: null,
+                admissionId: (string) $admission->id,
+                sourceNumber: $admission->admission_number,
+                serviceCode: $serviceCodes,
+                serviceName: $serviceName,
+                serviceType: 'bed_day',
+                sourceStatus: $admission->status,
+                performedAt: $performedAt,
+                quantity: 1,
+                unit: 'day',
+                currencyCode: $currencyCode,
+                invoicedSources: $invoicedSources,
+            );
         }
 
         return $candidates;

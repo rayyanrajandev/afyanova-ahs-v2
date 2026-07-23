@@ -161,6 +161,7 @@ return [
             'inpatient.ward.update-task-status',
             'inpatient.ward.create-care-plan',
             'inpatient.ward.update-care-plan',
+            'inpatient.ward.create-round-note',
             'patient.vitals.record',
             'lab.sample.collect',
             'service.requests.create',

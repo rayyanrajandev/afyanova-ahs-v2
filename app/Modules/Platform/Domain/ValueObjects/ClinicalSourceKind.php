@@ -16,6 +16,7 @@ enum ClinicalSourceKind: string
     case CLINICAL_PROCEDURE_ORDER = 'clinical_procedure_order';
     case THEATRE_PROCEDURE = 'theatre_procedure';
     case APPOINTMENT_CONSULTATION = 'appointment_consultation';
+    case ADMISSION_BED_DAY = 'admission_bed_day';
 
     /**
      * @return array<int, string>
@@ -37,6 +38,7 @@ enum ClinicalSourceKind: string
             'clinical_procedure_order' => self::CLINICAL_PROCEDURE_ORDER,
             'theatre_procedure', 'procedure' => self::THEATRE_PROCEDURE,
             'appointment_consultation' => self::APPOINTMENT_CONSULTATION,
+            'admission_bed_day' => self::ADMISSION_BED_DAY,
             default => null,
         };
     }
@@ -58,6 +60,7 @@ enum ClinicalSourceKind: string
             self::CLINICAL_PROCEDURE_ORDER => ClinicalProcedureOrderModel::class,
             self::THEATRE_PROCEDURE => TheatreProcedureModel::class,
             self::APPOINTMENT_CONSULTATION => throw new \LogicException('Consultations are not order-shaped.'),
+            self::ADMISSION_BED_DAY => throw new \LogicException('Bed-day charges are not order-shaped.'),
         };
     }
 
@@ -70,6 +73,7 @@ enum ClinicalSourceKind: string
             self::CLINICAL_PROCEDURE_ORDER => 'clinical_procedure_catalog_item_id',
             self::THEATRE_PROCEDURE => 'theatre_procedure_catalog_item_id',
             self::APPOINTMENT_CONSULTATION => throw new \LogicException('Consultations have no catalog FK.'),
+            self::ADMISSION_BED_DAY => throw new \LogicException('Bed-day charges have no catalog FK.'),
         };
     }
 
@@ -85,6 +89,7 @@ enum ClinicalSourceKind: string
             self::CLINICAL_PROCEDURE_ORDER => ['ordered'],
             self::THEATRE_PROCEDURE => ['planned'],
             self::APPOINTMENT_CONSULTATION => throw new \LogicException('Consultations are not POS-eligible.'),
+            self::ADMISSION_BED_DAY => throw new \LogicException('Bed-day charges are not POS-eligible.'),
         };
     }
 
@@ -102,6 +107,7 @@ enum ClinicalSourceKind: string
             self::LABORATORY_ORDER, self::PHARMACY_ORDER, self::RADIOLOGY_ORDER, self::CLINICAL_PROCEDURE_ORDER => true,
             self::THEATRE_PROCEDURE => false,
             self::APPOINTMENT_CONSULTATION => throw new \LogicException('Consultations are not POS-eligible.'),
+            self::ADMISSION_BED_DAY => throw new \LogicException('Bed-day charges are not POS-eligible.'),
         };
     }
 }

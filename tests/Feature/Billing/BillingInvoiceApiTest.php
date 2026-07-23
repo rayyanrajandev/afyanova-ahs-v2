@@ -110,6 +110,27 @@ function makeBillingRadiologyTariff(array $overrides = []): BillingServiceCatalo
     ], $overrides));
 }
 
+function makeBillingBedDayTariff(array $overrides = []): BillingServiceCatalogItemModel
+{
+    return BillingServiceCatalogItemModel::query()->create(array_merge([
+        'service_code' => 'BED-DAY',
+        'service_name' => 'Bed Charge',
+        'service_type' => 'bed_day',
+        'department' => null,
+        'unit' => 'day',
+        'base_price' => 20000,
+        'currency_code' => 'TZS',
+        'tax_rate_percent' => 0,
+        'is_taxable' => false,
+        'effective_from' => now()->subDay()->toDateTimeString(),
+        'effective_to' => null,
+        'description' => 'Bed-day charge capture tariff',
+        'metadata' => null,
+        'status' => 'active',
+        'status_reason' => null,
+    ], $overrides));
+}
+
 function makeBillingStaffProfileForUser(User $user, array $overrides = []): StaffProfileModel
 {
     return StaffProfileModel::query()->create(array_merge([
@@ -126,9 +147,9 @@ function makeBillingStaffProfileForUser(User $user, array $overrides = []): Staf
     ], $overrides));
 }
 
-function makeBillingAdmission(string $patientId): AdmissionModel
+function makeBillingAdmission(string $patientId, array $overrides = []): AdmissionModel
 {
-    return AdmissionModel::query()->create([
+    return AdmissionModel::query()->create(array_merge([
         'admission_number' => 'ADM'.now()->format('Ymd').strtoupper(Str::random(6)),
         'patient_id' => $patientId,
         'appointment_id' => null,
@@ -141,7 +162,7 @@ function makeBillingAdmission(string $patientId): AdmissionModel
         'notes' => null,
         'status' => 'admitted',
         'status_reason' => null,
-    ]);
+    ], $overrides));
 }
 
 function billingInvoicePayload(string $patientId, array $overrides = []): array
@@ -485,6 +506,96 @@ it('accepts true false query strings for billing charge capture include invoiced
         ->assertOk()
         ->assertJsonPath('meta.includeInvoiced', false)
         ->assertJsonPath('meta.pending', 1);
+});
+
+it('generates one bed-day charge capture candidate per elapsed calendar day of an admission', function (): void {
+    $user = makeBillingUser();
+    $patient = makeBillingPatient();
+    $admission = makeBillingAdmission($patient->id, [
+        'admitted_at' => now()->subHours(26)->toDateTimeString(),
+    ]);
+
+    makeBillingBedDayTariff();
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&admissionId='.$admission->id.'&currencyCode=TZS')
+        ->assertOk()
+        ->assertJsonPath('meta.pending', 2)
+        ->assertJsonPath('meta.priced', 2)
+        ->json('data');
+
+    $bedDayCandidates = collect($response)->where('sourceWorkflowKind', 'admission_bed_day')->values();
+
+    expect($bedDayCandidates)->toHaveCount(2)
+        ->and($bedDayCandidates->pluck('sourceWorkflowId')->all())->toBe([
+            $admission->id.':2',
+            $admission->id.':1',
+        ])
+        ->and($bedDayCandidates->pluck('serviceCode')->unique()->all())->toBe(['BED-DAY'])
+        ->and($bedDayCandidates->pluck('unitPrice')->unique()->all())->toBe([20000])
+        ->and($bedDayCandidates->pluck('unit')->unique()->all())->toBe(['day']);
+});
+
+it('prices bed-day charges by ward-specific tariff before the flat bed-day fallback', function (): void {
+    $user = makeBillingUser();
+    $patient = makeBillingPatient();
+    $admission = makeBillingAdmission($patient->id, [
+        'ward' => 'ICU',
+        'admitted_at' => now()->subHours(2)->toDateTimeString(),
+    ]);
+
+    makeBillingBedDayTariff();
+    makeBillingBedDayTariff([
+        'service_code' => 'BED-ICU',
+        'service_name' => 'ICU Bed Charge',
+        'base_price' => 120000,
+    ]);
+
+    $candidate = $this->actingAs($user)
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&admissionId='.$admission->id.'&currencyCode=TZS')
+        ->assertOk()
+        ->assertJsonPath('meta.pending', 1)
+        ->json('data.0');
+
+    expect($candidate['serviceCode'])->toBe('BED-ICU')
+        ->and($candidate['unitPrice'])->toBe(120000)
+        ->and($candidate['pricingLookupCodes'])->toContain('BED-ICU', 'BED-DAY');
+});
+
+it('excludes already-invoiced bed-days while still surfacing newly elapsed ones', function (): void {
+    $user = makeBillingUser();
+    $patient = makeBillingPatient();
+    $admission = makeBillingAdmission($patient->id, [
+        'admitted_at' => now()->subHours(26)->toDateTimeString(),
+    ]);
+
+    makeBillingBedDayTariff();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
+            'admissionId' => $admission->id,
+            'lineItems' => [
+                [
+                    'description' => 'Bed Charge',
+                    'quantity' => 1,
+                    'unitPrice' => 20000,
+                    'serviceCode' => 'BED-DAY',
+                    'unit' => 'day',
+                    'sourceWorkflowKind' => 'admission_bed_day',
+                    'sourceWorkflowId' => $admission->id.':1',
+                    'sourceWorkflowLabel' => $admission->admission_number,
+                    'sourcePerformedAt' => now()->subHours(26)->toDateTimeString(),
+                ],
+            ],
+        ]))
+        ->assertCreated();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&admissionId='.$admission->id.'&currencyCode=TZS')
+        ->assertOk()
+        ->assertJsonPath('meta.pending', 1)
+        ->assertJsonPath('meta.alreadyInvoiced', 1)
+        ->assertJsonPath('data.0.sourceWorkflowId', $admission->id.':2');
 });
 
 it('prices consultation visits by clinician cadre before department fallback', function (): void {
