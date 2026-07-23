@@ -28,7 +28,6 @@ use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
 use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -190,8 +189,6 @@ class ClinicalProcedureOrderController extends Controller
         }
 
         abort_if($order === null, 404, 'Clinical procedure order not found.');
-
-        Gate::authorize('perform', $order);
 
         return response()->json([
             'data' => ClinicalProcedureOrderResponseTransformer::transform($order),
