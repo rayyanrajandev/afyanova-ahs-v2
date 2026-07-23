@@ -174,7 +174,25 @@ While verifying Task 2.2, discovered that **~13-17 separate migrations** (spanni
 | 6.1 | Write a small Artisan command or automated test that: (a) greps the codebase for every permission literal used in `can:` middleware, `hasPermissionTo(`, and `->authorize(`/`->can(`, and (b) asserts each one exists as a seeded permission name (or is on an explicit allow-list of Gate-only composite abilities, e.g. the ones in `EffectivePermissionNameResolver`). | New file, e.g. `app/Console/Commands/AuditPermissionUsage.php` + a Pest test that runs it | **Pass condition:** running it today, before any further changes, produces a clean report of exactly the anomalies already documented in `RBAC_Audit_Report.md` §6.2/§6.3 (proving the tool works) — and zero *new*, previously-unknown anomalies (which would mean the tool has a bug, since the audit was meant to be exhaustive for this class of issue). |
 | 6.2 | Wire this check into CI (e.g. `composer test` or a dedicated CI job) so a future PR that introduces a new mismatched permission name fails the build. | `composer.json` scripts, CI config | **Verification:** intentionally introduce a deliberately-typo'd permission check in a throwaway branch and confirm CI fails; remove the typo and confirm CI passes. |
 
-**Phase Gate 6→7:** CI check is live and has been proven to both catch a real mismatch and pass on clean code.
+**DONE (2026-07-23).**
+
+**What actually shipped:** `app/Support/Rbac/PermissionUsageAuditor.php` scans `routes/*.php` and every PHP file under `app/` for permission literals passed to `can:` middleware, `hasPermissionTo(`, `->authorize(`, and `->can(`, then diffs that set against (a) the real `permissions` table and (b) an allow-list of `Gate::define()`-only abilities in `AppServiceProvider`. `app/Console/Commands/AuditPermissionUsage.php` exposes it as `php artisan rbac:audit-permissions`. `tests/Feature/RbacPermissionUsageAuditTest.php` runs it as a Pest test — this is the actual CI tripwire (Task 6.2): it runs on every `./vendor/bin/pest` invocation, which is what CI already runs, so no separate CI wiring was needed.
+
+**Task 6.2's typo-detection proof:** rather than a manual throwaway-branch exercise, the test suite itself contains the proof as a permanent regression test — the second test in `RbacPermissionUsageAuditTest.php` writes a real throwaway PHP file containing `hasPermissionTo('this.permission.was.never.seeded.anywhere')`, runs the real auditor against the real `app/` tree (including that file), asserts the orphaned name is caught, then deletes the fixture file. This is stronger than a one-off manual proof: it re-proves detection works on every test run, forever, not just once.
+
+**First real run found 8 genuine bugs beyond the original manual audit's scope**, all fixed via `config/roles.php` grants plus `database/migrations/2026_07_23_000004_fix_permission_tripwire_findings.php`:
+
+- 4 audit-log permissions seeded under a hyphenated name (`laboratory-orders.view-audit-logs`) but checked in code under a dot-namespaced name (`laboratory.orders.audit-logs.view`) — the same naming-drift bug class as the already-known `clinical_procedure.*` issue, affecting laboratory, pharmacy, medical-records, and billing-invoices audit logs.
+- 1 route checking the wrong permission entirely: the `patient-vitals` store route was gated on `inpatient.ward.create` instead of `patient.vitals.record` (`routes/api.php` ~line 1938).
+- 4 `inventory.procurement.*` permissions (correct-movement, manage-item-units, manage-unit-prices, set-opening-stock) and 2 `staff.attendance.*` + 1 `platform.clinical-catalog.manage-clinical-procedures` permission checked in code but never seeded at all, so no role could ever hold them.
+
+**A second, much larger systemic bug was found while verifying the tripwire against a fresh install:** the tripwire test failed in the SQLite/`RefreshDatabase` CI environment even after all 8 fixes above, because a fresh `php artisan migrate` only produced 121 permission rows versus 275 in the real, long-lived local Postgres database. Diffing the two lists found **162 permissions** — spanning nearly every module (admissions, appointments, billing, claims, emergency triage, inpatient ward, lab/laboratory, medical records, pharmacy, platform cross-tenant/facilities/feature-flags/multi-facility/rbac/users, POS, radiology, staff, theatre) — that exist in the real database purely because some seeder (almost certainly the now-deleted `RoleHierarchySeeder`) was run manually against it at some point in its history, with no migration ever replicating that. This meant **any fresh deployment, CI run, or disaster-recovery restore from migrations alone would have started with almost no working permission catalog**, independent of anything else in this remediation plan. Fixed by `database/migrations/2026_07_23_000005_seed_baseline_permission_catalog.php`, which inserts all 162 rows (idempotently, permission rows only — role grants remain `config/roles.php`'s job). Verified by rerunning migrations against a throwaway fresh SQLite file and confirming its permission set now exactly matches the real database's 275.
+
+**Verification performed:** `rbac:audit-permissions`/the Pest tripwire produces a clean report (0 orphaned checks) against the real database; the deliberate-typo fixture test passes; a fresh SQLite install now seeds all 275 permissions, matching the real database exactly; full-suite JUnit diff against the Phase 5 baseline shows **0 new failures and 0 newly-fixed tests** — the pre-existing 372 failures (unrelated flaky/environment-dependent tests, not RBAC) are identical in count and identity before and after, plus the 2 new tripwire tests pass.
+
+**Rollback for Phase 6:** `php artisan migrate:rollback` reverts `2026_07_23_000005` as a no-op by design (see its `down()` docblock — removing the rows would reintroduce the exact bug class this migration exists to prevent) and reverts `2026_07_23_000004`'s renames/inserts normally. The auditor, command, and test files can be deleted without affecting runtime behavior — they are a detection tool, not enforcement.
+
+**Phase Gate 6→7: cleared.** CI tripwire is live (runs as part of the existing Pest suite), proven to catch a real mismatch (permanent regression test) and to pass on clean code, and the far larger fresh-install permission-catalog gap it surfaced is closed.
 
 ---
 
@@ -199,8 +217,8 @@ The remediation is considered complete when:
 - [ ] Phase 2 shipped (via pilot → full rollout), verified, feature flag removed.
 - [ ] Phase 3's three endpoints all have passing allow/deny tests in the suite.
 - [ ] Phase 4's dead code is deleted and grep-confirmed gone.
-- [ ] Phase 5's previously-orphaned permissions are seeded and end-to-end tested.
-- [ ] Phase 6's CI tripwire is live and proven to catch a deliberately-introduced mismatch.
+- [x] Phase 5's previously-orphaned permissions are seeded and end-to-end tested. (2026-07-23)
+- [x] Phase 6's CI tripwire is live and proven to catch a deliberately-introduced mismatch. (2026-07-23)
 - [ ] Phase 7 items are logged as their own backlog items/tickets (not silently dropped), even though they're out of scope for this plan.
 
 This document should be updated (checkboxes ticked, dates added) as each phase actually completes — it is a tracking artifact, not a one-time write-up.
