@@ -64,7 +64,7 @@ return new class extends Migration
         }
 
         foreach (self::RENAMED_PERMISSIONS as $oldName => $newName) {
-            DB::table('permissions')->where('name', $oldName)->update(['name' => $newName]);
+            $this->renamePermission($oldName, $newName);
         }
 
         $now = now();
@@ -106,7 +106,52 @@ return new class extends Migration
         DB::table('permissions')->whereIn('name', self::NEW_PERMISSIONS)->delete();
 
         foreach (self::RENAMED_PERMISSIONS as $oldName => $newName) {
-            DB::table('permissions')->where('name', $newName)->update(['name' => $oldName]);
+            $newId = DB::table('permissions')->where('name', $newName)->value('id');
+            if ($newId === null) {
+                continue;
+            }
+
+            if (DB::table('permissions')->where('name', $oldName)->exists()) {
+                // Renaming back would collide with an existing row -- leave it as-is.
+                continue;
+            }
+
+            DB::table('permissions')->where('id', $newId)->update(['name' => $oldName]);
         }
+    }
+
+    /**
+     * Rename $oldName to $newName, tolerating environments (like a cloud DB
+     * seeded from a different snapshot) where a permission row named
+     * $newName already exists. In that case, re-point any role grants that
+     * only reference the old row onto the existing new row, then drop the
+     * old row -- the permission_role FK cascades, so any leftover grants for
+     * roles that already held the new permission are cleaned up for free.
+     */
+    private function renamePermission(string $oldName, string $newName): void
+    {
+        $oldId = DB::table('permissions')->where('name', $oldName)->value('id');
+        if ($oldId === null) {
+            return;
+        }
+
+        $newId = DB::table('permissions')->where('name', $newName)->value('id');
+        if ($newId === null) {
+            DB::table('permissions')->where('id', $oldId)->update(['name' => $newName]);
+
+            return;
+        }
+
+        if ($oldId === $newId) {
+            return;
+        }
+
+        $roleIdsAlreadyOnNew = DB::table('permission_role')->where('permission_id', $newId)->pluck('role_id');
+        DB::table('permission_role')
+            ->where('permission_id', $oldId)
+            ->whereNotIn('role_id', $roleIdsAlreadyOnNew)
+            ->update(['permission_id' => $newId]);
+
+        DB::table('permissions')->where('id', $oldId)->delete();
     }
 };
