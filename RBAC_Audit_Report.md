@@ -22,6 +22,13 @@ However, the audit found **one critical, system-wide privilege-escalation-adjace
 
 Overall risk rating: **High** (see §17), driven primarily by the Super Admin bypass defect. The rest of the system's authorization posture is comparatively mature.
 
+> **Correction added 2026-07-23 (during Phase 3 remediation):** three of this report's four §7.3/§7.4/§15 "zero authorization" / "no permission floor" findings were **false positives**. Re-verification while implementing fixes (reading the actual `FormRequest::authorize()` implementations, not just the Controller/UseCase files the original session-limited manual pass checked) found:
+> - Billing service-catalog write endpoints (§7.3): already protected — each `FormRequest` checks `billing.service-catalog.manage` **OR** the granular `manage-identity`/`manage-pricing` variant, and the latter *is* granted to real roles. The original pass only noticed the orphaned half of the OR.
+> - Staff privilege-grant status endpoint (§7.3): already protected — `UpdateStaffPrivilegeGrantStatusRequest::authorize()` maps each target status to the correct permission via `Gate::forUser($user)->allows(...)`.
+> - Medical-record/encounter status transitions (§7.4): already have a real permission floor (`medical.records.read` plus `finalize`/`amend`/`archive` depending on target status) in `UpdateMedicalRecordStatusRequest`/`UpdateEncounterStatusRequest`, layered *underneath* the ownership check §7.4 correctly identified — the ownership check was never a substitute for it.
+>
+> Only the billing invoice status endpoint (`PATCH billing/{id}/status`) had a genuine gap, and it was narrower than reported: `issued`/`voided`/`cancelled` were already checked correctly; only `paid`/`partially_paid`/`draft` fell through an unconditional `return true`. All three false positives were confirmed via already-passing (or newly added) tests, not just re-reading code. See `RBAC_Remediation_Plan.md` Phase 3 for full detail. Root cause of the original errors: the two research agents that produced this section hit an API session-limit failure partway through (see §3 Methodology) and had to be finished via a faster, less thorough manual grep pass that checked Controllers/UseCases but consistently missed the FormRequest layer, which turns out to be where real authorization lives for several endpoints in this codebase (inconsistently — sometimes a stub, sometimes real logic). Sections 7.3, 7.4, 15, and the Executive Summary below are left as originally written for the audit-trail record; treat the three items above as corrected by this note, not by silent edits.
+
 ---
 
 ## 2. Audit Scope
