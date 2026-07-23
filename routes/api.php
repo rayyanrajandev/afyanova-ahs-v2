@@ -1935,7 +1935,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:inpatient.ward.read')
         ->name('patient-vitals.overdue-summary');
     Route::post('patient-vitals', [PatientVitalSetController::class, 'store'])
-        ->middleware('can:inpatient.ward.create')
+        ->middleware('can:patient.vitals.record')
         ->name('patient-vitals.store');
     Route::get('patient-vitals/patient/{patientId}', [PatientVitalSetController::class, 'latestForPatient'])
         ->middleware('can:patients.read')
