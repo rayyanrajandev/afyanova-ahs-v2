@@ -932,10 +932,11 @@ const ws = useSupplyChainPageApi();
                         </SelectContent>
                     </Select>
                     <Input
-                        id="inv-correction-reason"
+                        id="inv-correction-reason-detail"
                         v-model="ws.stockMovementCorrectionForm.reason"
                         :disabled="ws.stockMovementCorrectionSubmitting"
                         placeholder="Optional additional detail"
+                        aria-label="Correction reason additional detail"
                         class="mt-2"
                     />
                     <p v-if="ws.fieldError(ws.stockMovementCorrectionErrors, 'reason')" class="text-xs text-destructive">
