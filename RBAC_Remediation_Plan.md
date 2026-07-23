@@ -126,19 +126,21 @@ While verifying Task 2.2, discovered that **~13-17 separate migrations** (spanni
 
 ---
 
-## Phase 4 — Remove Dead / Conflicting Code
+## Phase 4 — Remove Dead / Conflicting Code — **DONE (2026-07-23)**
 
-**Objective:** Delete the leftover code that could silently reintroduce a conflicting rule set if ever run by accident. Low risk, no behavior change for real users (confirmed dead via the audit).
+**Objective:** Delete the leftover code that could silently reintroduce a conflicting rule set if ever run by accident.
 
-| # | Task | File(s) | Verification |
+| # | Task | File(s) | Result |
 |---|---|---|---|
-| 4.1 | Delete (or move to a clearly-marked non-autoloaded archive) the seeders that define a second, conflicting role/permission catalog and are never invoked. | `database/seeders/RoleHierarchySeeder.php`, `InventoryAccessRolesSeeder.php`, `InventoryPermissionsSeeder.php` | **Verification:** re-run `grep -rn "RoleHierarchySeeder\|InventoryAccessRolesSeeder\|InventoryPermissionsSeeder" --include=*.php .` (excluding the files themselves) and confirm zero references remain anywhere (`DatabaseSeeder`, console commands, tests). Full test suite still passes after removal. |
-| 4.2 | Remove the dead `inventory.access` middleware alias and `InventoryAccessMiddleware` class, and the unused `InventoryPolicy` Gate registration (or fold any genuinely-missing rule from it into `DepartmentScopedPermissionResolver` first, if review finds one). | `bootstrap/app.php:46`, `app/Http/Middleware/InventoryAccessMiddleware.php`, `app/Providers/AppServiceProvider.php:90`, `app/Policies/InventoryPolicy.php` | **Verification:** grep confirms zero remaining references/route usages before deletion (already confirmed in the audit — re-confirm at delete time in case anything changed). Test suite passes. |
-| 4.3 | Fix or remove the broken post-write `Gate::authorize('perform', $order)` call in the Clinical Procedure controller (either register a matching policy/gate the same way `RadiologyOrderPolicy::perform()` does, or delete the redundant call since the route already enforces the equivalent permission). | `app/Modules/ClinicalProcedure/Presentation/Http/Controllers/ClinicalProcedureOrderController.php:194` | **Automated test:** a legitimately-permitted user can now successfully call this endpoint end-to-end without the spurious 403 that currently follows every successful write. |
+| 4.1 | Delete the seeders that defined a second, conflicting role/permission catalog and were never invoked. | Deleted `database/seeders/RoleHierarchySeeder.php`, `InventoryAccessRolesSeeder.php`, `InventoryPermissionsSeeder.php` | **Done.** Re-confirmed zero references anywhere (`DatabaseSeeder`, console commands, tests) before deleting — unchanged from the original audit. |
+| 4.2 | Remove the dead `inventory.access` middleware alias and `InventoryAccessMiddleware` class, and the unused `InventoryPolicy` Gate registration. | Deleted `app/Http/Middleware/InventoryAccessMiddleware.php`, `app/Policies/InventoryPolicy.php`; removed the alias from `bootstrap/app.php` and the `Gate::policy()` registration + now-unused imports from `app/Providers/AppServiceProvider.php` | **Done.** Re-confirmed zero references to any of `InventoryPolicy`'s abilities (`createRequisition`/`approveRequisition`/`viewRequisition`) or the model it was registered against anywhere in `app/` before deleting — nothing was folded in because nothing used it; the live enforcement path (`DepartmentScopedPermissionResolver`, used directly by `InventoryDepartmentAccessController`) already covers this ground independently. |
+| 4.3 | Fix or remove the broken post-write `Gate::authorize('perform', $order)` call in the Clinical Procedure controller. | `app/Modules/ClinicalProcedure/Presentation/Http/Controllers/ClinicalProcedureOrderController.php` | **Done — this turned out to be more than a redundancy.** Confirmed via the FormRequest (`UpdateClinicalProcedureOrderStatusRequest::authorize()` already requires `clinical-procedure.perform`, runs before the use case) and the use case (`UpdateClinicalProcedureOrderStatusUseCase` already validates status-transition legality itself) that both permission and state-transition checks were already fully covered elsewhere — the post-write `Gate::authorize('perform', ...)` call had **no registered policy or gate for that ability at all**, so it unconditionally threw on every call, **after the status update had already been committed to the database**. This means every legitimate call to this endpoint was silently succeeding server-side while returning a 403 to the client — an active functional bug, not just a redundant check. Removed the call and the now-unused `Gate` import. This module had zero test coverage before this fix (no test file existed for `ClinicalProcedureOrderController` at all); added `tests/Feature/ClinicalProcedure/ClinicalProcedureOrderStatusApiTest.php` with 2 tests proving a legitimately-authorized call now succeeds end-to-end, and an unauthorized one is still correctly rejected. |
 
-**Rollback for Phase 4:** Plain code revert; nothing here has external dependents (confirmed unused pre-deletion).
+**Verification performed:** full-suite JUnit diff (same method as prior phases) — 2 tests newly passing (both new), 0 newly failing, 0 regressions anywhere in the 1,725-test suite.
 
-**Phase Gate 4→5:** Grep-confirmed zero lingering references to deleted code; full test suite green.
+**Rollback for Phase 4:** Plain code revert; nothing deleted had any external dependents (re-confirmed via grep immediately before each deletion, not just trusted from the original audit).
+
+**Phase Gate 4→5: cleared.** Grep-confirmed zero lingering references to any deleted code. Full test suite green (diff-verified).
 
 ---
 
