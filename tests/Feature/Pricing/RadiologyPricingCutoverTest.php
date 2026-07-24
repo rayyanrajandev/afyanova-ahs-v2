@@ -90,7 +90,9 @@ function setUpRadiologyCutover(float $legacyPrice, float $newResolverPrice): Cli
     return $catalogItem;
 }
 
-it('serves the legacy price for radiology by default', function (): void {
+it('serves the legacy price for radiology when both cutover flags are off', function (): void {
+    setRadiologyPricingFlags(master: false, radiology: false);
+
     $catalogItem = setUpRadiologyCutover(legacyPrice: 60000, newResolverPrice: 99000);
     $patient = makeRadiologyCutoverPatient();
     makeRadiologyCutoverOrder($patient->id, $catalogItem->id);
@@ -120,8 +122,12 @@ it('serves the new resolver price for radiology once cut over', function (): voi
 });
 
 it('cutting over radiology does not enable laboratory (flags are independent, not just the reverse case)', function (): void {
+    $flags = config('feature_flags.flags');
+    $flags['pricing.engine.v2.laboratory']['enabled'] = false;
+    config(['feature_flags.flags' => $flags]);
+
     setRadiologyPricingFlags(master: true, radiology: true);
-    // pricing.engine.v2.laboratory deliberately left at its default (off).
+    // pricing.engine.v2.laboratory explicitly forced off above, regardless of its ambient default.
 
     expect(app(App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface::class)->isEnabled('pricing.engine.v2.laboratory'))
         ->toBeFalse();

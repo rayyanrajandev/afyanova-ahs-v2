@@ -80,7 +80,9 @@ function setUpBedDayCutoverPricing(float $legacyPrice, float $newResolverPrice):
     return $chargeableItem->id;
 }
 
-it('serves the legacy string-matched price when both cutover flags default off', function (): void {
+it('serves the legacy string-matched price when both cutover flags are off', function (): void {
+    setBedDayCutoverFlags(master: false, bedDay: false);
+
     $chargeableItemId = setUpBedDayCutoverPricing(legacyPrice: 20000, newResolverPrice: 30000);
     $patient = makeBedDayCutoverPatient();
     $bed = makeBedDayCutoverBed($chargeableItemId);

@@ -135,7 +135,9 @@ function setUpCutoverCatalogAndPrice(float $legacyPrice, float $newResolverPrice
     return $catalogItem;
 }
 
-it('serves the legacy price when both cutover flags default off', function (): void {
+it('serves the legacy price when both cutover flags are off', function (): void {
+    setPricingEngineFlags(master: false, laboratory: false);
+
     $catalogItem = setUpCutoverCatalogAndPrice(legacyPrice: 12000, newResolverPrice: 20000);
     $patient = makeCutoverPatient();
     makeCutoverLabOrder($patient->id, $catalogItem->id);
@@ -199,8 +201,12 @@ it('stays on the legacy price when only the master flag is on but the domain fla
 });
 
 it('cutting over laboratory does not affect radiology pricing (per-domain isolation)', function (): void {
+    $flags = config('feature_flags.flags');
+    $flags['pricing.engine.v2.radiology']['enabled'] = false;
+    config(['feature_flags.flags' => $flags]);
+
     setPricingEngineFlags(master: true, laboratory: true);
-    // pricing.engine.v2.radiology deliberately not set/enabled.
+    // pricing.engine.v2.radiology explicitly forced off above, regardless of its ambient default.
 
     $patient = makeCutoverPatient();
 
@@ -255,7 +261,7 @@ it('still dispatches shadow-diff comparisons after a domain has cut over', funct
         ->and($diff->mismatch_reason)->toBe('price_differs');
 });
 
-it('falls back to missing_catalog_price rather than crashing when cut over with no price book entry', function (): void {
+it('falls back to the legacy price rather than showing zero when cut over with no price book entry', function (): void {
     setPricingEngineFlags(master: true, laboratory: true);
 
     $catalogItem = ClinicalCatalogItemModel::query()->create([
@@ -264,7 +270,11 @@ it('falls back to missing_catalog_price rather than crashing when cut over with 
     makeChargeableItemWithId($catalogItem->id, [
         'catalog_type' => 'lab_test', 'charge_model' => 'flat', 'code' => 'LAB-CBC', 'name' => 'CBC', 'status' => 'active',
     ]);
-    // Deliberately no PriceBookEntryModel row.
+    // Deliberately no PriceBookEntryModel row -- e.g. a chargeable item that
+    // was backfilled but never priced, or a catalog item created after the
+    // last backfill run. The candidate must keep its already-computed legacy
+    // price rather than being overwritten with zero -- the same fallback
+    // bed-day/consultation already had, extended to the order-domains.
 
     $patient = makeCutoverPatient();
     makeCutoverLabOrder($patient->id, $catalogItem->id);
@@ -275,6 +285,7 @@ it('falls back to missing_catalog_price rather than crashing when cut over with 
         ->assertOk()
         ->json('data.0');
 
-    expect((float) $candidate['unitPrice'])->toBe(0.0)
-        ->and($candidate['pricingStatus'])->toBe('missing_catalog_price');
+    expect((float) $candidate['unitPrice'])->toBe(12000.0)
+        ->and($candidate['pricingStatus'])->toBe('priced')
+        ->and($candidate['pricingSource'])->toBe('service_catalog');
 });

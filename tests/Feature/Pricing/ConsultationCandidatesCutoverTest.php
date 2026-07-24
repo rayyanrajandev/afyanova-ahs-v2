@@ -92,6 +92,8 @@ function setUpConsultationCandidateMapping(float $legacyPrice, float $newResolve
 }
 
 it('consultationCandidates never checks the mapping when cutover flags are off (parity proof)', function (): void {
+    setConsultationCandidatesCutoverFlags(master: false, consultation: false);
+
     setUpConsultationCandidateMapping(legacyPrice: 15000, newResolverPrice: 22000);
     $patient = makeConsultationCandidatePatient();
     $clinician = makeConsultationCandidateClinician();

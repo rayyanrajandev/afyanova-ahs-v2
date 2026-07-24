@@ -41,6 +41,8 @@ function makeLinkedConsultationMapping(float $chargeableItemPrice): Consultation
 }
 
 it('returns null when the cutover flags are off, regardless of a linked mapping existing', function (): void {
+    setConsultationCutoverFlags(master: false, consultation: false);
+
     makeLinkedConsultationMapping(18000);
 
     $result = app(ConsultationPricingResolver::class)->resolveViaExplicitMapping(

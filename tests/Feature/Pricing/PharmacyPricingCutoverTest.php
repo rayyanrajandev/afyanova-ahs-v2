@@ -93,7 +93,9 @@ function setUpPharmacyCutover(float $legacyUnitPrice, float $newResolverUnitPric
     return $catalogItem;
 }
 
-it('serves the legacy price for pharmacy by default', function (): void {
+it('serves the legacy price for pharmacy when both cutover flags are off', function (): void {
+    setPharmacyPricingFlags(master: false, pharmacy: false);
+
     $catalogItem = setUpPharmacyCutover(legacyUnitPrice: 200, newResolverUnitPrice: 250);
     $patient = makePharmacyCutoverPatient();
     makePharmacyCutoverOrder($patient->id, $catalogItem->id, quantityDispensed: 20);

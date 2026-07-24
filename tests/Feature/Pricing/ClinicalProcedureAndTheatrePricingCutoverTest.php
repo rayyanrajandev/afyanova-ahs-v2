@@ -69,7 +69,9 @@ function setUpCPTCutover(string $catalogType, string $code, float $legacyPrice, 
     return $catalogItem;
 }
 
-it('serves the legacy price for clinical procedures by default', function (): void {
+it('serves the legacy price for clinical procedures when both cutover flags are off', function (): void {
+    setCutoverFlags('clinical_procedure', master: false, domainOn: false);
+
     $catalogItem = setUpCPTCutover('clinical_procedure', 'PROC-TEST-001', legacyPrice: 40000, newPrice: 45000);
     $patient = makeCPTCutoverPatient();
     ClinicalProcedureOrderModel::query()->create([
@@ -116,7 +118,9 @@ it('serves the new resolver price for clinical procedures once cut over', functi
         ->and($candidate['pricingSource'])->toBe('chargeable_item');
 });
 
-it('serves the legacy price for theatre procedures by default', function (): void {
+it('serves the legacy price for theatre procedures when both cutover flags are off', function (): void {
+    setCutoverFlags('theatre', master: false, domainOn: false);
+
     $catalogItem = setUpCPTCutover('theatre_procedure', 'THR-TEST-001', legacyPrice: 300000, newPrice: 350000);
     $patient = makeCPTCutoverPatient();
     TheatreProcedureModel::query()->create([
@@ -168,8 +172,9 @@ it('serves the new resolver price for theatre procedures once cut over', functio
 });
 
 it('cutting over clinical_procedure does not affect theatre pricing (per-domain isolation)', function (): void {
+    setCutoverFlags('theatre', master: false, domainOn: false);
     setCutoverFlags('clinical_procedure', master: true, domainOn: true);
-    // pricing.engine.v2.theatre deliberately left off.
+    // pricing.engine.v2.theatre explicitly forced off above, regardless of its ambient default.
 
     $catalogItem = setUpCPTCutover('theatre_procedure', 'THR-TEST-003', legacyPrice: 300000, newPrice: 350000);
     $patient = makeCPTCutoverPatient();

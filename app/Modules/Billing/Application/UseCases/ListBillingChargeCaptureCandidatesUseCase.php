@@ -216,13 +216,13 @@ class ListBillingChargeCaptureCandidatesUseCase
             currencyCode: $currencyCode,
         );
 
-        if ($resolved === null) {
+        if ($resolved === null || $resolved['pricingStatus'] !== 'priced') {
             return $candidate;
         }
 
         $candidate['unitPrice'] = $resolved['unitPrice'];
         $candidate['lineTotal'] = $resolved['lineTotal'];
-        $candidate['pricingStatus'] = $resolved['pricingStatus'] === 'priced' ? 'priced' : 'missing_catalog_price';
+        $candidate['pricingStatus'] = 'priced';
         $candidate['pricingSource'] = 'chargeable_item';
         $candidate['suggestedLineItem']['unitPrice'] = $resolved['unitPrice'];
         $candidate['suggestedLineItem']['lineTotal'] = $resolved['lineTotal'];
@@ -535,6 +535,15 @@ class ListBillingChargeCaptureCandidatesUseCase
      * string-matched legacy one. Display fields (service name/code) are
      * untouched -- only the actual charge (unit price, total, status) changes.
      *
+     * If the new resolver can't find a price (chargeable_item never
+     * backfilled, or price_book_entries never populated for it -- the
+     * backfill command is a one-time manual step, not a hook on catalog item
+     * creation, so this drift is a real operational scenario, not just a
+     * test fixture edge case), the candidate's already-computed legacy price
+     * is left untouched rather than overwritten with a zero. Mirrors the
+     * fallback bed-day/consultation already have for their own unmigrated
+     * case -- this closes the same gap for the five order-domains.
+     *
      * @param  array<string, mixed>  $candidate
      * @return array<string, mixed>
      */
@@ -550,9 +559,13 @@ class ListBillingChargeCaptureCandidatesUseCase
             currencyCode: (string) $candidate['currencyCode'],
         );
 
+        if ($resolved['pricingStatus'] !== 'priced') {
+            return $candidate;
+        }
+
         $candidate['unitPrice'] = $resolved['unitPrice'];
         $candidate['lineTotal'] = $resolved['lineTotal'];
-        $candidate['pricingStatus'] = $resolved['pricingStatus'] === 'priced' ? 'priced' : 'missing_catalog_price';
+        $candidate['pricingStatus'] = 'priced';
         $candidate['pricingSource'] = 'chargeable_item';
         $candidate['suggestedLineItem']['unitPrice'] = $resolved['unitPrice'];
         $candidate['suggestedLineItem']['lineTotal'] = $resolved['lineTotal'];

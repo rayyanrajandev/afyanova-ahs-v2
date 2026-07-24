@@ -58,7 +58,13 @@ Only begins once **all** backend domains have flipped (Phase 3 fully complete) �
 
 ## Phase 5 — Legacy Removal
 
-Only starts once Phase 4 has been live and stable for an agreed bake period (recommend 2–4 weeks, Billing owner's call). Full itemized list in `PricingEngine_Removal_Inventory.md` — summary:
+**Status (2026-07-24): rollout started, deletion not yet.** All 7 domain flags (`pricing.engine.v2` + the 7 per-domain flags) were flipped on this date — this is the real prerequisite Phase 5's own gate was waiting on, since flags had never actually been turned on before. Coverage notes at flip time:
+
+- Laboratory, Radiology, Pharmacy, Clinical Procedure, Theatre, Consultation: real backfilled data confirmed correct (Radiology needed its own data-fix first, see migration `2026_07_24_000013`). Clinical Procedure, Theatre, Pharmacy had zero real order/tariff rows in this dev DB — flip is a safe no-op today, verified via test fixtures and one synthetic live check per domain.
+- Bed-day: 0 of 25 active ward-beds had a pricing item assigned at flip time (including the 1 bed with an active admission) — also a safe no-op until a facility admin assigns a chargeable item via the ward/bed admin screen, at which point it upgrades automatically.
+- **Real bug found and fixed during this rollout**: the five order-domains' `applyResolvedPrice()` had no legacy-price fallback if the new resolver came up empty (chargeable item never backfilled, or price never set) — it silently zeroed the price instead of keeping the working legacy one. Consultation's manual-review path (`applyConsultationResolvedPrice()`) had the identical gap. Both now fall back to the legacy price, matching the pattern Bed-day already had correctly. This was only caught because the flags were actually turned on for a full-suite run, not by the isolated cutover test fixtures (which always used fully-backfilled data).
+
+Actual legacy code/table deletion below is unchanged and still gated on a bake period — only starts once Phase 4 has been live and stable for an agreed bake period (recommend 2–4 weeks, Billing owner's call). Full itemized list in `PricingEngine_Removal_Inventory.md` — summary:
 
 - Delete string-matching resolver code (`findActivePricingByServiceCodes`, `resolveServiceCode`, `normalizeServiceCodeCandidates`, the `CONSULT-*`/`BED-*` string-assembly helpers).
 - Delete the old `billing_payer_contract_price_overrides` table (its data is now redundant with `price_book_entries.payer_contract_id`) — **archive, don't hard-delete**, export to cold storage first given financial-audit retention norms; confirm retention requirement with Finance before dropping.

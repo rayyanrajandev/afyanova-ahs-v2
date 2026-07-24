@@ -109,6 +109,8 @@ function executeAutoCaptureCutoverTransition(string $appointmentId): void
 }
 
 it('auto-capture uses the mapping base_price unchanged when cutover flags are off (parity proof)', function (): void {
+    setAutoCaptureCutoverFlags(master: false, consultation: false);
+
     setUpAutoCaptureCutoverMapping(legacyPrice: 15000, newResolverPrice: 20000);
     $patient = makeAutoCaptureCutoverPatient();
     $clinician = makeAutoCaptureCutoverClinician();
