@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -21,6 +21,7 @@ import { useActiveRole } from '@/composables/useActiveRole';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useSidebarBadges } from '@/composables/useSidebarBadges';
 import { useSidebarFavorites } from '@/composables/useSidebarFavorites';
+import { useSidebarHistory } from '@/composables/useSidebarHistory';
 
 import {
     appNavCatalog,
@@ -46,8 +47,21 @@ type NavSection = {
 const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } =
     usePlatformAccess();
 const { toggleFavorite, getFavorites } = useSidebarFavorites();
-const { activeSections } = useActiveRole();
+const { recordVisit } = useSidebarHistory();
 
+function onSidebarNavigation(event: CustomEvent) {
+    recordVisit(event.detail);
+}
+
+onMounted(() => {
+    window.addEventListener('afyanova:sidebar-navigation', onSidebarNavigation as EventListener);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('afyanova:sidebar-navigation', onSidebarNavigation as EventListener);
+});
+
+const { activeSections } = useActiveRole();
 const { badges } = useSidebarBadges();
 
 const BADGE_HREF_MAP: Record<string, string> = {
@@ -238,6 +252,7 @@ function emitSidebarNavigationEvent(item: NavItem) {
         id: item.id ?? item.href,
         title: item.title,
         href: item.href,
+        iconName: item.iconName ?? null,
         section: item.section ?? null,
         subGroup: item.subGroup ?? null,
     };

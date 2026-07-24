@@ -27,6 +27,10 @@ export function useSidebarHistory() {
         ].slice(0, MAX_HISTORY);
     }
 
+    function removeFromHistory(id: string) {
+        history.value = history.value.filter((h) => h.id !== id);
+    }
+
     function clearHistory() {
         history.value = [];
     }
@@ -34,6 +38,7 @@ export function useSidebarHistory() {
     return {
         recentItems: computed(() => history.value),
         recordVisit,
+        removeFromHistory,
         clearHistory,
     };
 }
