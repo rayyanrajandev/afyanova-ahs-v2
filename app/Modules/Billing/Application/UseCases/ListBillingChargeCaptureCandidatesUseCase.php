@@ -2,12 +2,16 @@
 
 namespace App\Modules\Billing\Application\UseCases;
 
+use App\Jobs\ShadowDiffChargeCaptureCandidateJob;
+use App\Modules\Billing\Application\Support\ConsultationPricingResolver;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
+use App\Modules\Billing\Domain\Services\ChargeResolverInterface;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalSourceKind;
@@ -153,7 +157,7 @@ class ListBillingChargeCaptureCandidatesUseCase
                     ?? $appointment->updated_at
                 );
 
-                return $this->buildCandidate(
+                $candidate = $this->buildCandidate(
                     sourceKind: 'appointment_consultation',
                     sourceId: (string) $appointment->id,
                     patientId: (string) $appointment->patient_id,
@@ -170,8 +174,60 @@ class ListBillingChargeCaptureCandidatesUseCase
                     currencyCode: $currencyCode,
                     invoicedSources: $invoicedSources,
                 );
+
+                return $this->applyConsultationResolvedPrice($candidate, $department, $clinicianContext, $performedAt, $currencyCode);
             })
             ->all();
+    }
+
+    /**
+     * PricingEngine_Migration_Plan.md Phase 3, Consultation cutover. Unlike
+     * the five order-kind domains, this call site never checked
+     * ConsultationMappingModel at all before -- ConsultationPricingResolver
+     * only upgrades the price when both cutover flags are on AND an
+     * explicit mapping has been backfilled with a chargeable_item_id, so at
+     * flag-off this method is a no-op and behavior stays exactly as before.
+     *
+     * @param  array<string, mixed>  $candidate
+     * @param  array<string, mixed>|null  $clinicianContext
+     * @return array<string, mixed>
+     */
+    private function applyConsultationResolvedPrice(
+        array $candidate,
+        string $department,
+        ?array $clinicianContext,
+        ?string $performedAt,
+        string $currencyCode,
+    ): array {
+        $tier = $this->consultationClinicianTier($clinicianContext);
+        if ($tier === null || $department === '') {
+            return $candidate;
+        }
+
+        $scopeContext = app(CurrentPlatformScopeContextInterface::class);
+        $resolved = app(ConsultationPricingResolver::class)->resolveViaExplicitMapping(
+            mapping: null,
+            tier: $tier,
+            department: $department,
+            quantity: 1.0,
+            performedAt: $performedAt,
+            tenantId: $scopeContext->tenantId(),
+            facilityId: $scopeContext->facilityId(),
+            currencyCode: $currencyCode,
+        );
+
+        if ($resolved === null) {
+            return $candidate;
+        }
+
+        $candidate['unitPrice'] = $resolved['unitPrice'];
+        $candidate['lineTotal'] = $resolved['lineTotal'];
+        $candidate['pricingStatus'] = $resolved['pricingStatus'] === 'priced' ? 'priced' : 'missing_catalog_price';
+        $candidate['pricingSource'] = 'chargeable_item';
+        $candidate['suggestedLineItem']['unitPrice'] = $resolved['unitPrice'];
+        $candidate['suggestedLineItem']['lineTotal'] = $resolved['lineTotal'];
+
+        return $candidate;
     }
 
     /**
@@ -263,12 +319,17 @@ class ListBillingChargeCaptureCandidatesUseCase
         ])));
         $serviceName = $wardLabel !== '' ? sprintf('Bed Charge - %s', $wardLabel) : 'Bed Charge';
 
+        $chargeableItemId = $this->normalizeNullableUuid($admission->bedResource?->chargeable_item_id);
+        $domainCutOver = $chargeableItemId !== null
+            && $this->featureFlagResolver->isEnabled('pricing.engine.v2')
+            && $this->featureFlagResolver->isEnabled('pricing.engine.v2.bed_day');
+
         $candidates = [];
 
         for ($dayIndex = 1; $dayIndex <= $days; $dayIndex++) {
             $performedAt = $this->dateTimeString($admittedAt->copy()->addDays($dayIndex - 1));
 
-            $candidates[] = $this->buildCandidate(
+            $candidate = $this->buildCandidate(
                 sourceKind: 'admission_bed_day',
                 sourceId: sprintf('%s:%d', $admission->id, $dayIndex),
                 patientId: (string) $admission->patient_id,
@@ -285,9 +346,56 @@ class ListBillingChargeCaptureCandidatesUseCase
                 currencyCode: $currencyCode,
                 invoicedSources: $invoicedSources,
             );
+
+            if ($domainCutOver) {
+                $candidate = $this->applyBedDayResolvedPrice($candidate, $chargeableItemId, $performedAt, $currencyCode);
+            }
+
+            $candidates[] = $candidate;
         }
 
         return $candidates;
+    }
+
+    /**
+     * PricingEngine_Migration_Plan.md Phase 3, Bed-day. Beds have no
+     * pre-existing catalog FK or string-match data to shadow-diff against
+     * (same reason Consultation and Bed-day were excluded from Phase 2) --
+     * this only ever upgrades the price when the bed/ward's
+     * facility_resources.chargeable_item_id has actually been assigned by
+     * a facility admin (via the ward/bed admin screen) and both cutover
+     * flags are on. Unassigned beds keep the existing BED-{WARD}/BED-DAY
+     * string-match fallback, same "prefer new, fall back to legacy when
+     * not yet migrated" shape as every other domain including Consultation.
+     *
+     * @param  array<string, mixed>  $candidate
+     * @return array<string, mixed>
+     */
+    private function applyBedDayResolvedPrice(array $candidate, string $chargeableItemId, ?string $performedAt, string $currencyCode): array
+    {
+        $scopeContext = app(CurrentPlatformScopeContextInterface::class);
+        $resolved = app(ChargeResolverInterface::class)->resolvePrice(
+            chargeableItemId: $chargeableItemId,
+            quantityOrDuration: 1.0,
+            asOfDate: $performedAt,
+            tenantId: $scopeContext->tenantId(),
+            facilityId: $scopeContext->facilityId(),
+            payerContractId: null,
+            currencyCode: $currencyCode,
+        );
+
+        if ($resolved['pricingStatus'] !== 'priced') {
+            return $candidate;
+        }
+
+        $candidate['unitPrice'] = $resolved['unitPrice'];
+        $candidate['lineTotal'] = $resolved['lineTotal'];
+        $candidate['pricingStatus'] = 'priced';
+        $candidate['pricingSource'] = 'chargeable_item';
+        $candidate['suggestedLineItem']['unitPrice'] = $resolved['unitPrice'];
+        $candidate['suggestedLineItem']['lineTotal'] = $resolved['lineTotal'];
+
+        return $candidate;
     }
 
     /**
@@ -341,14 +449,16 @@ class ListBillingChargeCaptureCandidatesUseCase
 
         $orders = $query->limit(100)->get();
         $catalogItems = $this->clinicalCatalogIndex($orders->pluck($catalogFk)->all());
+        $domainCutOver = $this->featureFlagResolver->isEnabled('pricing.engine.v2')
+            && $this->featureFlagResolver->isEnabled(sprintf('pricing.engine.v2.%s', $kind->pricingEngineDomainFlag()));
 
         return $orders
-            ->map(function (mixed $order) use ($kind, $catalogFk, $catalogItems, $currencyCode, $invoicedSources): array {
+            ->map(function (mixed $order) use ($kind, $catalogFk, $catalogItems, $currencyCode, $invoicedSources, $domainCutOver): array {
                 $catalogItem = $catalogItems[(string) $order->{$catalogFk}] ?? null;
 
                 [$serviceCode, $serviceName, $serviceType, $performedAt, $quantity, $unit] = $this->extractCandidateFields($order, $kind, $catalogItem);
 
-                return $this->buildCandidate(
+                $candidate = $this->buildCandidate(
                     sourceKind: $kind->value,
                     sourceId: (string) $order->id,
                     patientId: (string) $order->patient_id,
@@ -365,8 +475,89 @@ class ListBillingChargeCaptureCandidatesUseCase
                     currencyCode: $currencyCode,
                     invoicedSources: $invoicedSources,
                 );
+
+                $chargeableItemId = $this->normalizeNullableUuid($order->{$catalogFk});
+                if ($chargeableItemId === null) {
+                    return $candidate;
+                }
+
+                $scopeContext = app(CurrentPlatformScopeContextInterface::class);
+                $tenantId = $scopeContext->tenantId();
+                $facilityId = $scopeContext->facilityId();
+
+                // Always dispatch against the pristine legacy candidate, before
+                // any Phase 3 cutover below overwrites its pricing fields --
+                // PricingEngine_Migration_Plan.md's per-domain verification gate
+                // keeps shadow-diffing in both directions through the bake
+                // period after a domain's flag flips, not just before.
+                $this->dispatchShadowDiff($candidate, $chargeableItemId, $tenantId, $facilityId);
+
+                if ($domainCutOver) {
+                    $candidate = $this->applyResolvedPrice($candidate, $chargeableItemId, $tenantId, $facilityId);
+                }
+
+                return $candidate;
             })
             ->all();
+    }
+
+    /**
+     * PricingEngine_Migration_Plan.md Phase 2/3. The order's existing catalog
+     * FK column doubles as its chargeable_item_id -- Phase 1's backfill
+     * intentionally reused clinical_catalog_item ids for chargeable_items,
+     * so this comparison produces real data without waiting on a domain's
+     * own Phase 3 migration. Fire-and-forget: dispatch failures must never
+     * affect the response this method returns.
+     *
+     * @param  array<string, mixed>  $candidate
+     */
+    private function dispatchShadowDiff(array $candidate, string $chargeableItemId, ?string $tenantId, ?string $facilityId): void
+    {
+        ShadowDiffChargeCaptureCandidateJob::dispatch(
+            sourceKind: (string) $candidate['sourceWorkflowKind'],
+            sourceId: (string) $candidate['sourceWorkflowId'],
+            chargeableItemId: $chargeableItemId,
+            quantityOrDuration: (float) $candidate['quantity'],
+            performedAt: $candidate['performedAt'],
+            tenantId: $tenantId,
+            facilityId: $facilityId,
+            payerContractId: null,
+            legacyCurrencyCode: (string) $candidate['currencyCode'],
+            legacyServiceCode: $candidate['serviceCode'],
+            legacyUnitPrice: (float) $candidate['unitPrice'],
+            legacyPricingStatus: (string) $candidate['pricingStatus'],
+        );
+    }
+
+    /**
+     * PricingEngine_Migration_Plan.md Phase 3. Once a domain's flag is cut
+     * over, serve the chargeable_item_id-resolved price instead of the
+     * string-matched legacy one. Display fields (service name/code) are
+     * untouched -- only the actual charge (unit price, total, status) changes.
+     *
+     * @param  array<string, mixed>  $candidate
+     * @return array<string, mixed>
+     */
+    private function applyResolvedPrice(array $candidate, string $chargeableItemId, ?string $tenantId, ?string $facilityId): array
+    {
+        $resolved = app(ChargeResolverInterface::class)->resolvePrice(
+            chargeableItemId: $chargeableItemId,
+            quantityOrDuration: (float) $candidate['quantity'],
+            asOfDate: $candidate['performedAt'],
+            tenantId: $tenantId,
+            facilityId: $facilityId,
+            payerContractId: null,
+            currencyCode: (string) $candidate['currencyCode'],
+        );
+
+        $candidate['unitPrice'] = $resolved['unitPrice'];
+        $candidate['lineTotal'] = $resolved['lineTotal'];
+        $candidate['pricingStatus'] = $resolved['pricingStatus'] === 'priced' ? 'priced' : 'missing_catalog_price';
+        $candidate['pricingSource'] = 'chargeable_item';
+        $candidate['suggestedLineItem']['unitPrice'] = $resolved['unitPrice'];
+        $candidate['suggestedLineItem']['lineTotal'] = $resolved['lineTotal'];
+
+        return $candidate;
     }
 
     /**

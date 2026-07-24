@@ -24,6 +24,7 @@ class StoreWardBedRequest extends FormRequest
             'bedNumber' => ['required', 'string', 'max:40'],
             'location' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'chargeableItemId' => ['nullable', 'uuid', 'exists:chargeable_items,id'],
         ];
     }
 }

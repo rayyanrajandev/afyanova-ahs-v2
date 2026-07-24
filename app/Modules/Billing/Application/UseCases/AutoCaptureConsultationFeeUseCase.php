@@ -2,12 +2,14 @@
 
 namespace App\Modules\Billing\Application\UseCases;
 
+use App\Modules\Billing\Application\Support\ConsultationPricingResolver;
 use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Encounter\Application\Services\EncounterResolverService;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use DateTimeInterface;
@@ -22,6 +24,8 @@ class AutoCaptureConsultationFeeUseCase
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
         private readonly BillingPayerContractRepositoryInterface $payerContractRepository,
         private readonly EncounterResolverService $encounterResolverService,
+        private readonly ConsultationPricingResolver $consultationPricingResolver,
+        private readonly CurrentPlatformScopeContextInterface $scopeContext,
     ) {}
 
     public function execute(string $appointmentId, ?int $actorId = null): array
@@ -55,8 +59,18 @@ class AutoCaptureConsultationFeeUseCase
         $currencyCode = $this->defaultCurrencyResolver->resolve();
         $tier = $this->consultationClinicianTier($clinicianContext);
 
+        $performedAt = $appointment['consultation_started_at']
+            ?? $appointment['triaged_at']
+            ?? $appointment['scheduled_at']
+            ?? $appointment['updated_at'];
+
+        $performedAtStringForResolver = $performedAt instanceof DateTimeInterface
+            ? $performedAt->format(DateTimeInterface::ATOM)
+            : (is_string($performedAt) ? $performedAt : null);
+
         // 1. Explicit Mapping Lookup
         $catalogItem = null;
+        $mapping = null;
         if ($tier !== null && $department !== '') {
             $mapping = ConsultationMappingModel::query()
                 ->where('clinician_tier', $tier)
@@ -91,14 +105,27 @@ class AutoCaptureConsultationFeeUseCase
         $resolvedUnit = trim((string) ($catalogItem['unit'] ?? 'visit'));
         $resolvedDescription = trim((string) ($catalogItem['service_name'] ?? $serviceName));
 
-        $performedAt = $appointment['consultation_started_at']
-            ?? $appointment['triaged_at']
-            ?? $appointment['scheduled_at']
-            ?? $appointment['updated_at'];
+        // PricingEngine_Migration_Plan.md Phase 3, Consultation cutover.
+        // Only ever upgrades the price when an explicit mapping has been
+        // backfilled with a chargeable_item_id and the cutover flags are
+        // on; a null result leaves $unitPrice exactly as resolved above.
+        if ($tier !== null && $mapping !== null) {
+            $resolved = $this->consultationPricingResolver->resolveViaExplicitMapping(
+                mapping: $mapping,
+                tier: $tier,
+                department: $department,
+                quantity: 1.0,
+                performedAt: $performedAtStringForResolver,
+                tenantId: $this->scopeContext->tenantId(),
+                facilityId: $this->scopeContext->facilityId(),
+                currencyCode: $currencyCode,
+            );
+            if ($resolved !== null && $resolved['pricingStatus'] === 'priced') {
+                $unitPrice = $resolved['unitPrice'];
+            }
+        }
 
-        $performedAtString = $performedAt instanceof DateTimeInterface
-            ? $performedAt->format(DateTimeInterface::ATOM)
-            : (is_string($performedAt) ? $performedAt : null);
+        $performedAtString = $performedAtStringForResolver;
 
         $lineNotes = sprintf(
             'Charge capture from appointment_consultation %s%s.',

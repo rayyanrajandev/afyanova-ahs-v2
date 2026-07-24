@@ -17,6 +17,7 @@ export type UpdateWardBedPayload = {
     bedNumber: string;
     location?: string | null;
     notes?: string | null;
+    chargeableItemId?: string | null;
 };
 
 type UpdateWardBedResponse = { data: WardBed };

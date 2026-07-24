@@ -7,6 +7,7 @@ export type UpdateConsultationMappingPayload = {
     clinicianTier: string;
     department: string;
     billingServiceCatalogItemId: string;
+    chargeableItemId?: string | null;
 };
 
 type UpdateConsultationMappingResponse = { success: boolean; data: RawConsultationMapping };
@@ -19,6 +20,7 @@ export function useUpdateConsultationMapping(): UseMutationReturnType<Consultati
                     clinician_tier: payload.clinicianTier,
                     department: payload.department,
                     billing_service_catalog_item_id: payload.billingServiceCatalogItemId,
+                    chargeable_item_id: payload.chargeableItemId ?? null,
                 },
             });
             return toConsultationMapping(response.data);

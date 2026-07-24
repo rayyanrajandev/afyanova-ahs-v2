@@ -22,6 +22,7 @@ export type WardBed = {
     wardName: string | null;
     bedNumber: string | null;
     location: string | null;
+    chargeableItemId: string | null;
     status: string | null;
     statusReason: string | null;
     notes: string | null;

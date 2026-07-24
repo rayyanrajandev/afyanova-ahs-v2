@@ -4,6 +4,7 @@ namespace App\Modules\Platform\Infrastructure\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FacilityResourceModel extends Model
 {
@@ -32,7 +33,13 @@ class FacilityResourceModel extends Model
         'status',
         'status_reason',
         'notes',
+        'chargeable_item_id',
     ];
+
+    public function chargeableItem(): BelongsTo
+    {
+        return $this->belongsTo(ChargeableItemModel::class, 'chargeable_item_id');
+    }
 
     /**
      * @return array<string, string>

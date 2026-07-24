@@ -443,6 +443,10 @@ Route::get('billing-consultation-mappings', function () {
     return Inertia::render('billing/ConsultationMappings');
 })->middleware(['auth', 'verified', 'can:billing.consultation-mappings.read', 'facility.entitlement:billing.service_catalog'])->name('billing-consultation-mappings.page');
 
+Route::get('chargeable-items', function () {
+    return Inertia::render('billing/ChargeableItemsV2');
+})->middleware(['auth', 'verified', 'can:billing.chargeable-items.read', 'facility.entitlement:billing.service_catalog'])->name('chargeable-items.page');
+
 Route::get('staff', function () {
     return Inertia::render('staff/Index');
 })->middleware(['auth', 'verified', 'can:staff.read', 'facility.entitlement:staff.profiles'])->name('staff.page');

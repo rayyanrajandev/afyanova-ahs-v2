@@ -54,6 +54,7 @@ class CreateFacilityResourceUseCase
         if ($resourceType === FacilityResourceType::WARD_BED->value) {
             $createPayload['ward_name'] = $this->nullableTrimmedValue($payload['ward_name'] ?? null);
             $createPayload['bed_number'] = $this->nullableTrimmedValue($payload['bed_number'] ?? null);
+            $createPayload['chargeable_item_id'] = $this->nullableTrimmedValue($payload['chargeable_item_id'] ?? null);
         }
 
         $created = $this->facilityResourceRepository->create($createPayload);
@@ -108,6 +109,7 @@ class CreateFacilityResourceUseCase
             'status',
             'status_reason',
             'notes',
+            'chargeable_item_id',
         ];
 
         $result = [];

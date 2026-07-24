@@ -313,6 +313,15 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         permissionPrefixes: ['billing.service-catalog.'],
         helpNote: 'Billable services, tariffs, and pricing history',
     },
+    {
+        title: 'Chargeable Items',
+        href: '/chargeable-items',
+        iconName: 'file-text',
+        section: 'billing',
+        subGroup: 'rates',
+        permissionPrefixes: ['billing.chargeable-items.'],
+        helpNote: 'New pricing engine: canonical chargeable items and price book entries',
+    },
 
     {
         title: 'Payer contracts',

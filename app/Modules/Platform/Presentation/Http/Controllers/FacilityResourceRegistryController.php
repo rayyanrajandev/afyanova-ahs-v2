@@ -164,6 +164,7 @@ class FacilityResourceRegistryController extends Controller
                 'bedNumber' => 'bed_number',
                 'location' => 'location',
                 'notes' => 'notes',
+                'chargeableItemId' => 'chargeable_item_id',
             ],
         );
     }
@@ -201,6 +202,7 @@ class FacilityResourceRegistryController extends Controller
                 'bedNumber' => 'bed_number',
                 'location' => 'location',
                 'notes' => 'notes',
+                'chargeableItemId' => 'chargeable_item_id',
             ],
         );
     }

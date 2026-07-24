@@ -69,6 +69,9 @@ class UpdateFacilityResourceUseCase
             if (array_key_exists('bed_number', $payload)) {
                 $updatePayload['bed_number'] = $this->nullableTrimmedValue($payload['bed_number']);
             }
+            if (array_key_exists('chargeable_item_id', $payload)) {
+                $updatePayload['chargeable_item_id'] = $this->nullableTrimmedValue($payload['chargeable_item_id']);
+            }
         }
 
         $updated = $this->facilityResourceRepository->update($id, $updatePayload);
@@ -124,6 +127,7 @@ class UpdateFacilityResourceUseCase
             'status',
             'status_reason',
             'notes',
+            'chargeable_item_id',
         ];
 
         $changes = [];

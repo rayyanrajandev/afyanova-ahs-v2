@@ -18,6 +18,7 @@ class FacilityResourceResponseTransformer
             'wardName' => $resource['ward_name'] ?? null,
             'bedNumber' => $resource['bed_number'] ?? null,
             'location' => $resource['location'] ?? null,
+            'chargeableItemId' => $resource['chargeable_item_id'] ?? null,
             'status' => $resource['status'] ?? null,
             'statusReason' => $resource['status_reason'] ?? null,
             'notes' => $resource['notes'] ?? null,

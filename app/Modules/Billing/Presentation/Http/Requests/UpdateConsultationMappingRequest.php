@@ -24,6 +24,7 @@ class UpdateConsultationMappingRequest extends FormRequest
 
         return [
             'billing_service_catalog_item_id' => ['sometimes', 'required', 'string', 'exists:billing_service_catalog_items,id'],
+            'chargeable_item_id' => ['sometimes', 'nullable', 'uuid', 'exists:chargeable_items,id'],
             'clinician_tier' => ['sometimes', 'required', Rule::in(['CO', 'AMO', 'MD', 'SPECIALIST'])],
             'department' => [
                 'sometimes',

@@ -176,7 +176,7 @@ it('returns configured feature flags', function (): void {
     $this->actingAs($user)
         ->getJson('/api/v1/platform/feature-flags')
         ->assertOk()
-        ->assertJsonPath('meta.total', 8)
+        ->assertJsonPath('meta.total', 16)
         ->assertJsonPath('data.0.name', 'billing.multi_currency');
 });
 

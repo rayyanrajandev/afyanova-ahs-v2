@@ -25,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
+import { useChargeableItemOptions } from '@/composables/chargeableItems/useChargeableItemOptions';
 import { useCreateWardBed } from '@/composables/platform/useCreateWardBed';
 import { useUpdateWardBed } from '@/composables/platform/useUpdateWardBed';
 import { useUpdateWardBedStatus } from '@/composables/platform/useUpdateWardBedStatus';
@@ -78,6 +79,7 @@ const filters = useWardBedFilters();
 const list = useWardBeds(filters);
 const statusCounts = useWardBedStatusCounts(filters);
 const { departments, options: departmentOptions } = useWardBedDepartmentOptions();
+const { options: pricingItemOptions } = useChargeableItemOptions('bed_day');
 
 const items = computed<WardBed[]>(() => list.data.value?.data ?? []);
 const pagination = computed(() => list.data.value?.meta ?? null);
@@ -131,6 +133,7 @@ const createForm = reactive({
     bedNumber: '',
     location: '',
     notes: '',
+    chargeableItemId: '',
 });
 const createWardBed = useCreateWardBed();
 
@@ -146,6 +149,7 @@ const editForm = reactive({
     bedNumber: '',
     location: '',
     notes: '',
+    chargeableItemId: '',
 });
 const updateWardBed = useUpdateWardBed();
 
@@ -232,6 +236,7 @@ function resetCreateForm() {
     createForm.bedNumber = '';
     createForm.location = '';
     createForm.notes = '';
+    createForm.chargeableItemId = '';
     createRequestError.value = null;
     createFormErrors.value = {};
 }
@@ -269,6 +274,7 @@ async function createItem() {
             bedNumber: createForm.bedNumber.trim(),
             location: createForm.location.trim() || null,
             notes: createForm.notes.trim() || null,
+            chargeableItemId: createForm.chargeableItemId || null,
         });
         notifySuccess(`Created ${labelOf(created)}.`);
         closeCreateSheet(false);
@@ -291,6 +297,7 @@ function openEdit(item: WardBed) {
     editForm.bedNumber = item.bedNumber || '';
     editForm.location = item.location || '';
     editForm.notes = item.notes || '';
+    editForm.chargeableItemId = item.chargeableItemId || '';
     editRequestError.value = null;
     editFormErrors.value = {};
     editSheetOpen.value = true;
@@ -311,6 +318,7 @@ async function saveEdit() {
             bedNumber: editForm.bedNumber.trim(),
             location: editForm.location.trim() || null,
             notes: editForm.notes.trim() || null,
+            chargeableItemId: editForm.chargeableItemId || null,
         });
         notifySuccess('Ward/bed resource updated.');
         closeEditSheet(false);
@@ -780,6 +788,15 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 placeholder="Optional department link"
                                 empty-text="No department matched."
                             />
+                            <SearchableSelectField
+                                input-id="create-wb-pricing-item"
+                                label="Pricing item"
+                                v-model="createForm.chargeableItemId"
+                                :options="pricingItemOptions"
+                                :disabled="createLoading"
+                                placeholder="Optional bed-day price link"
+                                empty-text="No pricing item matched."
+                            />
                             <div class="grid gap-2">
                                 <Label for="create-wb-location">Location</Label>
                                 <Input
@@ -875,6 +892,15 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 v-model="editForm.departmentId"
                                 :options="departmentOptions"
                                 :disabled="updateWardBed.isPending.value || !canDepartmentRead"
+                            />
+                            <SearchableSelectField
+                                input-id="edit-wb-pricing-item"
+                                label="Pricing item"
+                                v-model="editForm.chargeableItemId"
+                                :options="pricingItemOptions"
+                                :disabled="updateWardBed.isPending.value"
+                                placeholder="Optional bed-day price link"
+                                empty-text="No pricing item matched."
                             />
                             <div class="grid gap-2">
                                 <Label for="edit-wb-location">Location</Label>

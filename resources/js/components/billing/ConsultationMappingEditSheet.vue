@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { useChargeableItemOptions } from '@/composables/chargeableItems/useChargeableItemOptions';
 import { useConsultationMappingCatalogItemOptions } from '@/composables/consultationMappings/useConsultationMappingCatalogItemOptions';
 import { useConsultationMappingDepartmentOptions } from '@/composables/consultationMappings/useConsultationMappingDepartmentOptions';
 import { CLINICIAN_TIER_OPTIONS, type ConsultationMapping } from '@/composables/consultationMappings/useConsultationMappings';
@@ -25,11 +26,13 @@ const emit = defineEmits<{
 const clinicianTier = ref('CO');
 const department = ref('');
 const billingServiceCatalogItemId = ref('');
+const chargeableItemId = ref('');
 const submitError = ref<string | null>(null);
 const fieldErrors = ref<Record<string, string[]>>({});
 
 const { options: departmentOptions } = useConsultationMappingDepartmentOptions();
 const { options: catalogItemOptions } = useConsultationMappingCatalogItemOptions();
+const { options: pricingItemOptions } = useChargeableItemOptions('consultation');
 const update = useUpdateConsultationMapping();
 
 watch([open, () => props.mapping], ([isOpen, mapping]) => {
@@ -37,6 +40,7 @@ watch([open, () => props.mapping], ([isOpen, mapping]) => {
     clinicianTier.value = mapping.clinicianTier;
     department.value = mapping.department;
     billingServiceCatalogItemId.value = mapping.billingServiceCatalogItemId;
+    chargeableItemId.value = mapping.chargeableItemId ?? '';
     submitError.value = null;
     fieldErrors.value = {};
 });
@@ -64,6 +68,7 @@ async function submit(): Promise<void> {
             clinicianTier: clinicianTier.value,
             department: department.value.trim(),
             billingServiceCatalogItemId: billingServiceCatalogItemId.value.trim(),
+            chargeableItemId: chargeableItemId.value.trim() || null,
         });
         emit('updated', mapping);
         open.value = false;
@@ -124,6 +129,17 @@ async function submit(): Promise<void> {
                     empty-text="No matching catalog item found."
                     required
                     :error-message="fieldError('billing_service_catalog_item_id')"
+                />
+
+                <SearchableSelectField
+                    v-model="chargeableItemId"
+                    input-id="consultation-mapping-edit-pricing-item"
+                    label="Pricing item (new engine)"
+                    :options="pricingItemOptions"
+                    placeholder="Optional — link to the new pricing engine"
+                    search-placeholder="Search pricing items"
+                    empty-text="No matching pricing item found."
+                    :error-message="fieldError('chargeable_item_id')"
                 />
             </div>
 

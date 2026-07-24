@@ -75,6 +75,7 @@ class ConsultationMappingController
             'clinician_tier' => $mapping->clinician_tier,
             'department' => $mapping->department,
             'billing_service_catalog_item_id' => (string) $mapping->billing_service_catalog_item_id,
+            'chargeable_item_id' => $mapping->chargeable_item_id === null ? null : (string) $mapping->chargeable_item_id,
             'catalog_item' => $catalogItem === null ? null : [
                 'id' => (string) $catalogItem->id,
                 'service_code' => $catalogItem->service_code,

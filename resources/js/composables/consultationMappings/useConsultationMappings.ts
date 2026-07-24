@@ -21,6 +21,7 @@ export type ConsultationMapping = {
     clinicianTier: string;
     department: string;
     billingServiceCatalogItemId: string;
+    chargeableItemId: string | null;
     catalogItem: ConsultationMappingCatalogItem | null;
     createdAt: string | null;
     updatedAt: string | null;
@@ -39,6 +40,7 @@ export type RawConsultationMapping = {
     clinician_tier: string;
     department: string;
     billing_service_catalog_item_id: string;
+    chargeable_item_id: string | null;
     catalog_item: RawConsultationMappingCatalogItem | null;
     created_at: string | null;
     updated_at: string | null;
@@ -52,6 +54,7 @@ export function toConsultationMapping(raw: RawConsultationMapping): Consultation
         clinicianTier: raw.clinician_tier,
         department: raw.department,
         billingServiceCatalogItemId: raw.billing_service_catalog_item_id,
+        chargeableItemId: raw.chargeable_item_id,
         catalogItem: raw.catalog_item === null ? null : {
             id: raw.catalog_item.id,
             serviceCode: raw.catalog_item.service_code,

@@ -12,6 +12,7 @@ use App\Modules\Billing\Presentation\Http\Controllers\BillingPatientWorkspaceCon
 use App\Modules\Billing\Presentation\Http\Controllers\BillingRoutingController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingWriteOffController;
 use App\Modules\Billing\Presentation\Http\Controllers\CashBillingController;
+use App\Modules\Billing\Presentation\Http\Controllers\ChargeableItemController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTenantIsolationWhenEnabled::class, EnsureMappedFacilitySubscriptionEntitlement::class])
@@ -75,6 +76,25 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         Route::delete('{mappingId}', [ConsultationMappingController::class, 'destroy'])
             ->middleware('can:billing.consultation-mappings.manage')
             ->name('consultation-mappings.destroy');
+    });
+
+    // Pricing engine v2: chargeable items + price book entries
+    Route::prefix('chargeable-items')->group(function () {
+        Route::get('/', [ChargeableItemController::class, 'index'])
+            ->middleware('can:billing.chargeable-items.read')
+            ->name('chargeable-items.index');
+        Route::post('/', [ChargeableItemController::class, 'store'])
+            ->middleware('can:billing.chargeable-items.manage')
+            ->name('chargeable-items.store');
+        Route::get('{chargeableItemId}', [ChargeableItemController::class, 'show'])
+            ->middleware('can:billing.chargeable-items.read')
+            ->name('chargeable-items.show');
+        Route::patch('{chargeableItemId}', [ChargeableItemController::class, 'update'])
+            ->middleware('can:billing.chargeable-items.manage')
+            ->name('chargeable-items.update');
+        Route::post('{chargeableItemId}/prices', [ChargeableItemController::class, 'storePrice'])
+            ->middleware('can:billing.chargeable-items.manage')
+            ->name('chargeable-items.store-price');
     });
 
     // Apply discounts

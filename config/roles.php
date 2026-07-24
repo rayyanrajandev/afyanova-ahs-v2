@@ -530,6 +530,7 @@ return [
             'billing.refunds.read',
             'billing.service-catalog.read',
             'billing.service-catalog.manage-identity',
+            'billing.chargeable-items.read',
         ],
     ],
 
@@ -559,6 +560,8 @@ return [
             'billing.service-catalog.manage',
             'billing.service-catalog.manage-pricing',
             'billing.service-catalog.view-audit-logs',
+            'billing.chargeable-items.read',
+            'billing.chargeable-items.manage',
         ],
     ],
 

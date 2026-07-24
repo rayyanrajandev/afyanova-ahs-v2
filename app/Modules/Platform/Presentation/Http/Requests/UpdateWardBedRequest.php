@@ -18,6 +18,7 @@ class UpdateWardBedRequest extends FormRequest
         'bedNumber',
         'location',
         'notes',
+        'chargeableItemId',
     ];
 
     public function authorize(): bool
@@ -38,6 +39,7 @@ class UpdateWardBedRequest extends FormRequest
             'bedNumber' => ['sometimes', 'string', 'max:40'],
             'location' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'chargeableItemId' => ['sometimes', 'nullable', 'uuid', 'exists:chargeable_items,id'],
             'status' => ['prohibited'],
             'statusReason' => ['prohibited'],
             'reason' => ['prohibited'],

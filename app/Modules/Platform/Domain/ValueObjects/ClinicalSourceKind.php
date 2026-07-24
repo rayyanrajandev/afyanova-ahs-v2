@@ -64,6 +64,25 @@ enum ClinicalSourceKind: string
         };
     }
 
+    /**
+     * PricingEngine_Migration_Plan.md Phase 3: the domain-specific segment
+     * of a per-domain cutover flag, e.g. "pricing.engine.v2.laboratory".
+     * Short/readable names matching the migration plan's own wording, not
+     * necessarily identical to this enum's value.
+     */
+    public function pricingEngineDomainFlag(): string
+    {
+        return match ($this) {
+            self::LABORATORY_ORDER => 'laboratory',
+            self::PHARMACY_ORDER => 'pharmacy',
+            self::RADIOLOGY_ORDER => 'radiology',
+            self::CLINICAL_PROCEDURE_ORDER => 'clinical_procedure',
+            self::THEATRE_PROCEDURE => 'theatre',
+            self::APPOINTMENT_CONSULTATION => 'consultation',
+            self::ADMISSION_BED_DAY => 'bed_day',
+        };
+    }
+
     public function catalogFk(): string
     {
         return match ($this) {
