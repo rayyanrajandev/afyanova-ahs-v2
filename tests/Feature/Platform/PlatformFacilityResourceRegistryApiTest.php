@@ -2,7 +2,9 @@
 
 use App\Models\User;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\FacilityModel;
 use App\Modules\Platform\Infrastructure\Models\FacilityResourceAuditLogModel;
 use App\Modules\Platform\Infrastructure\Models\FacilityResourceModel;
@@ -78,6 +80,28 @@ function seedFacilityResourceRecord(
     ];
 
     return FacilityResourceModel::query()->create(array_merge($defaults, $overrides));
+}
+
+function makeWardBedChargeableItem(string $code = 'BEDDAY-GEN-WARD'): ChargeableItemModel
+{
+    $item = new ChargeableItemModel();
+    $item->fill([
+        'catalog_type' => 'bed_day',
+        'charge_model' => 'per_day',
+        'code' => $code,
+        'name' => 'General Ward Bed-Day',
+        'status' => 'active',
+    ]);
+    $item->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $item->id,
+        'currency_code' => 'TZS',
+        'unit_price' => 15000,
+        'status' => 'active',
+    ]);
+
+    return $item;
 }
 
 function occupyWardBedWithActiveAdmission(FacilityResourceModel $wardBed, string $status = 'admitted'): AdmissionModel
@@ -285,6 +309,44 @@ it('rejects lifecycle status fields on ward-bed detail update endpoint', functio
     $wardBed->refresh();
     expect($wardBed->name)->toBe('Original Ward Bed');
     expect($wardBed->status)->toBe('active');
+});
+
+it('round-trips chargeableItemId through ward-bed create and update', function (): void {
+    $actor = makeFacilityResourceRegistryActor([
+        'platform.resources.manage-ward-beds',
+        'platform.resources.read',
+    ]);
+    $context = makeFacilityResourceRegistryContext('TEN-WB-CHG', 'FAC-WB-CHG');
+    $chargeableItem = makeWardBedChargeableItem();
+
+    $wardBed = $this->actingAs($actor)
+        ->postJson('/api/v1/platform/admin/ward-beds', [
+            'code' => 'WB-CHG-001',
+            'name' => 'Chargeable Ward Bed',
+            'wardName' => 'WARD-C',
+            'bedNumber' => 'C-01',
+            'chargeableItemId' => $chargeableItem->id,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.chargeableItemId', $chargeableItem->id)
+        ->json('data');
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/platform/admin/ward-beds/'.$wardBed['id'])
+        ->assertOk()
+        ->assertJsonPath('data.chargeableItemId', $chargeableItem->id);
+
+    $otherChargeableItem = makeWardBedChargeableItem('BEDDAY-GEN-WARD-2');
+
+    $this->actingAs($actor)
+        ->patchJson('/api/v1/platform/admin/ward-beds/'.$wardBed['id'], [
+            'chargeableItemId' => $otherChargeableItem->id,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.chargeableItemId', $otherChargeableItem->id);
+
+    $resource = FacilityResourceModel::query()->find($wardBed['id']);
+    expect($resource?->chargeable_item_id)->toBe($otherChargeableItem->id);
 });
 
 it('lists and exports facility resource audit logs when authorized', function (): void {
