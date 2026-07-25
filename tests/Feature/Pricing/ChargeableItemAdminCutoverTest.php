@@ -92,6 +92,41 @@ it('reuses the clinical catalog item id when creating a chargeable item linked t
     expect(ChargeableItemModel::query()->first()->id)->toBe($catalogItem->id);
 });
 
+it('reflects a later clinical catalog rename instead of showing a stale copy', function (): void {
+    $actor = makeChargeableItemActor(['billing.chargeable-items.manage', 'billing.chargeable-items.read']);
+    $catalogItem = makeChargeableItemLabCatalogItem();
+
+    $itemId = $this->actingAs($actor)
+        ->postJson('/api/v1/chargeable-items', [
+            'catalogType' => 'lab_test',
+            'chargeModel' => 'flat',
+            'clinicalCatalogItemId' => $catalogItem->id,
+            'currencyCode' => 'TZS',
+            'unitPrice' => 8000,
+        ])
+        ->assertCreated()
+        ->json('data.id');
+
+    $catalogItem->update(['name' => 'Renamed Full Blood Count', 'code' => 'LAB-CHG-001-RENAMED']);
+
+    $this->actingAs($actor)
+        ->getJson("/api/v1/chargeable-items/{$itemId}")
+        ->assertOk()
+        ->assertJsonPath('data.name', 'Renamed Full Blood Count')
+        ->assertJsonPath('data.code', 'LAB-CHG-001-RENAMED');
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/chargeable-items?catalogType=lab_test')
+        ->assertOk()
+        ->assertJsonPath('data.0.name', 'Renamed Full Blood Count');
+
+    // The stored column itself is a creation-time snapshot, not kept
+    // in sync by a write -- only the linked response reads live from
+    // the catalog. Confirms this is genuinely read-time derivation,
+    // not some other mechanism quietly rewriting the row.
+    expect(ChargeableItemModel::query()->find($itemId)->getRawOriginal('name'))->toBe('Full Blood Count');
+});
+
 it('reuses an already-backfilled chargeable item instead of failing on a duplicate id', function (): void {
     $actor = makeChargeableItemActor(['billing.chargeable-items.manage']);
     $catalogItem = makeChargeableItemLabCatalogItem();

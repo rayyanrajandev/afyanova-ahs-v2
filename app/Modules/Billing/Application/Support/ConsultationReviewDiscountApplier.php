@@ -3,16 +3,23 @@
 namespace App\Modules\Billing\Application\Support;
 
 use App\Modules\Appointment\Application\Support\ConsultationReviewPolicyResolver;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Billing\Domain\Services\AppointmentLookupServiceInterface;
 
 /**
  * Applies a review consultation discount to billing invoice line items when
  * the linked appointment is classified as REVIEW.
  *
- * Only line items that resolve to a service catalog item with
- * service_type = config('consultation_policy.consultation_service_type')
- * are eligible for the discount. All other charges (labs, drugs, etc.) are unaffected.
+ * Only line items sourced from a consultation charge-capture candidate
+ * (sourceWorkflowKind === 'appointment_consultation') are eligible for the
+ * discount. All other charges (labs, drugs, etc.) are unaffected.
+ *
+ * PricingEngine_Migration_Plan.md Phase 5: previously this matched on
+ * serviceCode against the legacy service catalog. Consultation's legacy
+ * pricing path was removed earlier in Phase 5, so a consultation
+ * charge-capture candidate no longer has a serviceCode at all (it's null --
+ * see ListBillingChargeCaptureCandidatesUseCase::consultationCandidates()).
+ * sourceWorkflowKind is the reliable, always-present signal instead -- it's
+ * set directly from the clinical source, never string-matched or guessed.
  *
  * The discount is expressed as an invoice discount and recorded in
  * pricing_context.consultationReviewDiscount for full auditability.
@@ -21,7 +28,6 @@ class ConsultationReviewDiscountApplier
 {
     public function __construct(
         private readonly AppointmentLookupServiceInterface $appointmentLookupService,
-        private readonly BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
         private readonly ConsultationReviewPolicyResolver $policyResolver,
     ) {}
 
@@ -97,8 +103,6 @@ class ConsultationReviewDiscountApplier
         array $appointment,
     ): array
     {
-        $consultationServiceType = strtolower(trim((string) config('consultation_policy.consultation_service_type', 'consultation')));
-        $currencyCode = strtoupper(trim((string) ($payload['currency_code'] ?? 'TZS')));
         $lineItems = is_array($payload['line_items'] ?? null) ? $payload['line_items'] : [];
 
         $reviewDiscountAmount = 0.0;
@@ -106,25 +110,12 @@ class ConsultationReviewDiscountApplier
         $affectedServiceCodes = [];
 
         foreach ($lineItems as &$lineItem) {
+            $sourceWorkflowKind = strtolower(trim((string) ($lineItem['sourceWorkflowKind'] ?? ($lineItem['source_workflow_kind'] ?? ''))));
+            if ($sourceWorkflowKind !== 'appointment_consultation') {
+                continue;
+            }
+
             $serviceCode = strtoupper(trim((string) ($lineItem['serviceCode'] ?? ($lineItem['service_code'] ?? ''))));
-            if ($serviceCode === '') {
-                continue;
-            }
-
-            // Only discount line items that resolve to a consultation catalog item.
-            $catalogItem = $this->serviceCatalogRepository->findActivePricingByServiceCode(
-                serviceCode: $serviceCode,
-                currencyCode: $currencyCode,
-                asOfDateTime: isset($payload['invoice_date']) ? (string) $payload['invoice_date'] : null,
-            );
-
-            if (! $catalogItem) {
-                continue;
-            }
-
-            if (strtolower(trim((string) ($catalogItem['service_type'] ?? ''))) !== $consultationServiceType) {
-                continue;
-            }
 
             $lineTotal = $this->lineTotal($lineItem);
             $lineDiscount = round($lineTotal * ($discountPercent / 100.0), 2);

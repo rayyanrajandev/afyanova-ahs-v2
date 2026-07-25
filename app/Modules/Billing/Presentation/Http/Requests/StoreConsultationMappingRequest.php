@@ -18,8 +18,8 @@ class StoreConsultationMappingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'billing_service_catalog_item_id' => ['required', 'string', 'exists:billing_service_catalog_items,id'],
-            'chargeable_item_id' => ['nullable', 'uuid', 'exists:chargeable_items,id'],
+            'billing_service_catalog_item_id' => ['nullable', 'string', 'exists:billing_service_catalog_items,id'],
+            'chargeable_item_id' => ['required', 'uuid', 'exists:chargeable_items,id'],
             'clinician_tier' => ['required', Rule::in(['CO', 'AMO', 'MD', 'SPECIALIST'])],
             'department' => [
                 'required',

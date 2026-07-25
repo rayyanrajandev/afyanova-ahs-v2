@@ -12,6 +12,7 @@ class BillingPayerContractPriceOverrideResponseTransformer
             'tenantId' => $override['tenant_id'] ?? null,
             'facilityId' => $override['facility_id'] ?? null,
             'billingServiceCatalogItemId' => $override['billing_service_catalog_item_id'] ?? null,
+            'chargeableItemId' => $override['chargeable_item_id'] ?? null,
             'serviceCode' => $override['service_code'] ?? null,
             'serviceName' => $override['service_name'] ?? null,
             'serviceType' => $override['service_type'] ?? null,

@@ -1,4 +1,5 @@
 import { useQuery, type UseQueryReturnType } from '@tanstack/vue-query';
+import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import { apiGet } from '@/lib/apiClient';
 
 /**
@@ -18,6 +19,7 @@ export type ChargeableItemPrice = {
 
 export type ChargeableItem = {
     id: string;
+    clinicalCatalogItemId: string | null;
     catalogType: string;
     chargeModel: string;
     code: string;
@@ -39,13 +41,23 @@ export type ChargeableItemFilters = {
 
 type ChargeableItemListResponse = { success: boolean; data: ChargeableItem[] };
 
-export function useChargeableItems(filters: ChargeableItemFilters = {}): UseQueryReturnType<ChargeableItem[], Error> {
+/**
+ * Accepts a ref/computed/getter, not just a plain object -- a plain object
+ * snapshot (e.g. `someComputed.value`) breaks reactivity entirely, since
+ * Vue Query's queryKey never sees the change and never refetches. This bit
+ * ChargeableItemsV2.vue's catalog-type tabs: clicking a tab updated the
+ * filter ref but the query stayed locked to whatever value was passed in
+ * at setup time. toValue() + a computed queryKey keeps this reactive the
+ * same way useServiceCatalogItems() already does for the legacy page.
+ */
+export function useChargeableItems(filters: MaybeRefOrGetter<ChargeableItemFilters> = {}): UseQueryReturnType<ChargeableItem[], Error> {
     return useQuery({
-        queryKey: ['chargeable-items', filters],
+        queryKey: ['chargeable-items', computed(() => ({ ...toValue(filters) }))],
         queryFn: async () => {
+            const resolved = toValue(filters);
             const response = await apiGet<ChargeableItemListResponse>('/chargeable-items', {
-                catalogType: filters.catalogType ?? null,
-                status: filters.status ?? null,
+                catalogType: resolved.catalogType ?? null,
+                status: resolved.status ?? null,
             });
             return response.data;
         },

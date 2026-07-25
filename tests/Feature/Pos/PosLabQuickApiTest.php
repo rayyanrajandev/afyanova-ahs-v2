@@ -3,8 +3,10 @@
 use App\Models\User;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Pos\Infrastructure\Models\PosSaleModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -173,6 +175,32 @@ function createPosLabQuickTariff(array $scope, array $overrides = []): BillingSe
     ], $overrides));
 }
 
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: lab quick cashier pricing now
+ * resolves via chargeable_item_id (price_book_entries), not the legacy
+ * service catalog -- createPosLabQuickTariff() above is kept only as a
+ * legacy fixture proving it's genuinely ignored now. This is the price
+ * that actually drives quick-cashier candidates, linked to the clinical
+ * catalog item via the Phase 1 ID-reuse convention.
+ */
+function createPosLabQuickPrice(ClinicalCatalogItemModel $catalogItem, float $price = 35000, string $currencyCode = 'TZS'): void
+{
+    if (ChargeableItemModel::query()->whereKey($catalogItem->id)->exists()) {
+        return;
+    }
+
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->id = $catalogItem->id;
+    $chargeableItem->fill([
+        'catalog_type' => 'lab_test', 'charge_model' => 'flat', 'code' => $catalogItem->code, 'name' => $catalogItem->name, 'status' => 'active',
+    ]);
+    $chargeableItem->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $catalogItem->id, 'currency_code' => $currencyCode, 'unit_price' => $price, 'status' => 'active',
+    ]);
+}
+
 function createPosLabQuickOrder(string $patientId, array $scope, array $overrides = []): LaboratoryOrderModel
 {
     return LaboratoryOrderModel::query()->create(array_merge([
@@ -205,6 +233,7 @@ it('lists payable laboratory quick cashier candidates with governed pricing and 
     $patient = createPosLabQuickPatient($scope);
     $catalogItem = createPosLabQuickCatalogItem($scope);
     createPosLabQuickTariff($scope);
+    createPosLabQuickPrice($catalogItem);
 
     $visibleOrder = createPosLabQuickOrder($patient->id, $scope, [
         'lab_test_catalog_item_id' => $catalogItem->id,
@@ -290,6 +319,7 @@ it('creates a lab quick cashier sale, links it to the patient order, and then bl
     ]);
     $catalogItem = createPosLabQuickCatalogItem($scope);
     createPosLabQuickTariff($scope);
+    createPosLabQuickPrice($catalogItem);
     $order = createPosLabQuickOrder($patient->id, $scope, [
         'lab_test_catalog_item_id' => $catalogItem->id,
     ]);
@@ -370,6 +400,7 @@ it('rejects mixed-patient laboratory quick cashier checkout in one sale', functi
     openPosLabQuickSession($user, $scope, (string) $register['id']);
     $catalogItem = createPosLabQuickCatalogItem($scope);
     createPosLabQuickTariff($scope);
+    createPosLabQuickPrice($catalogItem);
 
     $firstPatient = createPosLabQuickPatient($scope, [
         'first_name' => 'Mariam',
@@ -421,6 +452,7 @@ it('rejects laboratory quick cashier checkout when the order is already invoiced
     $patient = createPosLabQuickPatient($scope);
     $catalogItem = createPosLabQuickCatalogItem($scope);
     createPosLabQuickTariff($scope);
+    createPosLabQuickPrice($catalogItem);
     $order = createPosLabQuickOrder($patient->id, $scope, [
         'lab_test_catalog_item_id' => $catalogItem->id,
     ]);

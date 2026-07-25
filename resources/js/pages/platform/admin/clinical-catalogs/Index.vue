@@ -2338,9 +2338,9 @@ onBeforeUnmount(() => {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" class="w-48">
                                 <DropdownMenuItem as-child>
-                                    <Link href="/billing-service-catalog" class="gap-2">
+                                    <Link href="/chargeable-items" class="gap-2">
                                         <AppIcon name="receipt" class="size-4" />
-                                        Billing Service Catalog
+                                        Chargeable Items
                                     </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem as-child>
@@ -3349,9 +3349,9 @@ onBeforeUnmount(() => {
                                     <p class="text-sm font-medium">Hospital pricing</p>
                                     <p class="mt-1 text-xs text-muted-foreground">{{ billingLinkDetail(selected) }}</p>
                                     <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" as-child>
-                                        <Link href="/billing-service-catalog">
+                                        <Link href="/chargeable-items">
                                             <AppIcon name="receipt" class="size-3.5" />
-                                            Open Billing Service Catalog
+                                            Open Chargeable Items
                                         </Link>
                                     </Button>
                                 </div>

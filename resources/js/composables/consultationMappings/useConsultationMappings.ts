@@ -20,8 +20,10 @@ export type ConsultationMapping = {
     id: string;
     clinicianTier: string;
     department: string;
-    billingServiceCatalogItemId: string;
+    /** @deprecated Legacy pricing path, kept only for rows created before Phase 5. New mappings never set this. */
+    billingServiceCatalogItemId: string | null;
     chargeableItemId: string | null;
+    /** @deprecated Legacy pricing path, kept only for rows created before Phase 5. */
     catalogItem: ConsultationMappingCatalogItem | null;
     createdAt: string | null;
     updatedAt: string | null;
@@ -39,7 +41,7 @@ export type RawConsultationMapping = {
     id: string;
     clinician_tier: string;
     department: string;
-    billing_service_catalog_item_id: string;
+    billing_service_catalog_item_id: string | null;
     chargeable_item_id: string | null;
     catalog_item: RawConsultationMappingCatalogItem | null;
     created_at: string | null;

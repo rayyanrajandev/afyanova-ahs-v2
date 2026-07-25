@@ -3,9 +3,11 @@
 use App\Models\User;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Pos\Infrastructure\Models\PosSaleLineModel;
 use App\Modules\Pos\Infrastructure\Models\PosSaleModel;
@@ -171,6 +173,33 @@ function createPosFrontdeskQuickTariff(array $scope, string $serviceCode, array 
     ], $overrides));
 }
 
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: frontdesk/lab quick cashier
+ * pricing now resolves via chargeable_item_id (price_book_entries), not
+ * the legacy service catalog -- createPosFrontdeskQuickTariff() above is
+ * kept only as a legacy fixture proving it's genuinely ignored now. This
+ * is the price that actually drives quick-cashier candidates, linked to
+ * the clinical catalog item via the Phase 1 ID-reuse convention (a
+ * chargeable_items row shares its id with the order's own catalog FK).
+ */
+function createPosFrontdeskQuickPrice(ClinicalCatalogItemModel $catalogItem, float $price = 25000, string $currencyCode = 'TZS'): void
+{
+    if (ChargeableItemModel::query()->whereKey($catalogItem->id)->exists()) {
+        return;
+    }
+
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->id = $catalogItem->id;
+    $chargeableItem->fill([
+        'catalog_type' => 'service', 'charge_model' => 'flat', 'code' => $catalogItem->code, 'name' => $catalogItem->name, 'status' => 'active',
+    ]);
+    $chargeableItem->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $catalogItem->id, 'currency_code' => $currencyCode, 'unit_price' => $price, 'status' => 'active',
+    ]);
+}
+
 function createLabOrderForFrontdeskQuick(string $patientId, string $catalogItemId, array $scope, array $overrides = []): LaboratoryOrderModel
 {
     $serviceCode = $overrides['test_code'] ?? 'FDQ-SVC-001';
@@ -274,6 +303,7 @@ it('lists frontdesk quick candidates for all source kinds with pricing and exclu
         'metadata' => ['billingServiceCode' => 'FDQ-SVC-001'],
     ]);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
 
     $labOrder = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
     $pharmOrder = createPharmacyOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
@@ -297,6 +327,7 @@ it('excludes already-invoiced orders from frontdesk quick candidates', function 
     $patient = createPosFrontdeskQuickPatient($scope);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
 
     $visibleOrder = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
     $invoicedOrder = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope, [
@@ -366,6 +397,7 @@ it('lists frontdesk quick candidates filtered by patient search', function (): v
     ]);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
 
     $jumaOrder = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
     $ashaOrder = createLabOrderForFrontdeskQuick($otherPatient->id, $catalogItem->id, $scope);
@@ -399,6 +431,7 @@ it('creates a frontdesk quick POS sale with mixed source kinds', function (): vo
     ]);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
 
     $labOrder = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
     $pharmOrder = createPharmacyOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
@@ -455,6 +488,7 @@ it('rejects mixed-patient frontdesk quick checkout in one sale', function (): vo
     openPosFrontdeskQuickSession($user, $scope, (string) $register['id']);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
 
     $firstPatient = createPosFrontdeskQuickPatient($scope, [
         'first_name' => 'Mariam',
@@ -499,6 +533,7 @@ it('rejects frontdesk quick checkout when the order is already invoiced', functi
     $patient = createPosFrontdeskQuickPatient($scope);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
     $order = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
 
     BillingInvoiceModel::query()->create([
@@ -571,6 +606,7 @@ it('rejects frontdesk quick checkout when the order is already settled via POS',
     ]);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
     $order = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
 
     $this->actingAs($user)
@@ -619,6 +655,7 @@ it('blocks re-settlement via candidates list after frontdesk quick sale', functi
     $patient = createPosFrontdeskQuickPatient($scope);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
     $order = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
 
     $this->actingAs($user)
@@ -666,6 +703,7 @@ it('creates a frontdesk quick POS sale with createInvoice flag and creates billi
     ]);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
 
     $labOrder = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
     $radOrder = createRadiologyOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
@@ -718,6 +756,7 @@ it('verifies frontdesk quick payment for a completed sale', function (): void {
     ]);
     $catalogItem = createPosFrontdeskQuickCatalogItem($scope);
     createPosFrontdeskQuickTariff($scope, 'FDQ-SVC-001');
+    createPosFrontdeskQuickPrice($catalogItem);
     $order = createLabOrderForFrontdeskQuick($patient->id, $catalogItem->id, $scope);
 
     $this->actingAs($user)

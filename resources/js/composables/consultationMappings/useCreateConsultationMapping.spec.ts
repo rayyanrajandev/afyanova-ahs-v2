@@ -34,7 +34,8 @@ describe('useCreateConsultationMapping', () => {
                 id: '1',
                 clinician_tier: 'CO',
                 department: 'Outpatient Department (OPD)',
-                billing_service_catalog_item_id: 'cat-1',
+                billing_service_catalog_item_id: null,
+                chargeable_item_id: 'chg-1',
                 catalog_item: null,
                 created_at: null,
                 updated_at: null,
@@ -45,16 +46,16 @@ describe('useCreateConsultationMapping', () => {
         const result = await create.mutateAsync({
             clinicianTier: 'CO',
             department: 'Outpatient Department (OPD)',
-            billingServiceCatalogItemId: 'cat-1',
+            chargeableItemId: 'chg-1',
         });
 
         expect(postSpy).toHaveBeenCalledWith('/consultation-mappings', {
             body: {
                 clinician_tier: 'CO',
                 department: 'Outpatient Department (OPD)',
-                billing_service_catalog_item_id: 'cat-1',
+                chargeable_item_id: 'chg-1',
             },
         });
-        expect(result).toMatchObject({ id: '1', clinicianTier: 'CO', billingServiceCatalogItemId: 'cat-1' });
+        expect(result).toMatchObject({ id: '1', clinicianTier: 'CO', chargeableItemId: 'chg-1' });
     });
 });

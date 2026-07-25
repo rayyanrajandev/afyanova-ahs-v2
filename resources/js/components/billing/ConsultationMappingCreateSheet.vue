@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useChargeableItemOptions } from '@/composables/chargeableItems/useChargeableItemOptions';
-import { useConsultationMappingCatalogItemOptions } from '@/composables/consultationMappings/useConsultationMappingCatalogItemOptions';
 import { useConsultationMappingDepartmentOptions } from '@/composables/consultationMappings/useConsultationMappingDepartmentOptions';
 import { CLINICIAN_TIER_OPTIONS, type ConsultationMapping } from '@/composables/consultationMappings/useConsultationMappings';
 import { useCreateConsultationMapping } from '@/composables/consultationMappings/useCreateConsultationMapping';
@@ -18,6 +17,10 @@ import { messageFromUnknown } from '@/lib/notify';
  * CreateAdmissionSheet.vue: defineModel for open, watch(open) resets the
  * form, header/footer use the backdrop-blur sticky style, fields are flat
  * (no fieldset grouping — three fields doesn't need it).
+ *
+ * PricingEngine_Migration_Plan.md Phase 5: the old "Billing service catalog
+ * item" picker is gone -- chargeable_item_id is now the only pricing path
+ * for a consultation mapping.
  */
 const open = defineModel<boolean>('open', { required: true });
 
@@ -27,13 +30,11 @@ const emit = defineEmits<{
 
 const clinicianTier = ref('CO');
 const department = ref('');
-const billingServiceCatalogItemId = ref('');
 const chargeableItemId = ref('');
 const submitError = ref<string | null>(null);
 const fieldErrors = ref<Record<string, string[]>>({});
 
 const { options: departmentOptions } = useConsultationMappingDepartmentOptions();
-const { options: catalogItemOptions } = useConsultationMappingCatalogItemOptions();
 const { options: pricingItemOptions } = useChargeableItemOptions('consultation');
 const create = useCreateConsultationMapping();
 
@@ -41,7 +42,6 @@ watch(open, (isOpen) => {
     if (!isOpen) return;
     clinicianTier.value = 'CO';
     department.value = '';
-    billingServiceCatalogItemId.value = '';
     chargeableItemId.value = '';
     submitError.value = null;
     fieldErrors.value = {};
@@ -51,7 +51,7 @@ function fieldError(field: string): string | null {
     return fieldErrors.value[field]?.[0] ?? null;
 }
 
-const canSubmit = computed(() => department.value.trim() !== '' && billingServiceCatalogItemId.value.trim() !== '' && !create.isPending.value);
+const canSubmit = computed(() => department.value.trim() !== '' && chargeableItemId.value.trim() !== '' && !create.isPending.value);
 
 async function submit(): Promise<void> {
     submitError.value = null;
@@ -61,8 +61,7 @@ async function submit(): Promise<void> {
         const mapping = await create.mutateAsync({
             clinicianTier: clinicianTier.value,
             department: department.value.trim(),
-            billingServiceCatalogItemId: billingServiceCatalogItemId.value.trim(),
-            chargeableItemId: chargeableItemId.value.trim() || null,
+            chargeableItemId: chargeableItemId.value.trim(),
         });
         emit('created', mapping);
         open.value = false;
@@ -119,25 +118,14 @@ async function submit(): Promise<void> {
                 />
 
                 <SearchableSelectField
-                    v-model="billingServiceCatalogItemId"
-                    input-id="consultation-mapping-create-catalog-item"
-                    label="Billing service catalog item"
-                    :options="catalogItemOptions"
-                    placeholder="Select active catalog item"
-                    search-placeholder="Search service code or name"
-                    empty-text="No matching catalog item found."
-                    required
-                    :error-message="fieldError('billing_service_catalog_item_id')"
-                />
-
-                <SearchableSelectField
                     v-model="chargeableItemId"
                     input-id="consultation-mapping-create-pricing-item"
-                    label="Pricing item (new engine)"
+                    label="Pricing item"
                     :options="pricingItemOptions"
-                    placeholder="Optional — link to the new pricing engine"
+                    placeholder="Select active pricing item"
                     search-placeholder="Search pricing items"
                     empty-text="No matching pricing item found."
+                    required
                     :error-message="fieldError('chargeable_item_id')"
                 />
             </div>

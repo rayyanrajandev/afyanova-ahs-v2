@@ -4,9 +4,9 @@ namespace App\Console\Commands;
 
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
-use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
+use App\Support\CatalogGovernance\ChargeableItemCatalogSync;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -35,7 +35,7 @@ class PricingBackfillChargeableItems extends Command
 
     protected $description = 'Phase 1: backfill chargeable_items and price_book_entries from platform_clinical_catalog_items and billing_service_catalog_items';
 
-    public function handle(): int
+    public function handle(ChargeableItemCatalogSync $chargeableItemCatalogSync): int
     {
         $isDryRun = (bool) $this->option('dry-run');
 
@@ -55,7 +55,7 @@ class PricingBackfillChargeableItems extends Command
             'supersedes_links_rebuilt' => 0,
         ];
 
-        $this->backfillChargeableItems($isDryRun, $stats);
+        $this->backfillChargeableItems($isDryRun, $stats, $chargeableItemCatalogSync);
         $legacyToNewPriceId = $this->backfillPriceBookEntries($isDryRun, $stats);
         $this->rebuildSupersedesLinks($isDryRun, $stats, $legacyToNewPriceId);
         $unlinkedReport = $this->reportUnlinkedPriceRows();
@@ -95,7 +95,7 @@ class PricingBackfillChargeableItems extends Command
     /**
      * @param  array<string, int>  $stats
      */
-    private function backfillChargeableItems(bool $isDryRun, array &$stats): void
+    private function backfillChargeableItems(bool $isDryRun, array &$stats, ChargeableItemCatalogSync $chargeableItemCatalogSync): void
     {
         $catalogItems = ClinicalCatalogItemModel::query()->get();
 
@@ -104,27 +104,10 @@ class PricingBackfillChargeableItems extends Command
 
             $existing = ChargeableItemModel::query()->find($catalogItem->id);
 
-            $attributes = [
-                'tenant_id' => $catalogItem->tenant_id,
-                'facility_id' => $catalogItem->facility_id,
-                'facility_tier' => $catalogItem->facility_tier,
-                'catalog_type' => $catalogItem->catalog_type,
-                'charge_model' => $this->deriveChargeModel((string) $catalogItem->catalog_type),
-                'code' => $catalogItem->code,
-                'name' => $catalogItem->name,
-                'department_id' => $catalogItem->department_id,
-                'category' => $catalogItem->category,
-                'default_unit' => $catalogItem->unit,
-                'status' => $catalogItem->status,
-                'status_reason' => $catalogItem->status_reason,
-                'metadata' => $catalogItem->metadata,
-            ];
-
             if ($existing !== null) {
                 $stats['chargeable_items_updated']++;
                 if (! $isDryRun) {
-                    $existing->fill($attributes);
-                    $existing->save();
+                    $chargeableItemCatalogSync->sync($catalogItem);
                 }
 
                 continue;
@@ -135,21 +118,19 @@ class PricingBackfillChargeableItems extends Command
                 continue;
             }
 
-            $chargeableItem = new ChargeableItemModel();
-            $chargeableItem->id = $catalogItem->id;
-            $chargeableItem->fill($attributes);
-            $chargeableItem->created_at = $catalogItem->created_at;
-            $chargeableItem->updated_at = $catalogItem->updated_at;
-            $chargeableItem->save();
+            // Everyday creation goes through ChargeableItemCatalogSync's
+            // create-now path (matches EloquentClinicalCatalogItemRepository),
+            // but backfilling *pre-existing* catalog items should preserve
+            // their original created_at/updated_at rather than stamping
+            // "now" -- this is historical data, not a fresh row.
+            $chargeableItemCatalogSync->sync($catalogItem);
+            ChargeableItemModel::query()
+                ->where('id', $catalogItem->id)
+                ->update([
+                    'created_at' => $catalogItem->created_at,
+                    'updated_at' => $catalogItem->updated_at,
+                ]);
         }
-    }
-
-    private function deriveChargeModel(string $catalogType): string
-    {
-        return match ($catalogType) {
-            ClinicalCatalogType::FORMULARY_ITEM->value => 'per_unit',
-            default => 'flat',
-        };
     }
 
     /**

@@ -305,15 +305,6 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'End-of-day cashier settlement and revenue reconciliation',
     },
     {
-        title: 'Billing Service Catalog',
-        href: '/billing-service-catalog',
-        iconName: 'file-text',
-        section: 'billing',
-        subGroup: 'rates',
-        permissionPrefixes: ['billing.service-catalog.'],
-        helpNote: 'Billable services, tariffs, and pricing history',
-    },
-    {
         title: 'Chargeable Items',
         href: '/chargeable-items',
         iconName: 'file-text',

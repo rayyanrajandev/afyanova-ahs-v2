@@ -23,7 +23,7 @@ class ChargeableItemController
 
     public function index(Request $request): JsonResponse
     {
-        $query = ChargeableItemModel::query()->with('priceBookEntries');
+        $query = ChargeableItemModel::query()->with(['priceBookEntries', 'clinicalCatalogItem']);
 
         if ($request->filled('catalogType')) {
             $query->where('catalog_type', $request->string('catalogType')->value());
@@ -57,6 +57,7 @@ class ChargeableItemController
         }
 
         $chargeableItem = $this->findOrCreateChargeableItem($validated, $clinicalCatalogItem, $tenantId, $facilityId);
+        $chargeableItem->setRelation('clinicalCatalogItem', $clinicalCatalogItem);
 
         $priceBookEntry = new PriceBookEntryModel();
         $priceBookEntry->fill([
@@ -85,7 +86,7 @@ class ChargeableItemController
 
     public function show(string $chargeableItemId): JsonResponse
     {
-        $item = ChargeableItemModel::query()->with('priceBookEntries')->find($chargeableItemId);
+        $item = ChargeableItemModel::query()->with(['priceBookEntries', 'clinicalCatalogItem'])->find($chargeableItemId);
 
         if ($item === null) {
             return $this->notFoundResponse('Chargeable item not found');
@@ -103,14 +104,14 @@ class ChargeableItemController
         }
 
         $item->update($request->validated());
-        $item->load('priceBookEntries');
+        $item->load(['priceBookEntries', 'clinicalCatalogItem']);
 
         return $this->successResponse($this->transform($item));
     }
 
     public function storePrice(string $chargeableItemId, StorePriceBookEntryRequest $request): JsonResponse
     {
-        $item = ChargeableItemModel::query()->find($chargeableItemId);
+        $item = ChargeableItemModel::query()->with('clinicalCatalogItem')->find($chargeableItemId);
 
         if ($item === null) {
             return $this->notFoundResponse('Chargeable item not found');
@@ -156,12 +157,18 @@ class ChargeableItemController
         if ($clinicalCatalogItem !== null) {
             $existing = ChargeableItemModel::query()->find($clinicalCatalogItem->id);
             if ($existing !== null) {
+                if ($existing->clinical_catalog_item_id === null) {
+                    $existing->clinical_catalog_item_id = $clinicalCatalogItem->id;
+                    $existing->save();
+                }
+
                 return $existing;
             }
 
             $chargeableItem = new ChargeableItemModel();
             $chargeableItem->id = $clinicalCatalogItem->id;
             $chargeableItem->fill([
+                'clinical_catalog_item_id' => $clinicalCatalogItem->id,
                 'tenant_id' => $clinicalCatalogItem->tenant_id,
                 'facility_id' => $clinicalCatalogItem->facility_id,
                 'facility_tier' => $clinicalCatalogItem->facility_tier,
@@ -202,15 +209,28 @@ class ChargeableItemController
      */
     private function transform(ChargeableItemModel $item): array
     {
+        // When linked to a clinical catalog item, read identity fields live
+        // from the catalog so the response always reflects the latest
+        // catalog data -- same pattern BillingServiceCatalogItemResponseTransformer
+        // and InventoryItemResponseTransformer already use for their own
+        // clinical_catalog_item_id links. The stored code/name/category/
+        // default_unit columns are a creation-time snapshot, not the
+        // authoritative value, for any row that's actually linked.
+        $catalog = $item->relationLoaded('clinicalCatalogItem') ? $item->clinicalCatalogItem : null;
+        $hasCatalogLink = $item->clinical_catalog_item_id !== null && $catalog !== null;
+
         return [
             'id' => (string) $item->id,
+            'clinicalCatalogItemId' => $item->clinical_catalog_item_id === null ? null : (string) $item->clinical_catalog_item_id,
             'catalogType' => $item->catalog_type,
             'chargeModel' => $item->charge_model,
-            'code' => $item->code,
-            'name' => $item->name,
-            'departmentId' => $item->department_id === null ? null : (string) $item->department_id,
-            'category' => $item->category,
-            'defaultUnit' => $item->default_unit,
+            'code' => $hasCatalogLink ? $catalog->code : $item->code,
+            'name' => $hasCatalogLink ? $catalog->name : $item->name,
+            'departmentId' => $hasCatalogLink
+                ? ($catalog->department_id === null ? null : (string) $catalog->department_id)
+                : ($item->department_id === null ? null : (string) $item->department_id),
+            'category' => $hasCatalogLink ? ($catalog->category ?? $item->category) : $item->category,
+            'defaultUnit' => $hasCatalogLink ? ($catalog->unit ?? $item->default_unit) : $item->default_unit,
             'status' => $item->status,
             'statusReason' => $item->status_reason,
             'prices' => $item->priceBookEntries

@@ -7,8 +7,10 @@ use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentStatusUseCase;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
-use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
+use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileSpecialtyModel;
 use App\Modules\Staff\Infrastructure\Models\StaffRegulatoryProfileModel;
@@ -78,24 +80,35 @@ function makeAutoCaptureClinician(): User
     return $user;
 }
 
-function makeAutoCaptureConsultationTariff(): BillingServiceCatalogItemModel
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: Consultation's legacy
+ * string-match fallback is gone -- auto-capture only ever prices via an
+ * explicit ConsultationMappingModel row (tier + department -> chargeable
+ * item), so this fixture builds that instead of a standalone legacy tariff.
+ */
+function makeAutoCaptureConsultationTariff(): ConsultationMappingModel
 {
-    return BillingServiceCatalogItemModel::query()->create([
-        'service_code' => 'CONSULT-MD-OUTPATIENT',
-        'service_name' => 'Medical Doctor Consultation - Outpatient',
-        'service_type' => 'consultation',
-        'department' => 'Outpatient',
-        'unit' => 'visit',
-        'base_price' => 35000,
-        'currency_code' => 'TZS',
-        'tax_rate_percent' => 0,
-        'is_taxable' => false,
-        'effective_from' => now()->subDay()->toDateTimeString(),
-        'effective_to' => null,
-        'description' => 'Consultation fee auto-capture tariff',
-        'metadata' => null,
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->fill([
+        'catalog_type' => 'consultation',
+        'charge_model' => 'flat',
+        'code' => 'CONSULT-MD-OUTPATIENT',
+        'name' => 'Medical Doctor Consultation - Outpatient',
         'status' => 'active',
-        'status_reason' => null,
+    ]);
+    $chargeableItem->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $chargeableItem->id,
+        'currency_code' => 'TZS',
+        'unit_price' => 35000,
+        'status' => 'active',
+    ]);
+
+    return ConsultationMappingModel::query()->create([
+        'chargeable_item_id' => $chargeableItem->id,
+        'clinician_tier' => 'MD',
+        'department' => 'Outpatient',
     ]);
 }
 

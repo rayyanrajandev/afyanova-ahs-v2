@@ -6,6 +6,7 @@ use App\Modules\Platform\Domain\Repositories\ClinicalCatalogItemRepositoryInterf
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
+use App\Support\CatalogGovernance\ChargeableItemCatalogSync;
 use App\Support\CatalogGovernance\FacilityTierSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,6 +16,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
 {
     public function __construct(
         private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
+        private readonly ChargeableItemCatalogSync $chargeableItemCatalogSync,
     ) {}
 
     public function create(array $attributes): array
@@ -22,6 +24,8 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         $item = new ClinicalCatalogItemModel();
         $item->fill($this->filterAttributesForCurrentSchema($attributes));
         $item->save();
+
+        $this->chargeableItemCatalogSync->sync($item);
 
         return $item->toArray();
     }
@@ -46,6 +50,8 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
 
         $item->fill($this->filterAttributesForCurrentSchema($attributes));
         $item->save();
+
+        $this->chargeableItemCatalogSync->sync($item);
 
         return $item->toArray();
     }

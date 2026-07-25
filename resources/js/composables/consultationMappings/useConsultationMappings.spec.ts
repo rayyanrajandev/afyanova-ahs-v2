@@ -35,6 +35,7 @@ describe('useConsultationMappings', () => {
                 clinician_tier: 'CO',
                 department: 'Outpatient Department (OPD)',
                 billing_service_catalog_item_id: 'cat-1',
+                chargeable_item_id: 'chg-1',
                 catalog_item: { id: 'cat-1', service_code: 'CONSULT-CO-OPD', service_name: 'CO Consultation', base_price: '12000.00', status: 'active' },
                 created_at: '2026-01-01T00:00:00Z',
                 updated_at: '2026-01-01T00:00:00Z',

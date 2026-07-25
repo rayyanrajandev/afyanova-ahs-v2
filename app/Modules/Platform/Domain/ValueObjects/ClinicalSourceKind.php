@@ -83,6 +83,27 @@ enum ClinicalSourceKind: string
         };
     }
 
+    /**
+     * PricingEngine_Migration_Plan.md Phase 5: true once a domain's legacy
+     * string-match pricing path has been deleted outright (not just
+     * flag-gated) -- charge capture for that kind is then unconditionally
+     * priced via chargeable_item_id, with no fallback and no flag check.
+     * Flipped on domain-by-domain as each one's removal lands.
+     */
+    public function isLegacyPricingRemoved(): bool
+    {
+        return match ($this) {
+            self::LABORATORY_ORDER => true,
+            self::RADIOLOGY_ORDER => true,
+            self::CLINICAL_PROCEDURE_ORDER => true,
+            self::THEATRE_PROCEDURE => true,
+            self::PHARMACY_ORDER => true,
+            self::APPOINTMENT_CONSULTATION => true,
+            self::ADMISSION_BED_DAY => true,
+            default => false,
+        };
+    }
+
     public function catalogFk(): string
     {
         return match ($this) {

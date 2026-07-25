@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemAuditLogModel;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -119,6 +120,44 @@ it('creates clinical catalog item with normalized code and active status', funct
         ->assertJsonPath('data.catalogType', 'lab_test')
         ->assertJsonPath('data.code', 'LAB-CBC-001')
         ->assertJsonPath('data.status', 'active');
+});
+
+it('automatically creates a matching chargeable item, so no manual pricing backfill is ever needed for a new catalog item', function (): void {
+    $user = makeClinicalCatalogActor(['platform.clinical-catalog.manage-lab-tests']);
+
+    $catalogItemId = $this->actingAs($user)
+        ->postJson('/api/v1/platform/admin/clinical-catalogs/lab-tests', clinicalCatalogPayload([
+            'code' => 'LAB-AUTO-SYNC-001',
+            'name' => 'Auto-Sync Test Panel',
+        ]))
+        ->assertCreated()
+        ->json('data.id');
+
+    $chargeableItem = ChargeableItemModel::query()->find($catalogItemId);
+
+    expect($chargeableItem)->not->toBeNull()
+        ->and($chargeableItem->clinical_catalog_item_id)->toBe($catalogItemId)
+        ->and($chargeableItem->catalog_type)->toBe('lab_test')
+        ->and($chargeableItem->charge_model)->toBe('flat')
+        ->and($chargeableItem->code)->toBe('LAB-AUTO-SYNC-001')
+        ->and($chargeableItem->name)->toBe('Auto-Sync Test Panel')
+        ->and($chargeableItem->status)->toBe('active');
+});
+
+it('re-syncs the linked chargeable item when an existing catalog item changes status', function (): void {
+    $user = makeClinicalCatalogActor(['platform.clinical-catalog.manage-lab-tests']);
+    $catalogItemId = createLabCatalogItem($user, ['code' => 'LAB-AUTO-SYNC-002'])['id'];
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/platform/admin/clinical-catalogs/lab-tests/{$catalogItemId}/status", [
+            'status' => 'inactive',
+            'reason' => 'Retired for this test.',
+        ])
+        ->assertOk();
+
+    $chargeableItem = ChargeableItemModel::query()->find($catalogItemId);
+
+    expect($chargeableItem->status)->toBe('inactive');
 });
 
 it('returns billing link summary when clinical item references an active billing price', function (): void {

@@ -8,10 +8,10 @@ use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use App\Modules\Billing\Infrastructure\Models\PricingEngineShadowDiffModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
@@ -73,6 +73,37 @@ function makeShadowDiffLabOrder(string $patientId, ?string $chargeableItemId, ar
         'specimen_type' => 'Blood',
         'resulted_at' => now()->subHour()->toDateTimeString(),
         'status' => 'completed',
+    ], $overrides));
+}
+
+/**
+ * Pharmacy fixtures, kept for the direct-job-construction tests above (they
+ * instantiate ShadowDiffChargeCaptureCandidateJob directly and don't depend
+ * on which domain dispatches it). All five order-domains (Laboratory,
+ * Radiology, Clinical Procedure, Theatre, Pharmacy) now have their legacy
+ * pricing path fully removed (PricingEngine_Migration_Plan.md Phase 5), so
+ * none of them call dispatchShadowDiff() from the real endpoint anymore --
+ * see the "does not dispatch a shadow diff" test below, which replaced the
+ * old "dispatches..." test now that there's no order-domain left for it to
+ * exercise.
+ */
+function makeShadowDiffPharmacyOrder(string $patientId, ?string $chargeableItemId, array $overrides = []): PharmacyOrderModel
+{
+    return PharmacyOrderModel::query()->create(array_merge([
+        'order_number' => 'RX'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patientId,
+        'admission_id' => null,
+        'appointment_id' => null,
+        'ordered_by_user_id' => null,
+        'ordered_at' => now()->subHours(2)->toDateTimeString(),
+        'approved_medicine_catalog_item_id' => $chargeableItemId,
+        'medication_code' => 'MED-PARACETAMOL-500',
+        'medication_name' => 'Paracetamol 500mg',
+        'dosage_instruction' => '1 tablet twice daily',
+        'quantity_prescribed' => 20,
+        'quantity_dispensed' => 20,
+        'dispensed_at' => now()->subHour()->toDateTimeString(),
+        'status' => 'dispensed',
     ], $overrides));
 }
 
@@ -306,46 +337,19 @@ it('logs a mismatch instead of crashing when the referenced catalog item has no 
         ->and($diff->new_pricing_status)->toBe('missing_chargeable_item');
 });
 
-it('dispatches a shadow diff job for each eligible order candidate when hitting the real endpoint', function (): void {
+it('does not dispatch a shadow diff job for any order candidate when hitting the real endpoint, since every order-domain is cut over', function (): void {
     Queue::fake();
 
     $patient = makeShadowDiffPatient();
     $catalogItem = ClinicalCatalogItemModel::query()->create([
-        'catalog_type' => 'lab_test', 'code' => 'LAB-CBC', 'name' => 'CBC', 'unit' => 'test', 'status' => 'active',
+        'catalog_type' => 'formulary_item', 'code' => 'MED-PARACETAMOL-500', 'name' => 'Paracetamol 500mg', 'unit' => 'tablet', 'status' => 'active',
     ]);
-    makeShadowDiffLabOrder($patient->id, $catalogItem->id);
+    makeShadowDiffPharmacyOrder($patient->id, $catalogItem->id);
 
     $user = makeShadowDiffBillingUser();
     $this->actingAs($user)
         ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
         ->assertOk();
 
-    Queue::assertPushed(ShadowDiffChargeCaptureCandidateJob::class, 1);
-});
-
-it('produces an identical API response whether or not the shadow job actually runs', function (): void {
-    $patient = makeShadowDiffPatient();
-    $catalogItem = ClinicalCatalogItemModel::query()->create([
-        'catalog_type' => 'lab_test', 'code' => 'LAB-CBC', 'name' => 'CBC', 'unit' => 'test', 'status' => 'active',
-    ]);
-    makeShadowDiffLabOrder($patient->id, $catalogItem->id);
-    makeShadowDiffLabTariff(['clinical_catalog_item_id' => $catalogItem->id]);
-    Artisan::call('pricing:backfill-chargeable-items');
-
-    $user = makeShadowDiffBillingUser();
-    $endpoint = '/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS';
-
-    // Real run first: sync queue (the test default) executes the shadow
-    // job inline, writing a pricing_engine_shadow_diffs row for real.
-    $withShadowRunning = $this->actingAs($user)->getJson($endpoint)->assertOk()->json();
-    $diff = PricingEngineShadowDiffModel::query()->first();
-    expect($diff)->not->toBeNull()
-        ->and($diff->matched)->toBeTrue();
-
-    // Same request again, this time with the queue faked so the shadow
-    // job is dispatched but never actually executes.
-    Queue::fake();
-    $withoutShadowRun = $this->actingAs($user)->getJson($endpoint)->assertOk()->json();
-
-    expect($withoutShadowRun)->toBe($withShadowRunning);
+    Queue::assertNotPushed(ShadowDiffChargeCaptureCandidateJob::class);
 });

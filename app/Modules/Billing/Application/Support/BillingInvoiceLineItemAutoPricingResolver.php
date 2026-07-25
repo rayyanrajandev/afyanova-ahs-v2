@@ -6,17 +6,18 @@ use App\Modules\Billing\Application\Exceptions\BillingInvoicePricingResolutionEx
 use App\Modules\Billing\Domain\Repositories\BillingPayerAuthorizationRuleRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractPriceOverrideRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractRepositoryInterface;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Services\InventoryItemUnitPricingService;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 
 class BillingInvoiceLineItemAutoPricingResolver
 {
     public function __construct(
-        private readonly BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        private readonly ChargeableItemPricingLookup $chargeableItemPricingLookup,
         private readonly BillingPayerContractRepositoryInterface $payerContractRepository,
         private readonly BillingPayerContractPriceOverrideRepositoryInterface $payerContractPriceOverrideRepository,
         private readonly BillingPayerAuthorizationRuleRepositoryInterface $payerAuthorizationRuleRepository,
         private readonly InventoryItemUnitPricingService $inventoryItemUnitPricingService,
+        private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
     ) {}
 
     /**
@@ -94,13 +95,24 @@ class BillingInvoiceLineItemAutoPricingResolver
             static fn (array $lineItem): string => strtoupper(trim((string) ($lineItem['serviceCode'] ?? ''))),
             $lineItems,
         ))));
-        $pricingMap = $serviceCodes !== []
-            ? $this->serviceCatalogRepository->findActivePricingByServiceCodes(
-                serviceCodes: $serviceCodes,
+        // PricingEngine_Migration_Plan.md Phase 5: resolves via
+        // chargeable_items/price_book_entries now, not the legacy service
+        // catalog -- ChargeableItemPricingLookup returns the same shape
+        // the old repository method did, so everything below (override
+        // application, authorization rule matching, tax calculation)
+        // stays unchanged.
+        $tenantId = $this->platformScopeContext->tenantId();
+        $facilityId = $this->platformScopeContext->facilityId();
+        $pricingMap = [];
+        foreach ($serviceCodes as $code) {
+            $pricingMap[$code] = $this->chargeableItemPricingLookup->findByServiceCode(
+                serviceCode: $code,
                 currencyCode: $normalizedCurrency,
                 asOfDateTime: $effectiveAt,
-            )
-            : [];
+                tenantId: $tenantId,
+                facilityId: $facilityId,
+            );
+        }
 
         $overrideMap = [];
         if ($payerContract !== null) {

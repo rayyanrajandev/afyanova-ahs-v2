@@ -124,11 +124,11 @@ const setupHubItems: SetupHubItem[] = [
         permissionPrefixes: ['platform.clinical-catalog.', 'laboratory.orders.', 'radiology.orders.', 'pharmacy.orders.'],
     },
     {
-        title: 'Billing Service Catalog',
+        title: 'Chargeable Items',
         description: 'Connect clinical definitions to billable service codes, prices, and billing behavior.',
-        href: '/billing-service-catalog',
+        href: '/chargeable-items',
         icon: 'receipt',
-        permissionPrefixes: ['billing.service-catalog.'],
+        permissionPrefixes: ['billing.chargeable-items.'],
     },
     {
         title: 'Subscription plans',

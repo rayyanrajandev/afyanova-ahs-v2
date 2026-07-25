@@ -3,10 +3,17 @@
 use App\Models\User;
 use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
 use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
-use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: Consultation is the first domain
+ * with its legacy pricing path fully removed -- chargeable_item_id is now
+ * required on every consultation mapping, billing_service_catalog_item_id
+ * is legacy-optional (nullable, not touched by these routes anymore).
+ */
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
@@ -25,25 +32,26 @@ function makeConsultationMappingUser(array $permissions = []): User
     return $user;
 }
 
-function makeConsultationMappingCatalogItem(string $serviceCode = 'CONSULT-CO-OPD'): BillingServiceCatalogItemModel
+function makeConsultationMappingChargeableItem(string $code = 'CONSULT-CO-OPD'): ChargeableItemModel
 {
-    return BillingServiceCatalogItemModel::query()->create([
-        'service_code' => $serviceCode,
-        'service_name' => 'Clinical Officer Consultation - OPD',
-        'service_type' => 'consultation',
-        'department' => 'Outpatient Department (OPD)',
-        'unit' => 'visit',
-        'base_price' => 12000,
-        'currency_code' => 'TZS',
-        'tax_rate_percent' => 0,
-        'is_taxable' => false,
-        'effective_from' => now()->subDay()->toDateTimeString(),
-        'effective_to' => null,
-        'description' => 'Consultation mapping test tariff',
-        'metadata' => null,
+    $item = new ChargeableItemModel();
+    $item->fill([
+        'catalog_type' => 'consultation',
+        'charge_model' => 'flat',
+        'code' => $code,
+        'name' => 'Clinical Officer Consultation - OPD',
         'status' => 'active',
-        'status_reason' => null,
     ]);
+    $item->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $item->id,
+        'currency_code' => 'TZS',
+        'unit_price' => 12000,
+        'status' => 'active',
+    ]);
+
+    return $item;
 }
 
 it('creates lists updates and deletes a consultation mapping through loaded routes', function (): void {
@@ -51,18 +59,18 @@ it('creates lists updates and deletes a consultation mapping through loaded rout
         'billing.consultation-mappings.read',
         'billing.consultation-mappings.manage',
     ]);
-    $catalogItem = makeConsultationMappingCatalogItem();
+    $chargeableItem = makeConsultationMappingChargeableItem();
 
     $mapping = $this->actingAs($user)
         ->postJson('/api/v1/consultation-mappings', [
-            'billing_service_catalog_item_id' => $catalogItem->id,
+            'chargeable_item_id' => $chargeableItem->id,
             'clinician_tier' => 'CO',
             'department' => 'Outpatient Department (OPD)',
         ])
         ->assertCreated()
         ->assertJsonPath('data.clinician_tier', 'CO')
         ->assertJsonPath('data.department', 'Outpatient Department (OPD)')
-        ->assertJsonPath('data.catalog_item.service_code', 'CONSULT-CO-OPD')
+        ->assertJsonPath('data.chargeable_item_id', $chargeableItem->id)
         ->json('data');
 
     $this->actingAs($user)
@@ -70,14 +78,14 @@ it('creates lists updates and deletes a consultation mapping through loaded rout
         ->assertOk()
         ->assertJsonPath('data.0.id', $mapping['id']);
 
-    $otherCatalogItem = makeConsultationMappingCatalogItem('CONSULT-CO-OPD-2');
+    $otherChargeableItem = makeConsultationMappingChargeableItem('CONSULT-CO-OPD-2');
 
     $this->actingAs($user)
         ->patchJson("/api/v1/consultation-mappings/{$mapping['id']}", [
-            'billing_service_catalog_item_id' => $otherCatalogItem->id,
+            'chargeable_item_id' => $otherChargeableItem->id,
         ])
         ->assertOk()
-        ->assertJsonPath('data.catalog_item.service_code', 'CONSULT-CO-OPD-2')
+        ->assertJsonPath('data.chargeable_item_id', $otherChargeableItem->id)
         ->assertJsonPath('data.department', 'Outpatient Department (OPD)');
 
     $this->actingAs($user)
@@ -87,22 +95,37 @@ it('creates lists updates and deletes a consultation mapping through loaded rout
     expect(ConsultationMappingModel::query()->find($mapping['id']))->toBeNull();
 });
 
+it('rejects creating a mapping without a chargeable item', function (): void {
+    $user = makeConsultationMappingUser([
+        'billing.consultation-mappings.read',
+        'billing.consultation-mappings.manage',
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/consultation-mappings', [
+            'clinician_tier' => 'CO',
+            'department' => 'Outpatient Department (OPD)',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['chargeable_item_id']);
+});
+
 it('rejects a duplicate clinician tier and department mapping', function (): void {
     $user = makeConsultationMappingUser([
         'billing.consultation-mappings.read',
         'billing.consultation-mappings.manage',
     ]);
-    $catalogItem = makeConsultationMappingCatalogItem();
+    $chargeableItem = makeConsultationMappingChargeableItem();
 
     ConsultationMappingModel::query()->create([
-        'billing_service_catalog_item_id' => $catalogItem->id,
+        'chargeable_item_id' => $chargeableItem->id,
         'clinician_tier' => 'CO',
         'department' => 'Outpatient Department (OPD)',
     ]);
 
     $this->actingAs($user)
         ->postJson('/api/v1/consultation-mappings', [
-            'billing_service_catalog_item_id' => $catalogItem->id,
+            'chargeable_item_id' => $chargeableItem->id,
             'clinician_tier' => 'CO',
             'department' => 'Outpatient Department (OPD)',
         ])
@@ -115,11 +138,11 @@ it('rejects an unknown clinician tier', function (): void {
         'billing.consultation-mappings.read',
         'billing.consultation-mappings.manage',
     ]);
-    $catalogItem = makeConsultationMappingCatalogItem();
+    $chargeableItem = makeConsultationMappingChargeableItem();
 
     $this->actingAs($user)
         ->postJson('/api/v1/consultation-mappings', [
-            'billing_service_catalog_item_id' => $catalogItem->id,
+            'chargeable_item_id' => $chargeableItem->id,
             'clinician_tier' => 'NURSE',
             'department' => 'Outpatient Department (OPD)',
         ])
@@ -129,7 +152,7 @@ it('rejects an unknown clinician tier', function (): void {
 
 it('denies consultation mapping reads and writes without permission', function (): void {
     $user = makeConsultationMappingUser();
-    $catalogItem = makeConsultationMappingCatalogItem();
+    $chargeableItem = makeConsultationMappingChargeableItem();
 
     $this->actingAs($user)
         ->getJson('/api/v1/consultation-mappings')
@@ -137,7 +160,7 @@ it('denies consultation mapping reads and writes without permission', function (
 
     $this->actingAs($user)
         ->postJson('/api/v1/consultation-mappings', [
-            'billing_service_catalog_item_id' => $catalogItem->id,
+            'chargeable_item_id' => $chargeableItem->id,
             'clinician_tier' => 'CO',
             'department' => 'Outpatient Department (OPD)',
         ])

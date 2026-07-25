@@ -3,6 +3,7 @@
 use App\Models\User;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
+use App\Modules\Billing\Infrastructure\Models\PricingEngineShadowDiffModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
@@ -10,22 +11,12 @@ use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 
-uses(RefreshDatabase::class);
-
 /**
- * Radiology reuses the exact same generic cutover mechanism proven by
- * LaboratoryPricingCutoverTest.php (candidatesForKind()'s domain-flag check
- * is driven by ClinicalSourceKind::pricingEngineDomainFlag(), not
- * per-domain code) -- this file only needs to prove the wiring reaches
- * radiology specifically, not re-prove the whole mechanism.
+ * PricingEngine_Migration_Plan.md Phase 5: Radiology's legacy pricing path
+ * is fully removed, same as Laboratory (LaboratoryPricingCutoverTest.php).
+ * No flag left to gate it, no legacy fallback, no shadow-diff dispatched.
  */
-function setRadiologyPricingFlags(bool $master, bool $radiology): void
-{
-    $flags = config('feature_flags.flags');
-    $flags['pricing.engine.v2']['enabled'] = $master;
-    $flags['pricing.engine.v2.radiology']['enabled'] = $radiology;
-    config(['feature_flags.flags' => $flags]);
-}
+uses(RefreshDatabase::class);
 
 function makeRadiologyCutoverUser(): User
 {
@@ -65,7 +56,7 @@ function makeRadiologyCutoverOrder(string $patientId, string $chargeableItemId):
     ]);
 }
 
-function setUpRadiologyCutover(float $legacyPrice, float $newResolverPrice): ClinicalCatalogItemModel
+function setUpRadiologyCutover(float $price): ClinicalCatalogItemModel
 {
     $catalogItem = ClinicalCatalogItemModel::query()->create([
         'catalog_type' => 'radiology_procedure', 'code' => 'RAD-ABD-001', 'name' => 'Abdominal Ultrasound', 'unit' => 'study', 'status' => 'active',
@@ -79,38 +70,22 @@ function setUpRadiologyCutover(float $legacyPrice, float $newResolverPrice): Cli
     $chargeableItem->save();
 
     PriceBookEntryModel::query()->create([
-        'chargeable_item_id' => $catalogItem->id, 'currency_code' => 'TZS', 'unit_price' => $newResolverPrice, 'status' => 'active',
-    ]);
-
-    BillingServiceCatalogItemModel::query()->create([
-        'service_code' => 'RAD-ABD-001', 'service_name' => 'Abdominal Ultrasound', 'service_type' => 'radiology',
-        'unit' => 'study', 'base_price' => $legacyPrice, 'currency_code' => 'TZS', 'effective_from' => now()->subDay(), 'status' => 'active',
+        'chargeable_item_id' => $catalogItem->id, 'currency_code' => 'TZS', 'unit_price' => $price, 'status' => 'active',
     ]);
 
     return $catalogItem;
 }
 
-it('serves the legacy price for radiology when both cutover flags are off', function (): void {
-    setRadiologyPricingFlags(master: false, radiology: false);
-
-    $catalogItem = setUpRadiologyCutover(legacyPrice: 60000, newResolverPrice: 99000);
+it('prices radiology orders via the chargeable item, ignoring any legacy tariff', function (): void {
+    $catalogItem = setUpRadiologyCutover(99000);
     $patient = makeRadiologyCutoverPatient();
     makeRadiologyCutoverOrder($patient->id, $catalogItem->id);
-
-    $candidate = $this->actingAs(makeRadiologyCutoverUser())
-        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
-        ->assertOk()
-        ->json('data.0');
-
-    expect((float) $candidate['unitPrice'])->toBe(60000.0);
-});
-
-it('serves the new resolver price for radiology once cut over', function (): void {
-    setRadiologyPricingFlags(master: true, radiology: true);
-
-    $catalogItem = setUpRadiologyCutover(legacyPrice: 60000, newResolverPrice: 99000);
-    $patient = makeRadiologyCutoverPatient();
-    makeRadiologyCutoverOrder($patient->id, $catalogItem->id);
+    // A legacy tariff for the same code, deliberately present, to prove
+    // it's genuinely never consulted anymore.
+    BillingServiceCatalogItemModel::query()->create([
+        'service_code' => 'RAD-ABD-001', 'service_name' => 'Abdominal Ultrasound', 'service_type' => 'radiology',
+        'unit' => 'study', 'base_price' => 60000, 'currency_code' => 'TZS', 'effective_from' => now()->subDay(), 'status' => 'active',
+    ]);
 
     $candidate = $this->actingAs(makeRadiologyCutoverUser())
         ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
@@ -118,17 +93,48 @@ it('serves the new resolver price for radiology once cut over', function (): voi
         ->json('data.0');
 
     expect((float) $candidate['unitPrice'])->toBe(99000.0)
+        ->and($candidate['pricingStatus'])->toBe('priced')
         ->and($candidate['pricingSource'])->toBe('chargeable_item');
 });
 
-it('cutting over radiology does not enable laboratory (flags are independent, not just the reverse case)', function (): void {
-    $flags = config('feature_flags.flags');
-    $flags['pricing.engine.v2.laboratory']['enabled'] = false;
-    config(['feature_flags.flags' => $flags]);
+it('does not dispatch a shadow-diff comparison, since there is no legacy price left to compare against', function (): void {
+    $catalogItem = setUpRadiologyCutover(99000);
+    $patient = makeRadiologyCutoverPatient();
+    makeRadiologyCutoverOrder($patient->id, $catalogItem->id);
 
-    setRadiologyPricingFlags(master: true, radiology: true);
-    // pricing.engine.v2.laboratory explicitly forced off above, regardless of its ambient default.
+    $this->actingAs(makeRadiologyCutoverUser())
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
+        ->assertOk();
 
-    expect(app(App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface::class)->isEnabled('pricing.engine.v2.laboratory'))
-        ->toBeFalse();
+    expect(PricingEngineShadowDiffModel::query()->count())->toBe(0);
+});
+
+it('reports missing_catalog_price rather than falling back to a legacy tariff when there is no price book entry', function (): void {
+    $catalogItem = ClinicalCatalogItemModel::query()->create([
+        'catalog_type' => 'radiology_procedure', 'code' => 'RAD-ABD-001', 'name' => 'Abdominal Ultrasound', 'unit' => 'study', 'status' => 'active',
+    ]);
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->id = $catalogItem->id;
+    $chargeableItem->fill([
+        'catalog_type' => 'radiology_procedure', 'charge_model' => 'flat', 'code' => 'RAD-ABD-001', 'name' => 'Abdominal Ultrasound', 'status' => 'active',
+    ]);
+    $chargeableItem->save();
+    // Deliberately no PriceBookEntryModel row -- and a legacy tariff
+    // present too, to prove it's genuinely never consulted as a fallback.
+    BillingServiceCatalogItemModel::query()->create([
+        'service_code' => 'RAD-ABD-001', 'service_name' => 'Abdominal Ultrasound', 'service_type' => 'radiology',
+        'unit' => 'study', 'base_price' => 60000, 'currency_code' => 'TZS', 'effective_from' => now()->subDay(), 'status' => 'active',
+    ]);
+
+    $patient = makeRadiologyCutoverPatient();
+    makeRadiologyCutoverOrder($patient->id, $catalogItem->id);
+
+    $candidate = $this->actingAs(makeRadiologyCutoverUser())
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
+        ->assertOk()
+        ->json('data.0');
+
+    expect((float) $candidate['unitPrice'])->toBe(0.0)
+        ->and($candidate['pricingStatus'])->toBe('missing_catalog_price')
+        ->and($candidate['pricingSource'])->toBeNull();
 });

@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Billing\Application\Exceptions\DuplicateBillingPayerAuthorizationRuleCodeException;
 use App\Modules\Billing\Application\Exceptions\DuplicateBillingPayerContractCodeException;
 use App\Modules\Billing\Application\Exceptions\OverlappingBillingPayerContractPriceOverrideException;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
+use App\Modules\Billing\Application\Support\ChargeableItemPricingLookup;
 use App\Modules\Billing\Application\UseCases\CreateBillingPayerAuthorizationRuleUseCase;
 use App\Modules\Billing\Application\UseCases\CreateBillingPayerContractUseCase;
 use App\Modules\Billing\Application\UseCases\CreateBillingPayerContractPriceOverrideUseCase;
@@ -223,14 +223,15 @@ class BillingPayerContractController extends Controller
         string $id,
         Request $request,
         ListBillingPayerContractPriceOverridesUseCase $useCase,
-        BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        ChargeableItemPricingLookup $chargeableItemPricingLookup,
+        \App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface $platformScopeContext,
     ): JsonResponse {
         $result = $useCase->execute($id, $request->all());
         abort_if($result === null, 404, 'Billing payer contract not found.');
 
         return response()->json([
             'data' => array_map(
-                fn (array $override): array => $this->transformPriceOverride($override, $serviceCatalogRepository),
+                fn (array $override): array => $this->transformPriceOverride($override, $chargeableItemPricingLookup, $platformScopeContext),
                 $result['data'],
             ),
             'meta' => $result['meta'],
@@ -241,7 +242,8 @@ class BillingPayerContractController extends Controller
         string $id,
         StoreBillingPayerContractPriceOverrideRequest $request,
         CreateBillingPayerContractPriceOverrideUseCase $useCase,
-        BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        ChargeableItemPricingLookup $chargeableItemPricingLookup,
+        \App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface $platformScopeContext,
     ): JsonResponse {
         try {
             $override = $useCase->execute(
@@ -258,7 +260,7 @@ class BillingPayerContractController extends Controller
         abort_if($override === null, 404, 'Billing payer contract not found.');
 
         return response()->json([
-            'data' => $this->transformPriceOverride($override, $serviceCatalogRepository),
+            'data' => $this->transformPriceOverride($override, $chargeableItemPricingLookup, $platformScopeContext),
         ], 201);
     }
 
@@ -267,7 +269,8 @@ class BillingPayerContractController extends Controller
         string $overrideId,
         UpdateBillingPayerContractPriceOverrideRequest $request,
         UpdateBillingPayerContractPriceOverrideUseCase $useCase,
-        BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        ChargeableItemPricingLookup $chargeableItemPricingLookup,
+        \App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface $platformScopeContext,
     ): JsonResponse {
         try {
             $override = $useCase->execute(
@@ -285,7 +288,7 @@ class BillingPayerContractController extends Controller
         abort_if($override === null, 404, 'Billing payer contract price override not found.');
 
         return response()->json([
-            'data' => $this->transformPriceOverride($override, $serviceCatalogRepository),
+            'data' => $this->transformPriceOverride($override, $chargeableItemPricingLookup, $platformScopeContext),
         ]);
     }
 
@@ -294,7 +297,8 @@ class BillingPayerContractController extends Controller
         string $overrideId,
         UpdateBillingPayerContractPriceOverrideStatusRequest $request,
         UpdateBillingPayerContractPriceOverrideStatusUseCase $useCase,
-        BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        ChargeableItemPricingLookup $chargeableItemPricingLookup,
+        \App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface $platformScopeContext,
     ): JsonResponse {
         try {
             $override = $useCase->execute(
@@ -311,7 +315,7 @@ class BillingPayerContractController extends Controller
         abort_if($override === null, 404, 'Billing payer contract price override not found.');
 
         return response()->json([
-            'data' => $this->transformPriceOverride($override, $serviceCatalogRepository),
+            'data' => $this->transformPriceOverride($override, $chargeableItemPricingLookup, $platformScopeContext),
         ]);
     }
 
@@ -503,10 +507,11 @@ class BillingPayerContractController extends Controller
      */
     private function transformPriceOverride(
         array $override,
-        BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        ChargeableItemPricingLookup $chargeableItemPricingLookup,
+        \App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface $platformScopeContext,
     ): array {
         return BillingPayerContractPriceOverrideResponseTransformer::transform(
-            $this->withPriceOverridePricingImpact($override, $serviceCatalogRepository),
+            $this->withPriceOverridePricingImpact($override, $chargeableItemPricingLookup, $platformScopeContext),
         );
     }
 
@@ -516,22 +521,36 @@ class BillingPayerContractController extends Controller
      */
     private function withPriceOverridePricingImpact(
         array $override,
-        BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        ChargeableItemPricingLookup $chargeableItemPricingLookup,
+        \App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface $platformScopeContext,
     ): array {
+        $tenantId = $platformScopeContext->tenantId();
+        $facilityId = $platformScopeContext->facilityId();
+
         $catalogItem = null;
-        $linkedCatalogItemId = trim((string) ($override['billing_service_catalog_item_id'] ?? ''));
-        if ($linkedCatalogItemId !== '') {
-            $catalogItem = $serviceCatalogRepository->findById($linkedCatalogItemId);
+        $linkedChargeableItemId = trim((string) ($override['chargeable_item_id'] ?? ''));
+        $currencyCode = strtoupper(trim((string) ($override['currency_code'] ?? 'TZS')));
+        $asOfDateTime = $this->normalizeNullableDateTime($override['effective_from'] ?? null) ?? now()->toDateTimeString();
+
+        if ($linkedChargeableItemId !== '') {
+            $catalogItem = $chargeableItemPricingLookup->findById(
+                chargeableItemId: $linkedChargeableItemId,
+                currencyCode: $currencyCode,
+                asOfDateTime: $asOfDateTime,
+                tenantId: $tenantId,
+                facilityId: $facilityId,
+            );
         }
 
         if ($catalogItem === null) {
             $serviceCode = strtoupper(trim((string) ($override['service_code'] ?? '')));
-            $currencyCode = strtoupper(trim((string) ($override['currency_code'] ?? 'TZS')));
             if ($serviceCode !== '') {
-                $catalogItem = $serviceCatalogRepository->findActivePricingByServiceCode(
+                $catalogItem = $chargeableItemPricingLookup->findByServiceCode(
                     serviceCode: $serviceCode,
                     currencyCode: $currencyCode,
-                    asOfDateTime: $this->normalizeNullableDateTime($override['effective_from'] ?? null) ?? now()->toDateTimeString(),
+                    asOfDateTime: $asOfDateTime,
+                    tenantId: $tenantId,
+                    facilityId: $facilityId,
                 );
             }
         }

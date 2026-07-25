@@ -5,6 +5,7 @@ namespace App\Modules\Platform\Infrastructure\Models;
 use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ChargeableItemModel extends Model
@@ -21,6 +22,7 @@ class ChargeableItemModel extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'clinical_catalog_item_id',
         'tenant_id',
         'facility_id',
         'facility_tier',
@@ -34,6 +36,8 @@ class ChargeableItemModel extends Model
         'status',
         'status_reason',
         'metadata',
+        'tax_rate_percent',
+        'is_taxable',
     ];
 
     /**
@@ -43,6 +47,7 @@ class ChargeableItemModel extends Model
     {
         return [
             'metadata' => 'array',
+            'is_taxable' => 'boolean',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -51,5 +56,10 @@ class ChargeableItemModel extends Model
     public function priceBookEntries(): HasMany
     {
         return $this->hasMany(PriceBookEntryModel::class, 'chargeable_item_id');
+    }
+
+    public function clinicalCatalogItem(): BelongsTo
+    {
+        return $this->belongsTo(ClinicalCatalogItemModel::class, 'clinical_catalog_item_id');
     }
 }

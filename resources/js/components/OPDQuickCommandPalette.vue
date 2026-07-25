@@ -154,8 +154,8 @@ const routes: CommandRoute[] = [
         shortcut: 'G K',
     },
     {
-        label: 'Billable Service Catalog',
-        href: '/billing-service-catalog',
+        label: 'Chargeable Items',
+        href: '/chargeable-items',
         icon: 'receipt',
         shortcut: 'G 7',
     },
@@ -349,8 +349,8 @@ const createWorkflowRoutes: CommandRoute[] = [
         shortcut: 'C K',
     },
     {
-        label: 'Manage Billable Services',
-        href: '/billing-service-catalog',
+        label: 'Manage Chargeable Items',
+        href: '/chargeable-items',
         icon: 'receipt',
         shortcut: 'C 7',
     },
@@ -802,8 +802,8 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
             icon: 'stethoscope',
         },
         {
-            label: 'Open Billable Service Catalog',
-            href: '/billing-service-catalog',
+            label: 'Open Chargeable Items',
+            href: '/chargeable-items',
             icon: 'receipt',
         },
         {

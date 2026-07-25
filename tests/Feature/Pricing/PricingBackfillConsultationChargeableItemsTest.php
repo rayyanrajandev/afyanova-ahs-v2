@@ -82,17 +82,20 @@ it('reuses an existing chargeable item for the same code/tenant/facility instead
         ->and(ChargeableItemModel::query()->where('catalog_type', 'consultation')->count())->toBe(1);
 });
 
-it('deleting a tariff cascades to its mapping, leaving nothing orphaned for the backfill to skip', function (): void {
-    // consultation_mappings.billing_service_catalog_item_id is
-    // onDelete('cascade') -- a mapping can never actually outlive its
-    // tariff, so the command's "no tariff" guard is defensive against a
-    // relation lazy-loading to null, not a state reachable via normal
-    // deletes. Confirming the cascade itself, not an unreachable scenario.
+it('deleting a tariff nulls the mapping\'s legacy reference instead of destroying the mapping, and the backfill skips it cleanly', function (): void {
+    // PricingEngine_Migration_Plan.md Phase 5: consultation_mappings.billing_service_catalog_item_id
+    // changed from onDelete('cascade') to nullOnDelete() when it stopped
+    // being required -- a mapping's real pricing (chargeable_item_id)
+    // must survive a legacy tariff being cleaned up, not be destroyed by
+    // it. The command's "no tariff" guard is exactly what handles this.
     $tariff = makeConsultationTariffForBackfill();
     $mapping = makeConsultationMappingForBackfill($tariff->id);
     $tariff->delete();
 
-    expect(ConsultationMappingModel::query()->find($mapping->id))->toBeNull();
+    $mapping->refresh();
+    expect($mapping)->not->toBeNull()
+        ->and($mapping->billing_service_catalog_item_id)->toBeNull()
+        ->and($mapping->chargeable_item_id)->toBeNull();
 
     Artisan::call('pricing:backfill-consultation-chargeable-items');
 

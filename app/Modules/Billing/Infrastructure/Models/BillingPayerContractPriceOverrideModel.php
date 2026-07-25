@@ -23,6 +23,7 @@ class BillingPayerContractPriceOverrideModel extends Model
         'tenant_id',
         'facility_id',
         'billing_service_catalog_item_id',
+        'chargeable_item_id',
         'service_code',
         'service_name',
         'service_type',

@@ -7,10 +7,10 @@ use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractRepositoryInterface;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Encounter\Application\Services\EncounterResolverService;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use DateTimeInterface;
 
@@ -19,7 +19,6 @@ class AutoCaptureConsultationFeeUseCase
     public function __construct(
         private readonly AppointmentRepositoryInterface $appointmentRepository,
         private readonly BillingInvoiceRepositoryInterface $billingInvoiceRepository,
-        private readonly BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
         private readonly CreateBillingInvoiceUseCase $createBillingInvoiceUseCase,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
         private readonly BillingPayerContractRepositoryInterface $payerContractRepository,
@@ -68,49 +67,20 @@ class AutoCaptureConsultationFeeUseCase
             ? $performedAt->format(DateTimeInterface::ATOM)
             : (is_string($performedAt) ? $performedAt : null);
 
-        // 1. Explicit Mapping Lookup
-        $catalogItem = null;
+        // Explicit mapping lookup (tier + department -> chargeable item).
+        // PricingEngine_Migration_Plan.md Phase 5: this is now the *only*
+        // way a consultation auto-captures a price -- the old brittle
+        // CONSULT-{tier}-{dept} string-generation fallback is gone.
         $mapping = null;
         if ($tier !== null && $department !== '') {
             $mapping = ConsultationMappingModel::query()
                 ->where('clinician_tier', $tier)
                 ->where('department', $department)
-                ->with('billingServiceCatalogItem')
                 ->first();
-            if ($mapping) {
-                $catalogItem = $mapping->billingServiceCatalogItem?->toArray();
-            }
         }
 
-        // 2. Fallback to Brittle Generation Logic
-        if (!$catalogItem) {
-            $serviceCodes = $this->consultationServiceCodes($department, $clinicianContext);
-            $catalogItem = $this->findActivePricingByServiceCodes($serviceCodes, $currencyCode);
-        }
-
-        // No resolvable price for this clinician tier/department: leave the
-        // visit uncaptured rather than invoicing at TZS 0. It still surfaces
-        // as a pending candidate via ListBillingChargeCaptureCandidatesUseCase
-        // (pricingStatus: missing_catalog_price) for manual pricing/capture,
-        // instead of a phantom $0 invoice that looks resolved when it isn't.
-        if ($catalogItem === null) {
-            return ['captured' => false, 'reason' => 'no_catalog_price', 'invoice' => null];
-        }
-
-        $serviceName = $this->consultationServiceName($department, $clinicianContext);
-
-        $unitPrice = round(max((float) ($catalogItem['base_price'] ?? 0), 0), 2);
-        $normalizedServiceCode = strtoupper(trim((string) ($catalogItem['service_code'] ?? '')));
-
-        $resolvedUnit = trim((string) ($catalogItem['unit'] ?? 'visit'));
-        $resolvedDescription = trim((string) ($catalogItem['service_name'] ?? $serviceName));
-
-        // PricingEngine_Migration_Plan.md Phase 3, Consultation cutover.
-        // Only ever upgrades the price when an explicit mapping has been
-        // backfilled with a chargeable_item_id and the cutover flags are
-        // on; a null result leaves $unitPrice exactly as resolved above.
-        if ($tier !== null && $mapping !== null) {
-            $resolved = $this->consultationPricingResolver->resolveViaExplicitMapping(
+        $resolved = ($tier !== null && $mapping !== null)
+            ? $this->consultationPricingResolver->resolveViaExplicitMapping(
                 mapping: $mapping,
                 tier: $tier,
                 department: $department,
@@ -119,11 +89,24 @@ class AutoCaptureConsultationFeeUseCase
                 tenantId: $this->scopeContext->tenantId(),
                 facilityId: $this->scopeContext->facilityId(),
                 currencyCode: $currencyCode,
-            );
-            if ($resolved !== null && $resolved['pricingStatus'] === 'priced') {
-                $unitPrice = $resolved['unitPrice'];
-            }
+            )
+            : null;
+
+        // No resolvable price for this clinician tier/department: leave the
+        // visit uncaptured rather than invoicing at TZS 0. It still surfaces
+        // as a pending candidate via ListBillingChargeCaptureCandidatesUseCase
+        // (pricingStatus: missing_catalog_price) for manual pricing/capture,
+        // instead of a phantom $0 invoice that looks resolved when it isn't.
+        if ($resolved === null || $resolved['pricingStatus'] !== 'priced') {
+            return ['captured' => false, 'reason' => 'no_catalog_price', 'invoice' => null];
         }
+
+        $serviceName = $this->consultationServiceName($department, $clinicianContext);
+        $unitPrice = $resolved['unitPrice'];
+        $chargeableItem = ChargeableItemModel::query()->find($resolved['chargeableItemId']);
+        $normalizedServiceCode = strtoupper(trim((string) ($chargeableItem->code ?? '')));
+        $resolvedUnit = trim((string) ($chargeableItem->default_unit ?? 'visit'));
+        $resolvedDescription = $serviceName;
 
         $performedAtString = $performedAtStringForResolver;
 
@@ -248,46 +231,6 @@ class AutoCaptureConsultationFeeUseCase
         ];
     }
 
-    private function consultationServiceCodes(string $department, ?array $clinicianContext): array
-    {
-        $departmentToken = $this->serviceCodeToken($department);
-        $staffDepartmentToken = $this->serviceCodeToken((string) ($clinicianContext['profile']['department'] ?? ''));
-        $tier = $this->consultationClinicianTier($clinicianContext);
-        $specialtyTokens = $this->consultationSpecialtyTokens($clinicianContext);
-
-        $codes = [];
-
-        if ($tier !== null) {
-            foreach ($specialtyTokens as $specialtyToken) {
-                $codes[] = sprintf('CONSULT-%s-%s', $tier, $specialtyToken);
-            }
-        }
-
-        if ($tier !== null && $departmentToken !== '') {
-            $codes[] = sprintf('CONSULT-%s-%s', $tier, $departmentToken);
-        }
-
-        if ($tier !== null && $staffDepartmentToken !== '' && $staffDepartmentToken !== $departmentToken) {
-            $codes[] = sprintf('CONSULT-%s-%s', $tier, $staffDepartmentToken);
-        }
-
-        if ($tier !== null) {
-            $codes[] = sprintf('CONSULT-%s', $tier);
-        }
-
-        if ($departmentToken !== '') {
-            $codes[] = sprintf('CONSULT-%s', $departmentToken);
-        }
-
-        if ($staffDepartmentToken !== '' && $staffDepartmentToken !== $departmentToken) {
-            $codes[] = sprintf('CONSULT-%s', $staffDepartmentToken);
-        }
-
-        $codes[] = 'CONSULTATION';
-
-        return array_values(array_unique($codes));
-    }
-
     private function consultationServiceName(string $department, ?array $clinicianContext): string
     {
         $tier = $this->consultationClinicianTier($clinicianContext);
@@ -304,23 +247,6 @@ class AutoCaptureConsultationFeeUseCase
         $scope = $specialtyName !== '' ? $specialtyName : $department;
 
         return trim($scope) !== '' ? sprintf('%s - %s', $serviceName, trim($scope)) : $serviceName;
-    }
-
-    private function consultationSpecialtyTokens(?array $clinicianContext): array
-    {
-        $tokens = [];
-
-        foreach ([
-            $clinicianContext['specialty']['code'] ?? null,
-            $clinicianContext['specialty']['name'] ?? null,
-        ] as $value) {
-            $token = $this->serviceCodeToken((string) $value);
-            if ($token !== '') {
-                $tokens[] = $token;
-            }
-        }
-
-        return array_values(array_unique($tokens));
     }
 
     private function consultationClinicianTier(?array $clinicianContext): ?string
@@ -373,14 +299,6 @@ class AutoCaptureConsultationFeeUseCase
         }
 
         return false;
-    }
-
-    private function serviceCodeToken(string $value): string
-    {
-        $normalized = preg_replace('/[^A-Z0-9]+/', '-', strtoupper(trim($value)));
-        $normalized = trim((string) $normalized, '-');
-
-        return $normalized;
     }
 
     /**
@@ -451,23 +369,5 @@ class AutoCaptureConsultationFeeUseCase
             'decidedAt' => now()->toISOString(),
             'decidedBy' => 'AutoCaptureConsultationFeeUseCase',
         ];
-    }
-
-    private function findActivePricingByServiceCodes(array $serviceCodes, string $currencyCode): ?array
-    {
-        $pricingMap = $this->serviceCatalogRepository->findActivePricingByServiceCodes(
-            serviceCodes: $serviceCodes,
-            currencyCode: $currencyCode,
-            asOfDateTime: null,
-        );
-
-        foreach ($serviceCodes as $code) {
-            $normalized = strtoupper(trim($code));
-            if (isset($pricingMap[$normalized])) {
-                return $pricingMap[$normalized];
-            }
-        }
-
-        return null;
     }
 }

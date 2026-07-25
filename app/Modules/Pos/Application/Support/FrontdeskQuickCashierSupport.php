@@ -2,11 +2,12 @@
 
 namespace App\Modules\Pos\Application\Support;
 
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
+use App\Modules\Billing\Domain\Services\ChargeResolverInterface;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
@@ -25,7 +26,8 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 class FrontdeskQuickCashierSupport
 {
     public function __construct(
-        private readonly BillingServiceCatalogItemRepositoryInterface $billingServiceCatalogItemRepository,
+        private readonly ChargeResolverInterface $chargeResolver,
+        private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
         private readonly FeatureFlagResolverInterface $featureFlagResolver,
     ) {}
@@ -256,35 +258,44 @@ class FrontdeskQuickCashierSupport
     }
 
     /**
+     * PricingEngine_Migration_Plan.md Phase 5: prices via chargeable_item_id
+     * (price_book_entries), not the legacy service-catalog string match --
+     * every order-domain's own catalog FK doubles as the chargeable item id
+     * under the Phase 1 ID-reuse convention, the same FK
+     * ListBillingChargeCaptureCandidatesUseCase resolves through for the
+     * charge-capture flow.
+     *
      * @param  \Illuminate\Support\Collection<int, Model>  $orders
      * @param  string  $kind
      * @param  string  $catalogFk
      * @param  array<string, array<string, mixed>>  $catalogIndex
-     * @return array<string, array<string, mixed>|null>  Map of order_id => pricing or null
+     * @return array<string, array<string, mixed>|null>  Map of order_id => resolved price or null
      */
     public function batchPricingIndex($orders, string $kind, string $catalogFk, array $catalogIndex, string $currencyCode): array
     {
-        $serviceCodeMap = [];
-        foreach ($orders as $order) {
-            $catalogItem = $catalogIndex[(string) $order->{$catalogFk}] ?? null;
-            $code = $this->resolveServiceCode($order, $catalogItem, $kind);
-            if ($code !== null) {
-                $serviceCodeMap[(string) $order->id] = $code;
-            }
-        }
-
-        $uniqueCodes = array_values(array_unique(array_filter(array_values($serviceCodeMap))));
-        $pricingByCode = $uniqueCodes !== []
-            ? $this->billingServiceCatalogItemRepository->findActivePricingByServiceCodes(
-                serviceCodes: $uniqueCodes,
-                currencyCode: $currencyCode,
-                asOfDateTime: now()->toDateTimeString(),
-            )
-            : [];
+        $tenantId = $this->platformScopeContext->tenantId();
+        $facilityId = $this->platformScopeContext->facilityId();
 
         $result = [];
-        foreach ($serviceCodeMap as $orderId => $code) {
-            $result[$orderId] = $pricingByCode[$code] ?? null;
+        foreach ($orders as $order) {
+            $chargeableItemId = $this->nullableTrimmedValue($order->{$catalogFk} ?? null);
+            if ($chargeableItemId === null) {
+                $result[(string) $order->id] = null;
+
+                continue;
+            }
+
+            $resolved = $this->chargeResolver->resolvePrice(
+                chargeableItemId: $chargeableItemId,
+                quantityOrDuration: 1.0,
+                asOfDate: $this->performedAt($order),
+                tenantId: $tenantId,
+                facilityId: $facilityId,
+                payerContractId: null,
+                currencyCode: $currencyCode,
+            );
+
+            $result[(string) $order->id] = $resolved['pricingStatus'] === 'priced' ? $resolved : null;
         }
 
         return $result;
@@ -343,7 +354,7 @@ class FrontdeskQuickCashierSupport
      * @param  array<string, mixed>|null  $catalogItem
      * @param  array<string, array<string, mixed>>  $invoicedIndex
      * @param  array<string, array<string, mixed>>  $settledIndex
-     * @param  array<string, mixed>|null  $pricing  Pre-resolved pricing (skips DB when provided)
+     * @param  array<string, mixed>|null  $pricing  Pre-resolved ChargeResolver result (skips DB when provided)
      * @return array<string, mixed>
      */
     public function candidateFromOrder(
@@ -357,20 +368,26 @@ class FrontdeskQuickCashierSupport
         array $settledIndex,
         ?array $pricing = null,
     ): array {
-        $serviceCode = $this->resolveServiceCode($order, $catalogItem, $kind);
-        if ($pricing === null && $serviceCode !== null) {
-            $pricing = $this->billingServiceCatalogItemRepository->findActivePricingByServiceCodes(
-                serviceCodes: [$serviceCode],
+        $chargeableItemId = $this->nullableTrimmedValue($order->{$catalogFk} ?? null);
+
+        if ($pricing === null && $chargeableItemId !== null) {
+            $resolved = $this->chargeResolver->resolvePrice(
+                chargeableItemId: $chargeableItemId,
+                quantityOrDuration: 1.0,
+                asOfDate: $this->performedAt($order),
+                tenantId: $this->platformScopeContext->tenantId(),
+                facilityId: $this->platformScopeContext->facilityId(),
+                payerContractId: null,
                 currencyCode: $currencyCode,
-                asOfDateTime: $this->performedAt($order),
-            )[$serviceCode] ?? null;
+            );
+            $pricing = $resolved['pricingStatus'] === 'priced' ? $resolved : null;
         }
 
-        $resolvedServiceCode = strtoupper(trim((string) ($pricing['service_code'] ?? $serviceCode ?? '')));
-        $unitPrice = round(max((float) ($pricing['base_price'] ?? 0), 0), 2);
+        $resolvedServiceCode = strtoupper(trim((string) $this->resolveServiceCode($order, $catalogItem, $kind)));
+        $unitPrice = round(max((float) ($pricing['unitPrice'] ?? 0), 0), 2);
         $pricingStatus = $pricing !== null
             ? 'priced'
-            : ($serviceCode !== null ? 'missing_catalog_price' : 'missing_service_code');
+            : ($chargeableItemId !== null ? 'missing_catalog_price' : 'missing_service_code');
 
         $kindInvoicedIndex = $invoicedIndex[$kind] ?? [];
         $invoiceLink = $kindInvoicedIndex[(string) $order->id] ?? null;
@@ -386,8 +403,8 @@ class FrontdeskQuickCashierSupport
             'appointment_id' => $this->nullableTrimmedValue($order->appointment_id ?? null),
             'admission_id' => $this->nullableTrimmedValue($order->admission_id ?? null),
             'service_code' => $resolvedServiceCode !== '' ? $resolvedServiceCode : null,
-            'service_name' => trim((string) ($pricing['service_name'] ?? $this->resolveServiceName($order, $catalogItem, $pricing))),
-            'unit' => $this->resolveUnit($catalogItem, $pricing),
+            'service_name' => $this->resolveServiceName($order, $catalogItem),
+            'unit' => $this->resolveUnit($catalogItem),
             'source_status' => $order->status,
             'ordered_at' => $this->dateTimeString($order->ordered_at ?? $order->created_at ?? null),
             'performed_at' => $this->performedAt($order),
@@ -395,8 +412,8 @@ class FrontdeskQuickCashierSupport
             'unit_price' => $unitPrice,
             'line_total' => $unitPrice,
             'pricing_status' => $pricingStatus,
-            'pricing_source' => $pricing !== null ? 'service_catalog' : null,
-            'pricing_source_id' => $pricing['id'] ?? null,
+            'pricing_source' => $pricing !== null ? 'chargeable_item' : null,
+            'pricing_source_id' => $pricing !== null ? $chargeableItemId : null,
             'already_invoiced' => $invoiceLink !== null,
             'invoice_id' => $invoiceLink['invoiceId'] ?? null,
             'invoice_number' => $invoiceLink['invoiceNumber'] ?? null,
@@ -491,14 +508,10 @@ class FrontdeskQuickCashierSupport
 
     /**
      * @param  array<string, mixed>|null  $catalogItem
-     * @param  array<string, mixed>|null  $pricing
      */
-    private function resolveServiceName(
-        Model $order,
-        ?array $catalogItem,
-        ?array $pricing,
-    ): string {
-        $fallbacks = [$pricing['service_name'] ?? null, $catalogItem['name'] ?? null, ...$this->orderNameFallbacks($order)];
+    private function resolveServiceName(Model $order, ?array $catalogItem): string
+    {
+        $fallbacks = [$catalogItem['name'] ?? null, ...$this->orderNameFallbacks($order)];
 
         foreach ($fallbacks as $value) {
             $normalized = trim((string) $value);
@@ -532,22 +545,12 @@ class FrontdeskQuickCashierSupport
 
     /**
      * @param  array<string, mixed>|null  $catalogItem
-     * @param  array<string, mixed>|null  $pricing
      */
-    private function resolveUnit(?array $catalogItem, ?array $pricing): string
+    private function resolveUnit(?array $catalogItem): string
     {
-        foreach ([
-            $pricing['unit'] ?? null,
-            $catalogItem['unit'] ?? null,
-            'unit',
-        ] as $value) {
-            $normalized = trim((string) $value);
-            if ($normalized !== '') {
-                return $normalized;
-            }
-        }
+        $normalized = trim((string) ($catalogItem['unit'] ?? ''));
 
-        return 'unit';
+        return $normalized !== '' ? $normalized : 'unit';
     }
 
     private function orderNumber(Model $order, string $kind): string

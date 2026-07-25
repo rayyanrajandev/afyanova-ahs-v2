@@ -12,14 +12,15 @@ use App\Modules\Billing\Infrastructure\Models\BillingInvoicePaymentModel;
 use App\Modules\Billing\Infrastructure\Models\GLJournalEntryModel;
 use App\Modules\Billing\Infrastructure\Models\RevenueRecognitionModel;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
+use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
+use App\Modules\Platform\Infrastructure\Models\FacilityResourceModel;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
-use App\Modules\Staff\Infrastructure\Models\ClinicalSpecialtyModel;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
-use App\Modules\Staff\Infrastructure\Models\StaffProfileSpecialtyModel;
-use App\Modules\Staff\Infrastructure\Models\StaffRegulatoryProfileModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
@@ -129,6 +130,63 @@ function makeBillingBedDayTariff(array $overrides = []): BillingServiceCatalogIt
         'status' => 'active',
         'status_reason' => null,
     ], $overrides));
+}
+
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: bed-day pricing is keyed on the
+ * bed's own facility_resources.chargeable_item_id -- the old
+ * ward-specific-then-flat string-match cascade is gone. Returns the bed
+ * resource so callers can attach it to an admission's bed_resource_id.
+ */
+function makeBillingBedResourceWithPrice(string $wardName, float $price, string $code = 'BED-DAY', string $name = 'Bed Charge'): FacilityResourceModel
+{
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->fill([
+        'catalog_type' => 'bed_day', 'charge_model' => 'flat', 'code' => $code, 'name' => $name, 'status' => 'active',
+    ]);
+    $chargeableItem->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $chargeableItem->id, 'currency_code' => 'TZS', 'unit_price' => $price, 'status' => 'active',
+    ]);
+
+    return FacilityResourceModel::query()->create([
+        'resource_type' => 'ward_bed', 'code' => 'BED'.strtoupper(Str::random(6)),
+        'name' => $wardName.' Bed', 'ward_name' => $wardName, 'bed_number' => 'A-02',
+        'status' => 'active', 'chargeable_item_id' => $chargeableItem->id,
+    ]);
+}
+
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: consultation pricing is keyed
+ * on (clinician_tier, department) only, via chargeable_item_id -- the old
+ * string-match cascade (specialty-first, then department, then generic)
+ * is gone.
+ */
+function makeBillingConsultationMapping(string $tier, string $department, float $price, string $code = 'CONSULT', string $name = 'Consultation'): ConsultationMappingModel
+{
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->fill([
+        'catalog_type' => 'consultation',
+        'charge_model' => 'flat',
+        'code' => $code,
+        'name' => $name,
+        'status' => 'active',
+    ]);
+    $chargeableItem->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $chargeableItem->id,
+        'currency_code' => 'TZS',
+        'unit_price' => $price,
+        'status' => 'active',
+    ]);
+
+    return ConsultationMappingModel::query()->create([
+        'chargeable_item_id' => $chargeableItem->id,
+        'clinician_tier' => $tier,
+        'department' => $department,
+    ]);
 }
 
 function makeBillingStaffProfileForUser(User $user, array $overrides = []): StaffProfileModel
@@ -434,25 +492,19 @@ it('continues the active draft for the same patient billing context instead of c
 it('captures consultation visits as billable invoice source lines', function (): void {
     $user = makeBillingUser();
     $patient = makeBillingPatient();
-    $appointment = makeBillingAppointment($patient->id);
-
-    BillingServiceCatalogItemModel::query()->create([
-        'service_code' => 'CONSULT-OUTPATIENT',
-        'service_name' => 'Outpatient Consultation',
-        'service_type' => 'consultation',
+    $clinician = User::factory()->create();
+    $appointment = makeBillingAppointment($patient->id, [
+        'clinician_user_id' => $clinician->id,
+        'consultation_owner_user_id' => $clinician->id,
         'department' => 'Outpatient',
-        'unit' => 'visit',
-        'base_price' => 35000,
-        'currency_code' => 'TZS',
-        'tax_rate_percent' => 0,
-        'is_taxable' => false,
-        'effective_from' => now()->subDay()->toDateTimeString(),
-        'effective_to' => null,
-        'description' => 'Consultation charge capture tariff',
-        'metadata' => null,
-        'status' => 'active',
-        'status_reason' => null,
     ]);
+
+    makeBillingStaffProfileForUser($clinician, [
+        'job_title' => 'Clinical Officer',
+        'license_type' => 'CO',
+    ]);
+
+    makeBillingConsultationMapping('CO', 'Outpatient', 35000, 'CONSULT-OUTPATIENT', 'Outpatient Consultation');
 
     $candidate = $this->actingAs($user)
         ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
@@ -463,8 +515,9 @@ it('captures consultation visits as billable invoice source lines', function ():
 
     expect($candidate['sourceWorkflowKind'])->toBe('appointment_consultation')
         ->and($candidate['sourceWorkflowId'])->toBe($appointment->id)
-        ->and($candidate['serviceCode'])->toBe('CONSULT-OUTPATIENT')
-        ->and($candidate['pricingStatus'])->toBe('priced');
+        ->and($candidate['pricingStatus'])->toBe('priced')
+        ->and($candidate['pricingSource'])->toBe('chargeable_item')
+        ->and((float) $candidate['unitPrice'])->toBe(35000.0);
 
     $this->actingAs($user)
         ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
@@ -490,7 +543,6 @@ it('captures consultation visits as billable invoice source lines', function ():
         ->assertCreated()
         ->assertJsonPath('data.lineItems.0.sourceWorkflowKind', 'appointment_consultation')
         ->assertJsonPath('data.lineItems.0.sourceWorkflowId', $appointment->id)
-        ->assertJsonPath('data.lineItems.0.serviceCode', 'CONSULT-OUTPATIENT')
         ->assertJsonPath('data.lineItems.0.lineTotal', 35000);
 });
 
@@ -511,11 +563,11 @@ it('accepts true false query strings for billing charge capture include invoiced
 it('generates one bed-day charge capture candidate per elapsed calendar day of an admission', function (): void {
     $user = makeBillingUser();
     $patient = makeBillingPatient();
+    $bed = makeBillingBedResourceWithPrice('Ward A', 20000);
     $admission = makeBillingAdmission($patient->id, [
+        'bed_resource_id' => $bed->id,
         'admitted_at' => now()->subHours(26)->toDateTimeString(),
     ]);
-
-    makeBillingBedDayTariff();
 
     $response = $this->actingAs($user)
         ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&admissionId='.$admission->id.'&currencyCode=TZS')
@@ -531,24 +583,28 @@ it('generates one bed-day charge capture candidate per elapsed calendar day of a
             $admission->id.':2',
             $admission->id.':1',
         ])
-        ->and($bedDayCandidates->pluck('serviceCode')->unique()->all())->toBe(['BED-DAY'])
+        ->and($bedDayCandidates->pluck('pricingSource')->unique()->all())->toBe(['chargeable_item'])
         ->and($bedDayCandidates->pluck('unitPrice')->unique()->all())->toBe([20000])
         ->and($bedDayCandidates->pluck('unit')->unique()->all())->toBe(['day']);
 });
 
-it('prices bed-day charges by ward-specific tariff before the flat bed-day fallback', function (): void {
+it('prices bed-day charges via the bed\'s assigned chargeable item, ignoring any legacy tariff', function (): void {
     $user = makeBillingUser();
     $patient = makeBillingPatient();
+    $bed = makeBillingBedResourceWithPrice('ICU', 120000, 'BED-ICU', 'ICU Bed Charge');
     $admission = makeBillingAdmission($patient->id, [
         'ward' => 'ICU',
+        'bed_resource_id' => $bed->id,
         'admitted_at' => now()->subHours(2)->toDateTimeString(),
     ]);
 
+    // Legacy tariffs for the same ward, deliberately present, to prove
+    // they're genuinely never consulted anymore.
     makeBillingBedDayTariff();
     makeBillingBedDayTariff([
         'service_code' => 'BED-ICU',
         'service_name' => 'ICU Bed Charge',
-        'base_price' => 120000,
+        'base_price' => 20000,
     ]);
 
     $candidate = $this->actingAs($user)
@@ -557,19 +613,18 @@ it('prices bed-day charges by ward-specific tariff before the flat bed-day fallb
         ->assertJsonPath('meta.pending', 1)
         ->json('data.0');
 
-    expect($candidate['serviceCode'])->toBe('BED-ICU')
-        ->and($candidate['unitPrice'])->toBe(120000)
-        ->and($candidate['pricingLookupCodes'])->toContain('BED-ICU', 'BED-DAY');
+    expect($candidate['unitPrice'])->toBe(120000)
+        ->and($candidate['pricingSource'])->toBe('chargeable_item');
 });
 
 it('excludes already-invoiced bed-days while still surfacing newly elapsed ones', function (): void {
     $user = makeBillingUser();
     $patient = makeBillingPatient();
+    $bed = makeBillingBedResourceWithPrice('Ward A', 20000);
     $admission = makeBillingAdmission($patient->id, [
+        'bed_resource_id' => $bed->id,
         'admitted_at' => now()->subHours(26)->toDateTimeString(),
     ]);
-
-    makeBillingBedDayTariff();
 
     $this->actingAs($user)
         ->postJson('/api/v1/billing', billingInvoicePayload($patient->id, [
@@ -598,7 +653,7 @@ it('excludes already-invoiced bed-days while still surfacing newly elapsed ones'
         ->assertJsonPath('data.0.sourceWorkflowId', $admission->id.':2');
 });
 
-it('prices consultation visits by clinician cadre before department fallback', function (): void {
+it('prices consultation visits via the clinician tier + department mapping', function (): void {
     $user = makeBillingUser();
     $patient = makeBillingPatient();
     $clinician = User::factory()->create();
@@ -613,17 +668,11 @@ it('prices consultation visits by clinician cadre before department fallback', f
         'license_type' => 'CO',
     ]);
 
-    makeBillingConsultationTariff([
-        'service_code' => 'CONSULT-OUTPATIENT',
-        'service_name' => 'Outpatient Consultation',
-        'base_price' => 35000,
-    ]);
-
-    makeBillingConsultationTariff([
-        'service_code' => 'CONSULT-CO-OUTPATIENT',
-        'service_name' => 'Clinical Officer Outpatient Consultation',
-        'base_price' => 18000,
-    ]);
+    // A different tier's mapping for the same department must not apply --
+    // proves the lookup is genuinely tier-specific, not just "the only
+    // mapping that exists."
+    makeBillingConsultationMapping('MD', 'Outpatient', 35000, 'CONSULT-MD-OUTPATIENT', 'Medical Doctor Outpatient Consultation');
+    makeBillingConsultationMapping('CO', 'Outpatient', 18000, 'CONSULT-CO-OUTPATIENT', 'Clinical Officer Outpatient Consultation');
 
     $candidate = $this->actingAs($user)
         ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
@@ -632,76 +681,42 @@ it('prices consultation visits by clinician cadre before department fallback', f
         ->assertJsonPath('meta.priced', 1)
         ->json('data.0');
 
-    expect($candidate['serviceCode'])->toBe('CONSULT-CO-OUTPATIENT')
-        ->and($candidate['unitPrice'])->toBe(18000)
-        ->and($candidate['pricingLookupCodes'])->toContain('CONSULT-CO-OUTPATIENT', 'CONSULT-OUTPATIENT', 'CONSULTATION');
+    expect((float) $candidate['unitPrice'])->toBe(18000.0)
+        ->and($candidate['pricingStatus'])->toBe('priced')
+        ->and($candidate['pricingSource'])->toBe('chargeable_item');
 });
 
-it('prices specialist consultation visits by primary specialty before generic specialist tariffs', function (): void {
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: the old system could price a
+ * specific *specialty* (e.g. Cardiology) differently from a generic
+ * specialist, even under the same appointment department. The new
+ * ConsultationMappingModel has no specialty dimension -- only
+ * (clinician_tier, department) -- so that granularity is gone by design.
+ * In practice this means specialty-specific pricing now requires booking
+ * the appointment under a specialty-specific department (as this test
+ * does), rather than a generic one with specialty resolved from the
+ * clinician's profile.
+ */
+it('prices specialist consultation visits by the appointment department, not the old specialty cascade', function (): void {
     $user = makeBillingUser();
     $patient = makeBillingPatient();
-    $assignedClinician = User::factory()->create();
     $consultationOwner = User::factory()->create();
     $appointment = makeBillingAppointment($patient->id, [
-        'clinician_user_id' => $assignedClinician->id,
+        'clinician_user_id' => $consultationOwner->id,
         'consultation_owner_user_id' => $consultationOwner->id,
-        'department' => 'Outpatient',
+        'department' => 'Cardiology',
     ]);
 
-    makeBillingStaffProfileForUser($assignedClinician, [
-        'job_title' => 'Clinical Officer',
-        'license_type' => 'CO',
-    ]);
-
-    $specialistProfile = makeBillingStaffProfileForUser($consultationOwner, [
+    makeBillingStaffProfileForUser($consultationOwner, [
         'department' => 'Cardiology',
         'job_title' => 'Consultant Cardiologist',
         'license_type' => 'MD',
     ]);
 
-    StaffRegulatoryProfileModel::query()->create([
-        'staff_profile_id' => $specialistProfile->id,
-        'tenant_id' => null,
-        'primary_regulator_code' => 'MCT',
-        'cadre_code' => 'SPECIALIST_MD',
-        'professional_title' => 'Consultant Cardiologist',
-        'registration_type' => 'full',
-        'practice_authority_level' => 'independent',
-        'supervision_level' => 'none',
-        'good_standing_status' => 'good_standing',
-        'good_standing_checked_at' => null,
-        'notes' => null,
-        'created_by_user_id' => null,
-        'updated_by_user_id' => null,
-    ]);
-
-    $specialty = ClinicalSpecialtyModel::query()->create([
-        'tenant_id' => null,
-        'code' => 'CARDIOLOGY',
-        'name' => 'Cardiology',
-        'description' => null,
-        'status' => 'active',
-        'status_reason' => null,
-    ]);
-
-    StaffProfileSpecialtyModel::query()->create([
-        'staff_profile_id' => $specialistProfile->id,
-        'specialty_id' => $specialty->id,
-        'is_primary' => true,
-    ]);
-
-    makeBillingConsultationTariff([
-        'service_code' => 'CONSULT-SPECIALIST-OUTPATIENT',
-        'service_name' => 'Specialist Outpatient Consultation',
-        'base_price' => 50000,
-    ]);
-
-    makeBillingConsultationTariff([
-        'service_code' => 'CONSULT-SPECIALIST-CARDIOLOGY',
-        'service_name' => 'Cardiology Specialist Consultation',
-        'department' => 'Cardiology',
-        'base_price' => 65000,
-    ]);
+    // A generic specialist mapping for a different department must not
+    // apply -- proves the lookup is genuinely department-specific.
+    makeBillingConsultationMapping('SPECIALIST', 'Outpatient', 50000, 'CONSULT-SPECIALIST-OUTPATIENT', 'Specialist Outpatient Consultation');
+    makeBillingConsultationMapping('SPECIALIST', 'Cardiology', 65000, 'CONSULT-SPECIALIST-CARDIOLOGY', 'Cardiology Specialist Consultation');
 
     $candidate = $this->actingAs($user)
         ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&appointmentId='.$appointment->id.'&currencyCode=TZS')
@@ -710,13 +725,12 @@ it('prices specialist consultation visits by primary specialty before generic sp
         ->assertJsonPath('meta.priced', 1)
         ->json('data.0');
 
-    expect($candidate['serviceCode'])->toBe('CONSULT-SPECIALIST-CARDIOLOGY')
-        ->and($candidate['unitPrice'])->toBe(65000)
-        ->and($candidate['serviceName'])->toBe('Cardiology Specialist Consultation')
-        ->and($candidate['pricingLookupCodes'])->toContain('CONSULT-SPECIALIST-CARDIOLOGY', 'CONSULT-SPECIALIST-OUTPATIENT', 'CONSULTATION');
+    expect((float) $candidate['unitPrice'])->toBe(65000.0)
+        ->and($candidate['pricingStatus'])->toBe('priced')
+        ->and($candidate['pricingSource'])->toBe('chargeable_item');
 });
 
-it('prices completed radiology orders from the billing service catalog', function (): void {
+it('prices completed radiology orders via the chargeable item, not the old billing service catalog', function (): void {
     $user = makeBillingUser();
     $patient = makeBillingPatient();
     $appointment = makeBillingAppointment($patient->id);
@@ -742,6 +756,17 @@ it('prices completed radiology orders from the billing service catalog', functio
         'status_reason' => null,
     ]);
 
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->id = $catalogItem->id;
+    $chargeableItem->fill([
+        'catalog_type' => 'radiology_procedure', 'charge_model' => 'flat', 'code' => 'RAD-USA-001', 'name' => 'Abdominal Ultrasound', 'status' => 'active',
+    ]);
+    $chargeableItem->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $catalogItem->id, 'currency_code' => 'TZS', 'unit_price' => 60000, 'status' => 'active',
+    ]);
+
     $order = RadiologyOrderModel::query()->create([
         'order_number' => 'RAD'.now()->format('Ymd').strtoupper(Str::random(6)),
         'tenant_id' => null,
@@ -763,6 +788,8 @@ it('prices completed radiology orders from the billing service catalog', functio
         'status_reason' => null,
     ]);
 
+    // A legacy tariff for the same code, deliberately present, to prove
+    // it's genuinely never consulted anymore.
     makeBillingRadiologyTariff();
 
     $candidate = $this->actingAs($user)
@@ -774,6 +801,7 @@ it('prices completed radiology orders from the billing service catalog', functio
         ->and($candidate['sourceWorkflowId'])->toBe($order->id)
         ->and($candidate['serviceCode'])->toBe('RAD-USA-001')
         ->and($candidate['pricingStatus'])->toBe('priced')
+        ->and($candidate['pricingSource'])->toBe('chargeable_item')
         ->and((float) $candidate['unitPrice'])->toBe(60000.0)
         ->and((float) $candidate['lineTotal'])->toBe(60000.0);
 });

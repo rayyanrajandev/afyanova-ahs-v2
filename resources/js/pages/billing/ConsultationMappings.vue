@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useChargeableItemOptions } from '@/composables/chargeableItems/useChargeableItemOptions';
 import { CLINICIAN_TIER_OPTIONS, useConsultationMappings, type ConsultationMapping } from '@/composables/consultationMappings/useConsultationMappings';
 import { useDeleteConsultationMapping } from '@/composables/consultationMappings/useDeleteConsultationMapping';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -39,20 +40,30 @@ function invalidateMappingQueries(): void {
     void queryClient.invalidateQueries({ queryKey: ['consultation-mappings'] });
 }
 
+const { options: pricingItemOptions } = useChargeableItemOptions('consultation');
+
 function tierLabel(tier: string | null | undefined): string {
     return CLINICIAN_TIER_OPTIONS.find((option) => option.value === tier)?.label ?? tier ?? 'Unknown tier';
 }
 
-function catalogItemLabel(item: ConsultationMapping['catalogItem']): string {
-    if (!item) return 'Catalog item unavailable';
-    return item.serviceName || item.serviceCode || 'Unnamed service';
+function pricingItemLabel(mapping: ConsultationMapping): string {
+    const match = pricingItemOptions.value.find((option) => option.value === mapping.chargeableItemId);
+    if (match) return match.label;
+    // Legacy fallback for a mapping created before Phase 5 that somehow
+    // still has no chargeable_item_id -- shouldn't happen going forward
+    // since it's now a required field, but avoids a blank label if it does.
+    if (mapping.catalogItem) return mapping.catalogItem.serviceName || mapping.catalogItem.serviceCode || 'Unnamed service';
+    return 'Pricing item unavailable';
 }
 
-function catalogItemMeta(mapping: ConsultationMapping): string {
-    const item = mapping.catalogItem;
-    if (!item) return mapping.department;
-    const price = formatMoney(item.basePrice === null ? null : String(item.basePrice), null);
-    return `${mapping.department} · ${catalogItemLabel(item)} · ${price}`;
+function pricingItemMeta(mapping: ConsultationMapping): string {
+    const match = pricingItemOptions.value.find((option) => option.value === mapping.chargeableItemId);
+    if (match) return `${mapping.department} · ${match.label}${match.description ? ' · ' + match.description : ''}`;
+    if (mapping.catalogItem) {
+        const price = formatMoney(mapping.catalogItem.basePrice === null ? null : String(mapping.catalogItem.basePrice), null);
+        return `${mapping.department} · ${pricingItemLabel(mapping)} · ${price}`;
+    }
+    return mapping.department;
 }
 
 // --- Stat tiles ---
@@ -86,8 +97,7 @@ const filteredMappings = computed(() => {
     return tierFiltered.filter((mapping) => {
         const haystack = [
             mapping.department,
-            mapping.catalogItem?.serviceName,
-            mapping.catalogItem?.serviceCode,
+            pricingItemLabel(mapping),
         ]
             .filter(Boolean)
             .join(' ')
@@ -163,7 +173,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <div class="min-w-0 space-y-0.5">
                         <h1 class="text-lg font-bold tracking-tight md:text-xl">Consultation Mappings</h1>
                         <p class="text-sm text-muted-foreground">
-                            Map clinician tier + department to a priced service catalog item so consultation charges auto-bill correctly.
+                            Map clinician tier + department to a priced pricing item so consultation charges auto-bill correctly.
                         </p>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
@@ -236,8 +246,8 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <AlertTitle>Why this matters</AlertTitle>
                         <AlertDescription>
                             Consultation charge capture matches a completed appointment's clinician tier and department against
-                            these mappings first. A tier/department combination with no mapping falls back to a brittle
-                            service-code guess, and may leave the visit uncaptured entirely.
+                            these mappings. A tier/department combination with no mapping (or a mapping with no priced pricing
+                            item) is left uncaptured for manual pricing, rather than being auto-billed at an unpriced amount.
                         </AlertDescription>
                     </Alert>
 
@@ -255,7 +265,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <div v-else-if="mappings.length === 0" class="rounded-lg border border-dashed bg-card px-5 py-5">
                         <p class="text-sm font-medium text-foreground">No consultation mappings configured yet</p>
                         <p class="mt-1 text-xs text-muted-foreground">
-                            Consultation charges will fall back to a brittle service-code guess until at least one mapping
+                            Consultation charges will be left uncaptured for manual pricing until at least one mapping
                             exists for each active tier/department pair.
                         </p>
                         <Button v-if="canManage" size="sm" class="mt-3 h-8 gap-1.5" @click="createSheetOpen = true">
@@ -279,11 +289,11 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     <template #title>
                                         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                             <Badge>{{ tierLabel(mapping.clinicianTier) }}</Badge>
-                                            <span class="truncate text-sm font-medium">{{ catalogItemLabel(mapping.catalogItem) }}</span>
+                                            <span class="truncate text-sm font-medium">{{ pricingItemLabel(mapping) }}</span>
                                         </div>
                                     </template>
                                     <template #meta>
-                                        <p class="truncate text-xs text-muted-foreground">{{ catalogItemMeta(mapping) }}</p>
+                                        <p class="truncate text-xs text-muted-foreground">{{ pricingItemMeta(mapping) }}</p>
                                     </template>
                                     <template v-if="canManage" #actions>
                                         <Button size="sm" variant="ghost" class="h-7 gap-1 px-2 text-xs" @click="openEditSheet(mapping)">
@@ -310,7 +320,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <DialogTitle>Delete consultation mapping?</DialogTitle>
                     <DialogDescription>
                         Consultation charges for {{ deleteTarget?.department ?? 'this department' }}
-                        ({{ tierLabel(deleteTarget?.clinicianTier) }}) will fall back to the brittle service-code guess once
+                        ({{ tierLabel(deleteTarget?.clinicianTier) }}) will be left uncaptured for manual pricing once
                         this mapping is removed.
                     </DialogDescription>
                 </DialogHeader>

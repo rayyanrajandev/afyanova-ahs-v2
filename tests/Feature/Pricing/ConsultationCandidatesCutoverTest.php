@@ -2,7 +2,6 @@
 
 use App\Models\User;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
-use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
 use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
@@ -11,15 +10,16 @@ use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: Consultation's legacy
+ * string-match fallback is gone entirely -- consultationCandidates() now
+ * unconditionally prices via the explicit ConsultationMappingModel ->
+ * chargeable_item_id path, with no feature flag left to gate it and no
+ * legacy price to fall back to. A mapping with no priced chargeable item
+ * is genuinely unpriced ('missing_catalog_price'), not a silent
+ * string-match rescue.
+ */
 uses(RefreshDatabase::class);
-
-function setConsultationCandidatesCutoverFlags(bool $master, bool $consultation): void
-{
-    $flags = config('feature_flags.flags');
-    $flags['pricing.engine.v2']['enabled'] = $master;
-    $flags['pricing.engine.v2.consultation']['enabled'] = $consultation;
-    config(['feature_flags.flags' => $flags]);
-}
 
 function makeConsultationCandidateUser(): User
 {
@@ -65,52 +65,28 @@ function makeConsultationCandidateAppointment(string $patientId, ?int $clinician
     ]);
 }
 
-function setUpConsultationCandidateMapping(float $legacyPrice, float $newResolverPrice): BillingServiceCatalogItemModel
+function setUpConsultationCandidateMapping(float $price): ConsultationMappingModel
 {
-    $tariff = BillingServiceCatalogItemModel::query()->create([
-        'service_code' => 'CONSULT-CO-GENERAL-OPD', 'service_name' => 'CO General OPD Consultation',
-        'service_type' => 'consultation', 'department' => 'General OPD', 'unit' => 'visit',
-        'base_price' => $legacyPrice, 'currency_code' => 'TZS', 'effective_from' => now()->subDay(), 'status' => 'active',
-    ]);
-
     $chargeableItem = new ChargeableItemModel();
-    $chargeableItem->fill(['catalog_type' => 'consultation', 'charge_model' => 'flat', 'code' => $tariff->service_code, 'name' => $tariff->service_name, 'status' => 'active']);
+    $chargeableItem->fill([
+        'catalog_type' => 'consultation', 'charge_model' => 'flat',
+        'code' => 'CONSULT-CO-GENERAL-OPD', 'name' => 'CO General OPD Consultation', 'status' => 'active',
+    ]);
     $chargeableItem->save();
 
     PriceBookEntryModel::query()->create([
-        'chargeable_item_id' => $chargeableItem->id, 'currency_code' => 'TZS', 'unit_price' => $newResolverPrice, 'status' => 'active',
+        'chargeable_item_id' => $chargeableItem->id, 'currency_code' => 'TZS', 'unit_price' => $price, 'status' => 'active',
     ]);
 
-    ConsultationMappingModel::query()->create([
-        'billing_service_catalog_item_id' => $tariff->id,
+    return ConsultationMappingModel::query()->create([
         'chargeable_item_id' => $chargeableItem->id,
         'clinician_tier' => 'CO',
         'department' => 'General OPD',
     ]);
-
-    return $tariff;
 }
 
-it('consultationCandidates never checks the mapping when cutover flags are off (parity proof)', function (): void {
-    setConsultationCandidatesCutoverFlags(master: false, consultation: false);
-
-    setUpConsultationCandidateMapping(legacyPrice: 15000, newResolverPrice: 22000);
-    $patient = makeConsultationCandidatePatient();
-    $clinician = makeConsultationCandidateClinician();
-    makeConsultationCandidateAppointment($patient->id, $clinician->id);
-
-    $candidate = $this->actingAs(makeConsultationCandidateUser())
-        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
-        ->assertOk()
-        ->json('data.0');
-
-    expect((float) $candidate['unitPrice'])->toBe(15000.0)
-        ->and($candidate['pricingSource'])->toBe('service_catalog');
-});
-
-it('consultationCandidates gains the mapping check and cuts over to the chargeable_item price once both flags are on', function (): void {
-    setConsultationCandidatesCutoverFlags(master: true, consultation: true);
-    setUpConsultationCandidateMapping(legacyPrice: 15000, newResolverPrice: 22000);
+it('consultationCandidates prices via the mapping\'s chargeable item', function (): void {
+    setUpConsultationCandidateMapping(22000);
     $patient = makeConsultationCandidatePatient();
     $clinician = makeConsultationCandidateClinician();
     makeConsultationCandidateAppointment($patient->id, $clinician->id);
@@ -121,17 +97,39 @@ it('consultationCandidates gains the mapping check and cuts over to the chargeab
         ->json('data.0');
 
     expect((float) $candidate['unitPrice'])->toBe(22000.0)
+        ->and($candidate['pricingStatus'])->toBe('priced')
         ->and($candidate['pricingSource'])->toBe('chargeable_item');
 });
 
-it('consultationCandidates falls back to the string-matched price when flags are on but no mapping exists for the tier/department', function (): void {
-    setConsultationCandidatesCutoverFlags(master: true, consultation: true);
-    BillingServiceCatalogItemModel::query()->create([
-        'service_code' => 'CONSULT-CO-GENERAL-OPD', 'service_name' => 'CO General OPD Consultation',
-        'service_type' => 'consultation', 'department' => 'General OPD', 'unit' => 'visit',
-        'base_price' => 15000, 'currency_code' => 'TZS', 'effective_from' => now()->subDay(), 'status' => 'active',
-    ]);
+it('consultationCandidates reports missing_catalog_price when no mapping exists for the tier/department', function (): void {
     // Deliberately no ConsultationMappingModel row.
+    $patient = makeConsultationCandidatePatient();
+    $clinician = makeConsultationCandidateClinician();
+    makeConsultationCandidateAppointment($patient->id, $clinician->id);
+
+    $candidate = $this->actingAs(makeConsultationCandidateUser())
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
+        ->assertOk()
+        ->json('data.0');
+
+    expect((float) $candidate['unitPrice'])->toBe(0.0)
+        ->and($candidate['pricingStatus'])->toBe('missing_catalog_price')
+        ->and($candidate['pricingSource'])->toBeNull();
+});
+
+it('consultationCandidates reports missing_catalog_price when the mapping exists but has no active price', function (): void {
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->fill([
+        'catalog_type' => 'consultation', 'charge_model' => 'flat',
+        'code' => 'CONSULT-CO-GENERAL-OPD', 'name' => 'CO General OPD Consultation', 'status' => 'active',
+    ]);
+    $chargeableItem->save();
+    // Deliberately no PriceBookEntryModel row.
+    ConsultationMappingModel::query()->create([
+        'chargeable_item_id' => $chargeableItem->id,
+        'clinician_tier' => 'CO',
+        'department' => 'General OPD',
+    ]);
 
     $patient = makeConsultationCandidatePatient();
     $clinician = makeConsultationCandidateClinician();
@@ -142,6 +140,6 @@ it('consultationCandidates falls back to the string-matched price when flags are
         ->assertOk()
         ->json('data.0');
 
-    expect((float) $candidate['unitPrice'])->toBe(15000.0)
-        ->and($candidate['pricingSource'])->toBe('service_catalog');
+    expect((float) $candidate['unitPrice'])->toBe(0.0)
+        ->and($candidate['pricingStatus'])->toBe('missing_catalog_price');
 });

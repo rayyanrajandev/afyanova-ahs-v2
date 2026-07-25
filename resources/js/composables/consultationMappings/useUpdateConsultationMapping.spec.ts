@@ -34,7 +34,8 @@ describe('useUpdateConsultationMapping', () => {
                 id: '1',
                 clinician_tier: 'MD',
                 department: 'Outpatient Department (OPD)',
-                billing_service_catalog_item_id: 'cat-2',
+                billing_service_catalog_item_id: null,
+                chargeable_item_id: 'chg-2',
                 catalog_item: null,
                 created_at: null,
                 updated_at: null,
@@ -46,16 +47,16 @@ describe('useUpdateConsultationMapping', () => {
             id: '1',
             clinicianTier: 'MD',
             department: 'Outpatient Department (OPD)',
-            billingServiceCatalogItemId: 'cat-2',
+            chargeableItemId: 'chg-2',
         });
 
         expect(patchSpy).toHaveBeenCalledWith('/consultation-mappings/1', {
             body: {
                 clinician_tier: 'MD',
                 department: 'Outpatient Department (OPD)',
-                billing_service_catalog_item_id: 'cat-2',
+                chargeable_item_id: 'chg-2',
             },
         });
-        expect(result).toMatchObject({ id: '1', clinicianTier: 'MD', billingServiceCatalogItemId: 'cat-2' });
+        expect(result).toMatchObject({ id: '1', clinicianTier: 'MD', chargeableItemId: 'chg-2' });
     });
 });

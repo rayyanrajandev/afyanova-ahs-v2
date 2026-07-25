@@ -4,7 +4,6 @@ namespace App\Modules\Billing\Application\UseCases;
 
 use App\Jobs\ShadowDiffChargeCaptureCandidateJob;
 use App\Modules\Billing\Application\Support\ConsultationPricingResolver;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Billing\Domain\Services\ChargeResolverInterface;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
@@ -27,7 +26,6 @@ use Illuminate\Database\Eloquent\Builder;
 class ListBillingChargeCaptureCandidatesUseCase
 {
     public function __construct(
-        private readonly BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
         private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
         private readonly FeatureFlagResolverInterface $featureFlagResolver,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
@@ -164,7 +162,12 @@ class ListBillingChargeCaptureCandidatesUseCase
                     appointmentId: $this->normalizeNullableUuid($appointment->id),
                     admissionId: null,
                     sourceNumber: $appointment->appointment_number,
-                    serviceCode: $this->consultationServiceCodes($department, $clinicianContext),
+                    // Consultation no longer has a legacy string-match
+                    // fallback (Phase 5 legacy removal, this domain first) --
+                    // an empty code list means buildCandidate()'s legacy
+                    // lookup is a guaranteed no-op here; applyConsultationResolvedPrice()
+                    // below is now the *only* way a consultation gets priced.
+                    serviceCode: [],
                     serviceName: $this->consultationServiceName($department, $clinicianContext),
                     serviceType: 'consultation',
                     sourceStatus: $appointment->status,
@@ -181,12 +184,15 @@ class ListBillingChargeCaptureCandidatesUseCase
     }
 
     /**
-     * PricingEngine_Migration_Plan.md Phase 3, Consultation cutover. Unlike
-     * the five order-kind domains, this call site never checked
-     * ConsultationMappingModel at all before -- ConsultationPricingResolver
-     * only upgrades the price when both cutover flags are on AND an
-     * explicit mapping has been backfilled with a chargeable_item_id, so at
-     * flag-off this method is a no-op and behavior stays exactly as before.
+     * PricingEngine_Migration_Plan.md Phase 5, Consultation legacy removal
+     * (first domain fully cut over). This is now the *only* way a
+     * consultation candidate gets priced -- there is no string-match
+     * fallback left (consultationCandidates() passes buildCandidate() an
+     * empty service-code list). No mapping, or a mapping with no priced
+     * chargeable item, means genuinely unpriced: 'missing_catalog_price'
+     * ("needs pricing", a normal admin-actionable state), not
+     * buildCandidate()'s default 'missing_service_code' ("data problem") --
+     * that distinction matters for how ChargesTab.vue badges it.
      *
      * @param  array<string, mixed>  $candidate
      * @param  array<string, mixed>|null  $clinicianContext
@@ -201,6 +207,8 @@ class ListBillingChargeCaptureCandidatesUseCase
     ): array {
         $tier = $this->consultationClinicianTier($clinicianContext);
         if ($tier === null || $department === '') {
+            $candidate['pricingStatus'] = 'missing_catalog_price';
+
             return $candidate;
         }
 
@@ -217,6 +225,8 @@ class ListBillingChargeCaptureCandidatesUseCase
         );
 
         if ($resolved === null || $resolved['pricingStatus'] !== 'priced') {
+            $candidate['pricingStatus'] = 'missing_catalog_price';
+
             return $candidate;
         }
 
@@ -320,9 +330,7 @@ class ListBillingChargeCaptureCandidatesUseCase
         $serviceName = $wardLabel !== '' ? sprintf('Bed Charge - %s', $wardLabel) : 'Bed Charge';
 
         $chargeableItemId = $this->normalizeNullableUuid($admission->bedResource?->chargeable_item_id);
-        $domainCutOver = $chargeableItemId !== null
-            && $this->featureFlagResolver->isEnabled('pricing.engine.v2')
-            && $this->featureFlagResolver->isEnabled('pricing.engine.v2.bed_day');
+        $domainCutOver = $chargeableItemId !== null;
 
         $candidates = [];
 
@@ -358,15 +366,15 @@ class ListBillingChargeCaptureCandidatesUseCase
     }
 
     /**
-     * PricingEngine_Migration_Plan.md Phase 3, Bed-day. Beds have no
-     * pre-existing catalog FK or string-match data to shadow-diff against
-     * (same reason Consultation and Bed-day were excluded from Phase 2) --
-     * this only ever upgrades the price when the bed/ward's
-     * facility_resources.chargeable_item_id has actually been assigned by
-     * a facility admin (via the ward/bed admin screen) and both cutover
-     * flags are on. Unassigned beds keep the existing BED-{WARD}/BED-DAY
-     * string-match fallback, same "prefer new, fall back to legacy when
-     * not yet migrated" shape as every other domain including Consultation.
+     * PricingEngine_Migration_Plan.md Phase 5, Bed-day (last domain, legacy
+     * pricing fully removed). Beds have no shadow-diff (never did -- same
+     * reason Consultation was excluded from Phase 2). Once a bed/ward's
+     * facility_resources.chargeable_item_id has been assigned by a facility
+     * admin (via the ward/bed admin screen), that price is served
+     * unconditionally. An unassigned bed has genuinely no price to show
+     * (buildCandidate() above skips the deleted legacy lookup entirely) --
+     * 'missing_catalog_price', a normal admin-actionable state, not a
+     * silent string-match rescue.
      *
      * @param  array<string, mixed>  $candidate
      * @return array<string, mixed>
@@ -449,11 +457,16 @@ class ListBillingChargeCaptureCandidatesUseCase
 
         $orders = $query->limit(100)->get();
         $catalogItems = $this->clinicalCatalogIndex($orders->pluck($catalogFk)->all());
-        $domainCutOver = $this->featureFlagResolver->isEnabled('pricing.engine.v2')
-            && $this->featureFlagResolver->isEnabled(sprintf('pricing.engine.v2.%s', $kind->pricingEngineDomainFlag()));
+        // PricingEngine_Migration_Plan.md Phase 5: every order-domain's
+        // legacy pricing path is now removed, so this is always true. Kept
+        // as an explicit read of isLegacyPricingRemoved() (rather than a
+        // literal true) so a future new order-domain that starts
+        // un-migrated is handled correctly without touching this method.
+        $legacyRemoved = $kind->isLegacyPricingRemoved();
+        $domainCutOver = $legacyRemoved;
 
         return $orders
-            ->map(function (mixed $order) use ($kind, $catalogFk, $catalogItems, $currencyCode, $invoicedSources, $domainCutOver): array {
+            ->map(function (mixed $order) use ($kind, $catalogFk, $catalogItems, $currencyCode, $invoicedSources, $domainCutOver, $legacyRemoved): array {
                 $catalogItem = $catalogItems[(string) $order->{$catalogFk}] ?? null;
 
                 [$serviceCode, $serviceName, $serviceType, $performedAt, $quantity, $unit] = $this->extractCandidateFields($order, $kind, $catalogItem);
@@ -485,12 +498,15 @@ class ListBillingChargeCaptureCandidatesUseCase
                 $tenantId = $scopeContext->tenantId();
                 $facilityId = $scopeContext->facilityId();
 
-                // Always dispatch against the pristine legacy candidate, before
-                // any Phase 3 cutover below overwrites its pricing fields --
-                // PricingEngine_Migration_Plan.md's per-domain verification gate
-                // keeps shadow-diffing in both directions through the bake
-                // period after a domain's flag flips, not just before.
-                $this->dispatchShadowDiff($candidate, $chargeableItemId, $tenantId, $facilityId);
+                // Shadow-diffing exists to verify the new engine agrees with a
+                // still-live legacy price -- once a domain's legacy path is
+                // actually deleted (not just flag-gated), there is nothing
+                // left to compare against, so logging one would just record
+                // permanent false "mismatches" against a lookup that no
+                // longer runs.
+                if (! $legacyRemoved) {
+                    $this->dispatchShadowDiff($candidate, $chargeableItemId, $tenantId, $facilityId);
+                }
 
                 if ($domainCutOver) {
                     $candidate = $this->applyResolvedPrice($candidate, $chargeableItemId, $tenantId, $facilityId);
@@ -652,21 +668,21 @@ class ListBillingChargeCaptureCandidatesUseCase
         $serviceCodes = $this->normalizeServiceCodeCandidates($serviceCode);
         $normalizedServiceCode = $serviceCodes[0] ?? '';
         $label = trim((string) ($sourceNumber ?: $serviceName ?: $normalizedServiceCode ?: $sourceKind));
-        $catalogItem = $this->findActivePricingByServiceCodes($serviceCodes, $currencyCode, $performedAt);
-
-        if ($catalogItem !== null) {
-            $normalizedServiceCode = strtoupper(trim((string) ($catalogItem['service_code'] ?? $normalizedServiceCode)));
-        }
-
-        $resolvedDescription = trim((string) ($catalogItem['service_name'] ?? $serviceName ?? $label));
-        $resolvedUnit = trim((string) ($catalogItem['unit'] ?? $unit));
-        $unitPrice = round(max((float) ($catalogItem['base_price'] ?? 0), 0), 2);
-        $lineTotal = round(max($quantity, 0) * $unitPrice, 2);
+        // PricingEngine_Migration_Plan.md Phase 5: every domain's legacy
+        // pricing path is now removed. $serviceCode is still passed through
+        // for display (it's real data from the clinical catalog, not a
+        // guess) but a price is never looked up here -- that's the callers'
+        // job via applyResolvedPrice()/applyConsultationResolvedPrice()/
+        // applyBedDayResolvedPrice(), all resolving through chargeable_item_id.
+        // A candidate starts out unpriced; one of those methods upgrades it
+        // when a chargeable item + price book entry exists.
+        $resolvedDescription = trim((string) ($serviceName ?? $label));
+        $resolvedUnit = trim($unit);
+        $unitPrice = 0.0;
+        $lineTotal = 0.0;
         $sourceKey = $this->sourceKey($sourceKind, $sourceId);
         $invoiceLink = $invoicedSources[$sourceKey] ?? null;
-        $pricingStatus = $catalogItem
-            ? 'priced'
-            : ($serviceCodes !== [] ? 'missing_catalog_price' : 'missing_service_code');
+        $pricingStatus = $serviceCodes !== [] ? 'missing_catalog_price' : 'missing_service_code';
 
         $lineNotes = sprintf(
             'Charge capture from %s %s%s.',
@@ -695,8 +711,8 @@ class ListBillingChargeCaptureCandidatesUseCase
             'lineTotal' => $lineTotal,
             'currencyCode' => $currencyCode,
             'pricingStatus' => $pricingStatus,
-            'pricingSource' => $catalogItem ? 'service_catalog' : null,
-            'pricingSourceId' => $catalogItem['id'] ?? null,
+            'pricingSource' => null,
+            'pricingSourceId' => null,
             'pricingLookupCodes' => $serviceCodes,
             'alreadyInvoiced' => $invoiceLink !== null,
             'invoiceId' => $invoiceLink['invoiceId'] ?? null,
@@ -818,50 +834,6 @@ class ListBillingChargeCaptureCandidatesUseCase
 
     /**
      * @param  array<string, mixed>|null  $clinicianContext
-     * @return array<int, string>
-     */
-    private function consultationServiceCodes(string $department, ?array $clinicianContext): array
-    {
-        $departmentToken = $this->serviceCodeToken($department);
-        $staffDepartmentToken = $this->serviceCodeToken((string) ($clinicianContext['profile']['department'] ?? ''));
-        $tier = $this->consultationClinicianTier($clinicianContext);
-        $specialtyTokens = $this->consultationSpecialtyTokens($clinicianContext);
-
-        $codes = [];
-
-        if ($tier !== null) {
-            foreach ($specialtyTokens as $specialtyToken) {
-                $codes[] = sprintf('CONSULT-%s-%s', $tier, $specialtyToken);
-            }
-        }
-
-        if ($tier !== null && $departmentToken !== '') {
-            $codes[] = sprintf('CONSULT-%s-%s', $tier, $departmentToken);
-        }
-
-        if ($tier !== null && $staffDepartmentToken !== '' && $staffDepartmentToken !== $departmentToken) {
-            $codes[] = sprintf('CONSULT-%s-%s', $tier, $staffDepartmentToken);
-        }
-
-        if ($tier !== null) {
-            $codes[] = sprintf('CONSULT-%s', $tier);
-        }
-
-        if ($departmentToken !== '') {
-            $codes[] = sprintf('CONSULT-%s', $departmentToken);
-        }
-
-        if ($staffDepartmentToken !== '' && $staffDepartmentToken !== $departmentToken) {
-            $codes[] = sprintf('CONSULT-%s', $staffDepartmentToken);
-        }
-
-        $codes[] = 'CONSULTATION';
-
-        return array_values(array_unique($codes));
-    }
-
-    /**
-     * @param  array<string, mixed>|null  $clinicianContext
      */
     private function consultationServiceName(string $department, ?array $clinicianContext): string
     {
@@ -879,27 +851,6 @@ class ListBillingChargeCaptureCandidatesUseCase
         $scope = $specialtyName !== '' ? $specialtyName : $department;
 
         return trim($scope) !== '' ? sprintf('%s - %s', $serviceName, trim($scope)) : $serviceName;
-    }
-
-    /**
-     * @param  array<string, mixed>|null  $clinicianContext
-     * @return array<int, string>
-     */
-    private function consultationSpecialtyTokens(?array $clinicianContext): array
-    {
-        $tokens = [];
-
-        foreach ([
-            $clinicianContext['specialty']['code'] ?? null,
-            $clinicianContext['specialty']['name'] ?? null,
-        ] as $value) {
-            $token = $this->serviceCodeToken((string) $value);
-            if ($token !== '') {
-                $tokens[] = $token;
-            }
-        }
-
-        return array_values(array_unique($tokens));
     }
 
     /**
@@ -1119,28 +1070,6 @@ class ListBillingChargeCaptureCandidatesUseCase
         }
 
         return array_values(array_unique($codes));
-    }
-
-    /**
-     * @param  array<int, string>  $serviceCodes
-     * @return array<string, mixed>|null
-     */
-    private function findActivePricingByServiceCodes(array $serviceCodes, string $currencyCode, ?string $performedAt): ?array
-    {
-        $pricingMap = $this->serviceCatalogRepository->findActivePricingByServiceCodes(
-            serviceCodes: $serviceCodes,
-            currencyCode: $currencyCode,
-            asOfDateTime: $performedAt,
-        );
-
-        foreach ($serviceCodes as $serviceCode) {
-            $normalized = strtoupper(trim($serviceCode));
-            if ($normalized !== '' && isset($pricingMap[$normalized])) {
-                return $pricingMap[$normalized];
-            }
-        }
-
-        return null;
     }
 
     private function resolveServiceName(mixed $preferredName, ?array $clinicalCatalogItem, mixed $fallbackName = null): string

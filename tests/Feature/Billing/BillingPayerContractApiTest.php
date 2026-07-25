@@ -7,6 +7,8 @@ use App\Modules\Billing\Infrastructure\Models\BillingPayerAuthorizationRuleAudit
 use App\Modules\Billing\Infrastructure\Models\BillingPayerContractAuditLogModel;
 use App\Modules\Billing\Infrastructure\Models\BillingPayerContractPriceOverrideAuditLogModel;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -130,6 +132,29 @@ function createBillingServiceCatalogForContractOverride(array $overrides = []): 
         'status' => 'active',
         'status_reason' => null,
     ], $overrides));
+}
+
+/**
+ * PricingEngine_Migration_Plan.md Phase 5: payer price overrides resolve
+ * their base price/metadata from chargeable_items now, not the legacy
+ * service catalog -- createBillingServiceCatalogForContractOverride() above
+ * is kept only as a legacy fixture proving it's genuinely ignored now.
+ */
+function createChargeableItemForContractOverride(string $code = 'CONSULT-OPD-001', float $price = 50000, string $currencyCode = 'TZS'): void
+{
+    if (ChargeableItemModel::query()->whereRaw('UPPER(code) = ?', [strtoupper($code)])->exists()) {
+        return;
+    }
+
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->fill([
+        'catalog_type' => 'consultation', 'charge_model' => 'flat', 'code' => $code, 'name' => 'OPD Consultation', 'status' => 'active',
+    ]);
+    $chargeableItem->save();
+
+    PriceBookEntryModel::query()->create([
+        'chargeable_item_id' => $chargeableItem->id, 'currency_code' => $currencyCode, 'unit_price' => $price, 'status' => 'active',
+    ]);
 }
 
 it('requires authentication for billing payer contract creation', function (): void {
@@ -446,6 +471,7 @@ it('creates, updates, and lists price overrides under contract', function (): vo
         'billing.payer-contracts.manage-price-overrides',
     ]);
     createBillingServiceCatalogForContractOverride();
+    createChargeableItemForContractOverride();
     $contract = createBillingPayerContract($user, [
         'contractCode' => 'PRICING-BASE-2026',
     ]);
@@ -503,6 +529,7 @@ it('rejects overlapping price overrides for the same service window', function (
         'billing.payer-contracts.manage-price-overrides',
     ]);
     createBillingServiceCatalogForContractOverride();
+    createChargeableItemForContractOverride();
     $contract = createBillingPayerContract($user, [
         'contractCode' => 'PRICING-DUP-2026',
     ]);
@@ -574,6 +601,7 @@ it('lists and exports price override audit logs when authorized', function (): v
         'billing.payer-contracts.view-price-override-audit-logs',
     ]);
     createBillingServiceCatalogForContractOverride();
+    createChargeableItemForContractOverride();
     $contract = createBillingPayerContract($user, [
         'contractCode' => 'PRICE-AUDIT-2026',
     ]);
@@ -603,6 +631,7 @@ it('forbids price override audit logs without permission', function (): void {
         'billing.payer-contracts.manage-price-overrides',
     ]);
     createBillingServiceCatalogForContractOverride();
+    createChargeableItemForContractOverride();
     $contract = createBillingPayerContract($user, [
         'contractCode' => 'PRICE-AUDIT-NO-PERM-2026',
     ]);
@@ -706,6 +735,7 @@ it('writes payer contract and authorization rule status transition parity metada
     ]);
 
     createBillingServiceCatalogForContractOverride();
+    createChargeableItemForContractOverride();
     $override = $this->actingAs($user)
         ->postJson('/api/v1/billing-payer-contracts/'.$contract['id'].'/price-overrides', billingPayerContractPriceOverridePayload([
             'serviceCode' => 'CONSULT-OPD-001',
@@ -758,6 +788,7 @@ it('rejects billing payer contract and authorization rule detail updates with st
         ->json('data');
 
     createBillingServiceCatalogForContractOverride();
+    createChargeableItemForContractOverride();
     $override = $this->actingAs($user)
         ->postJson('/api/v1/billing-payer-contracts/'.$contract['id'].'/price-overrides', billingPayerContractPriceOverridePayload())
         ->assertCreated()

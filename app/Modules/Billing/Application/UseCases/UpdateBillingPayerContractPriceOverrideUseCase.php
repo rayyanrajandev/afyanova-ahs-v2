@@ -3,10 +3,10 @@
 namespace App\Modules\Billing\Application\UseCases;
 
 use App\Modules\Billing\Application\Exceptions\OverlappingBillingPayerContractPriceOverrideException;
+use App\Modules\Billing\Application\Support\ChargeableItemPricingLookup;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractPriceOverrideAuditLogRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractPriceOverrideRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractRepositoryInterface;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 
@@ -16,7 +16,7 @@ class UpdateBillingPayerContractPriceOverrideUseCase
         private readonly BillingPayerContractRepositoryInterface $contractRepository,
         private readonly BillingPayerContractPriceOverrideRepositoryInterface $priceOverrideRepository,
         private readonly BillingPayerContractPriceOverrideAuditLogRepositoryInterface $auditLogRepository,
-        private readonly BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        private readonly ChargeableItemPricingLookup $chargeableItemPricingLookup,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
@@ -97,16 +97,24 @@ class UpdateBillingPayerContractPriceOverrideUseCase
             ? $this->normalizeNullableDateTime($payload['effective_from'])
             : null;
 
-        $catalogItem = $this->serviceCatalogRepository->findActivePricingByServiceCode(
+        $catalogItem = $this->chargeableItemPricingLookup->findByServiceCode(
             serviceCode: $serviceCode,
             currencyCode: strtoupper(trim((string) ($contract['currency_code'] ?? 'TZS'))),
             asOfDateTime: $effectiveFrom ?? now()->toDateTimeString(),
+            tenantId: $this->platformScopeContext->tenantId(),
+            facilityId: $this->platformScopeContext->facilityId(),
         );
 
         $updateData = [];
 
-        if (array_key_exists('billing_service_catalog_item_id', $payload) || $catalogItem !== null) {
-            $updateData['billing_service_catalog_item_id'] = $catalogItem['id'] ?? ($payload['billing_service_catalog_item_id'] ?? null);
+        // billing_service_catalog_item_id is a hard FK to the legacy table --
+        // only ever set from explicit payload input, never from this lookup
+        // (see CreateBillingPayerContractPriceOverrideUseCase for why).
+        if (array_key_exists('billing_service_catalog_item_id', $payload)) {
+            $updateData['billing_service_catalog_item_id'] = $payload['billing_service_catalog_item_id'];
+        }
+        if (array_key_exists('chargeable_item_id', $payload) || $catalogItem !== null) {
+            $updateData['chargeable_item_id'] = $catalogItem['id'] ?? ($payload['chargeable_item_id'] ?? null);
         }
         if (array_key_exists('service_code', $payload)) {
             $updateData['service_code'] = $serviceCode;
@@ -149,6 +157,7 @@ class UpdateBillingPayerContractPriceOverrideUseCase
     {
         $fields = [
             'billing_service_catalog_item_id',
+            'chargeable_item_id',
             'service_code',
             'service_name',
             'service_type',

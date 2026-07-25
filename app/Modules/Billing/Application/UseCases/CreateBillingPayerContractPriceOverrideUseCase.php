@@ -3,10 +3,10 @@
 namespace App\Modules\Billing\Application\UseCases;
 
 use App\Modules\Billing\Application\Exceptions\OverlappingBillingPayerContractPriceOverrideException;
+use App\Modules\Billing\Application\Support\ChargeableItemPricingLookup;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractPriceOverrideAuditLogRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractPriceOverrideRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractRepositoryInterface;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Billing\Domain\ValueObjects\BillingPayerContractPriceOverrideStatus;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
@@ -17,7 +17,7 @@ class CreateBillingPayerContractPriceOverrideUseCase
         private readonly BillingPayerContractRepositoryInterface $contractRepository,
         private readonly BillingPayerContractPriceOverrideRepositoryInterface $priceOverrideRepository,
         private readonly BillingPayerContractPriceOverrideAuditLogRepositoryInterface $auditLogRepository,
-        private readonly BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
+        private readonly ChargeableItemPricingLookup $chargeableItemPricingLookup,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
@@ -41,17 +41,25 @@ class CreateBillingPayerContractPriceOverrideUseCase
             );
         }
 
-        $catalogItem = $this->serviceCatalogRepository->findActivePricingByServiceCode(
+        $catalogItem = $this->chargeableItemPricingLookup->findByServiceCode(
             serviceCode: $serviceCode,
             currencyCode: strtoupper(trim((string) ($contract['currency_code'] ?? 'TZS'))),
             asOfDateTime: $effectiveFrom ?? now()->toDateTimeString(),
+            tenantId: $this->platformScopeContext->tenantId(),
+            facilityId: $this->platformScopeContext->facilityId(),
         );
 
         $created = $this->priceOverrideRepository->create([
             'billing_payer_contract_id' => $billingPayerContractId,
             'tenant_id' => $this->platformScopeContext->tenantId(),
             'facility_id' => $this->platformScopeContext->facilityId(),
-            'billing_service_catalog_item_id' => $catalogItem['id'] ?? ($payload['billing_service_catalog_item_id'] ?? null),
+            // PricingEngine_Migration_Plan.md Phase 5: billing_service_catalog_item_id
+            // is a hard FK to the legacy table -- only ever set from
+            // explicit payload input now (a caller who still has a real
+            // legacy id), never from this lookup, which resolves against
+            // chargeable_items instead.
+            'billing_service_catalog_item_id' => $payload['billing_service_catalog_item_id'] ?? null,
+            'chargeable_item_id' => $catalogItem['id'] ?? ($payload['chargeable_item_id'] ?? null),
             'service_code' => $serviceCode,
             'service_name' => $this->nullableTrimmedValue($payload['service_name'] ?? null) ?? $this->nullableTrimmedValue($catalogItem['service_name'] ?? null),
             'service_type' => $this->nullableTrimmedValue($payload['service_type'] ?? null) ?? $this->nullableTrimmedValue($catalogItem['service_type'] ?? null),

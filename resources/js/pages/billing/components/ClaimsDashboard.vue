@@ -78,7 +78,7 @@ onMounted(fetchClaims);
                 <CardTitle>Quick Links</CardTitle>
             </CardHeader>
             <CardContent class="flex flex-wrap gap-4">
-                <a href="/billing-service-catalog" class="text-sm underline">NHIF Tariff Catalog</a>
+                <a href="/chargeable-items" class="text-sm underline">NHIF Tariff Catalog</a>
                 <a href="/claims-insurance" class="text-sm underline">Insurance Workspace</a>
             </CardContent>
         </Card>

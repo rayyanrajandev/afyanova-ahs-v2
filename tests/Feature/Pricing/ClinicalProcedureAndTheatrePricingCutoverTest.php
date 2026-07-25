@@ -3,6 +3,7 @@
 use App\Models\User;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
+use App\Modules\Billing\Infrastructure\Models\PricingEngineShadowDiffModel;
 use App\Modules\ClinicalProcedure\Infrastructure\Models\ClinicalProcedureOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
@@ -14,19 +15,10 @@ use Illuminate\Support\Str;
 uses(RefreshDatabase::class);
 
 /**
- * Both domains use charge_model=flat, same shape as Laboratory/Radiology
- * already proven -- these tests exist to confirm the generic mechanism
- * reaches these two specific ClinicalSourceKind cases, not to re-prove the
- * mechanism itself.
+ * Clinical Procedure and Theatre both have their legacy pricing paths fully
+ * removed (PricingEngine_Migration_Plan.md Phase 5), so both are tested
+ * unconditionally below, the same way Laboratory/Radiology are.
  */
-function setCutoverFlags(string $domain, bool $master, bool $domainOn): void
-{
-    $flags = config('feature_flags.flags');
-    $flags['pricing.engine.v2']['enabled'] = $master;
-    $flags['pricing.engine.v2.'.$domain]['enabled'] = $domainOn;
-    config(['feature_flags.flags' => $flags]);
-}
-
 function makeCPTCutoverUser(): User
 {
     $user = User::factory()->create();
@@ -69,9 +61,9 @@ function setUpCPTCutover(string $catalogType, string $code, float $legacyPrice, 
     return $catalogItem;
 }
 
-it('serves the legacy price for clinical procedures when both cutover flags are off', function (): void {
-    setCutoverFlags('clinical_procedure', master: false, domainOn: false);
-
+it('prices clinical procedure orders via the chargeable item, ignoring any legacy tariff', function (): void {
+    // A legacy tariff for the same code, deliberately present (via
+    // setUpCPTCutover), to prove it's genuinely never consulted anymore.
     $catalogItem = setUpCPTCutover('clinical_procedure', 'PROC-TEST-001', legacyPrice: 40000, newPrice: 45000);
     $patient = makeCPTCutoverPatient();
     ClinicalProcedureOrderModel::query()->create([
@@ -90,12 +82,12 @@ it('serves the legacy price for clinical procedures when both cutover flags are 
         ->assertOk()
         ->json('data.0');
 
-    expect((float) $candidate['unitPrice'])->toBe(40000.0);
+    expect((float) $candidate['unitPrice'])->toBe(45000.0)
+        ->and($candidate['pricingStatus'])->toBe('priced')
+        ->and($candidate['pricingSource'])->toBe('chargeable_item');
 });
 
-it('serves the new resolver price for clinical procedures once cut over', function (): void {
-    setCutoverFlags('clinical_procedure', master: true, domainOn: true);
-
+it('does not dispatch a shadow-diff comparison for clinical procedures, since there is no legacy price left to compare against', function (): void {
     $catalogItem = setUpCPTCutover('clinical_procedure', 'PROC-TEST-002', legacyPrice: 40000, newPrice: 45000);
     $patient = makeCPTCutoverPatient();
     ClinicalProcedureOrderModel::query()->create([
@@ -109,18 +101,53 @@ it('serves the new resolver price for clinical procedures once cut over', functi
         'status' => 'completed',
     ]);
 
+    $this->actingAs(makeCPTCutoverUser())
+        ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
+        ->assertOk();
+
+    expect(PricingEngineShadowDiffModel::query()->count())->toBe(0);
+});
+
+it('reports missing_catalog_price for clinical procedures rather than falling back to a legacy tariff when there is no price book entry', function (): void {
+    $catalogItem = ClinicalCatalogItemModel::query()->create([
+        'catalog_type' => 'clinical_procedure', 'code' => 'PROC-TEST-003', 'name' => 'Test Procedure', 'unit' => 'procedure', 'status' => 'active',
+    ]);
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->id = $catalogItem->id;
+    $chargeableItem->fill(['catalog_type' => 'clinical_procedure', 'charge_model' => 'flat', 'code' => 'PROC-TEST-003', 'name' => 'Test Procedure', 'status' => 'active']);
+    $chargeableItem->save();
+    // Deliberately no PriceBookEntryModel row -- and a legacy tariff
+    // present too, to prove it's genuinely never consulted as a fallback.
+    BillingServiceCatalogItemModel::query()->create([
+        'service_code' => 'PROC-TEST-003', 'service_name' => 'Test Procedure', 'service_type' => 'procedure',
+        'unit' => 'procedure', 'base_price' => 40000, 'currency_code' => 'TZS', 'effective_from' => now()->subDay(), 'status' => 'active',
+    ]);
+
+    $patient = makeCPTCutoverPatient();
+    ClinicalProcedureOrderModel::query()->create([
+        'order_number' => 'PROC'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patient->id,
+        'ordered_at' => now()->subHours(2)->toDateTimeString(),
+        'clinical_procedure_catalog_item_id' => $catalogItem->id,
+        'procedure_code' => 'PROC-TEST-003',
+        'procedure_description' => 'Test Procedure',
+        'completed_at' => now()->subHour()->toDateTimeString(),
+        'status' => 'completed',
+    ]);
+
     $candidate = $this->actingAs(makeCPTCutoverUser())
         ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
         ->assertOk()
         ->json('data.0');
 
-    expect((float) $candidate['unitPrice'])->toBe(45000.0)
-        ->and($candidate['pricingSource'])->toBe('chargeable_item');
+    expect((float) $candidate['unitPrice'])->toBe(0.0)
+        ->and($candidate['pricingStatus'])->toBe('missing_catalog_price')
+        ->and($candidate['pricingSource'])->toBeNull();
 });
 
-it('serves the legacy price for theatre procedures when both cutover flags are off', function (): void {
-    setCutoverFlags('theatre', master: false, domainOn: false);
-
+it('prices theatre procedures via the chargeable item, ignoring any legacy tariff', function (): void {
+    // A legacy tariff for the same code, deliberately present (via
+    // setUpCPTCutover), to prove it's genuinely never consulted anymore.
     $catalogItem = setUpCPTCutover('theatre_procedure', 'THR-TEST-001', legacyPrice: 300000, newPrice: 350000);
     $patient = makeCPTCutoverPatient();
     TheatreProcedureModel::query()->create([
@@ -141,12 +168,12 @@ it('serves the legacy price for theatre procedures when both cutover flags are o
         ->assertOk()
         ->json('data.0');
 
-    expect((float) $candidate['unitPrice'])->toBe(300000.0);
+    expect((float) $candidate['unitPrice'])->toBe(350000.0)
+        ->and($candidate['pricingStatus'])->toBe('priced')
+        ->and($candidate['pricingSource'])->toBe('chargeable_item');
 });
 
-it('serves the new resolver price for theatre procedures once cut over', function (): void {
-    setCutoverFlags('theatre', master: true, domainOn: true);
-
+it('does not dispatch a shadow-diff comparison for theatre procedures, since there is no legacy price left to compare against', function (): void {
     $catalogItem = setUpCPTCutover('theatre_procedure', 'THR-TEST-002', legacyPrice: 300000, newPrice: 350000);
     $patient = makeCPTCutoverPatient();
     TheatreProcedureModel::query()->create([
@@ -162,21 +189,28 @@ it('serves the new resolver price for theatre procedures once cut over', functio
         'status' => 'completed',
     ]);
 
-    $candidate = $this->actingAs(makeCPTCutoverUser())
+    $this->actingAs(makeCPTCutoverUser())
         ->getJson('/api/v1/billing/charge-capture-candidates?patientId='.$patient->id.'&currencyCode=TZS')
-        ->assertOk()
-        ->json('data.0');
+        ->assertOk();
 
-    expect((float) $candidate['unitPrice'])->toBe(350000.0)
-        ->and($candidate['pricingSource'])->toBe('chargeable_item');
+    expect(PricingEngineShadowDiffModel::query()->count())->toBe(0);
 });
 
-it('cutting over clinical_procedure does not affect theatre pricing (per-domain isolation)', function (): void {
-    setCutoverFlags('theatre', master: false, domainOn: false);
-    setCutoverFlags('clinical_procedure', master: true, domainOn: true);
-    // pricing.engine.v2.theatre explicitly forced off above, regardless of its ambient default.
+it('reports missing_catalog_price for theatre procedures rather than falling back to a legacy tariff when there is no price book entry', function (): void {
+    $catalogItem = ClinicalCatalogItemModel::query()->create([
+        'catalog_type' => 'theatre_procedure', 'code' => 'THR-TEST-003', 'name' => 'Test Procedure', 'unit' => 'procedure', 'status' => 'active',
+    ]);
+    $chargeableItem = new ChargeableItemModel();
+    $chargeableItem->id = $catalogItem->id;
+    $chargeableItem->fill(['catalog_type' => 'theatre_procedure', 'charge_model' => 'flat', 'code' => 'THR-TEST-003', 'name' => 'Test Procedure', 'status' => 'active']);
+    $chargeableItem->save();
+    // Deliberately no PriceBookEntryModel row -- and a legacy tariff
+    // present too, to prove it's genuinely never consulted as a fallback.
+    BillingServiceCatalogItemModel::query()->create([
+        'service_code' => 'THR-TEST-003', 'service_name' => 'Test Procedure', 'service_type' => 'theatre',
+        'unit' => 'procedure', 'base_price' => 300000, 'currency_code' => 'TZS', 'effective_from' => now()->subDay(), 'status' => 'active',
+    ]);
 
-    $catalogItem = setUpCPTCutover('theatre_procedure', 'THR-TEST-003', legacyPrice: 300000, newPrice: 350000);
     $patient = makeCPTCutoverPatient();
     TheatreProcedureModel::query()->create([
         'procedure_number' => 'THR'.now()->format('Ymd').strtoupper(Str::random(5)),
@@ -196,5 +230,8 @@ it('cutting over clinical_procedure does not affect theatre pricing (per-domain 
         ->assertOk()
         ->json('data.0');
 
-    expect((float) $candidate['unitPrice'])->toBe(300000.0);
+    expect((float) $candidate['unitPrice'])->toBe(0.0)
+        ->and($candidate['pricingStatus'])->toBe('missing_catalog_price')
+        ->and($candidate['pricingSource'])->toBeNull();
 });
+
