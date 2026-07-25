@@ -13,6 +13,7 @@ class UpdateBillingPayerContractPriceOverrideRequest extends FormRequest
      */
     private const ALLOWED_FIELDS = [
         'billingServiceCatalogItemId',
+        'chargeableItemId',
         'serviceCode',
         'serviceName',
         'serviceType',
@@ -37,6 +38,7 @@ class UpdateBillingPayerContractPriceOverrideRequest extends FormRequest
     {
         return [
             'billingServiceCatalogItemId' => ['nullable', 'uuid'],
+            'chargeableItemId' => ['nullable', 'uuid', 'exists:chargeable_items,id'],
             'serviceCode' => ['sometimes', 'string', 'max:100'],
             'serviceName' => ['nullable', 'string', 'max:255'],
             'serviceType' => ['nullable', 'string', 'max:80'],

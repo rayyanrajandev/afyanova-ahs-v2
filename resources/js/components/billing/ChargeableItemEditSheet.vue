@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { ChargeableItem } from '@/composables/chargeableItems/useChargeableItems';
 import { useUpdateChargeableItem } from '@/composables/chargeableItems/useUpdateChargeableItem';
@@ -84,7 +85,7 @@ async function submit(): Promise<void> {
 
 <template>
     <Sheet :open="open" @update:open="(value) => (open = value)">
-        <SheetContent side="right" variant="form" size="lg">
+        <SheetContent side="right" variant="form" size="2xl">
             <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <SheetTitle class="flex items-center gap-2">
                     <AppIcon name="pencil" class="size-5 text-muted-foreground" />
@@ -95,37 +96,42 @@ async function submit(): Promise<void> {
                 </SheetDescription>
             </SheetHeader>
 
-            <div class="grid gap-4 px-6 py-4">
-                <Alert v-if="submitError" variant="destructive">
-                    <AlertTitle>Unable to update this item</AlertTitle>
-                    <AlertDescription>{{ submitError }}</AlertDescription>
-                </Alert>
+            <ScrollArea class="min-h-0 flex-1">
+                <div class="grid gap-4 px-6 py-4">
+                    <Alert v-if="submitError" variant="destructive">
+                        <AlertTitle>Unable to update this item</AlertTitle>
+                        <AlertDescription>{{ submitError }}</AlertDescription>
+                    </Alert>
 
-                <Alert v-if="isCatalogLinked">
-                    <AlertTitle>Name comes from the clinical catalog</AlertTitle>
-                    <AlertDescription>
-                        This item is linked to a clinical catalog entry, so its name is always shown from there. Edit it on the Clinical Catalogs page instead.
-                    </AlertDescription>
-                </Alert>
+                    <Alert v-if="isCatalogLinked">
+                        <AlertTitle>Name comes from the clinical catalog</AlertTitle>
+                        <AlertDescription>
+                            This item is linked to a clinical catalog entry, so its name is always shown from there. Edit it on the Clinical Catalogs page instead.
+                        </AlertDescription>
+                    </Alert>
 
-                <div class="grid gap-1.5">
-                    <Label for="chargeable-item-edit-name">Name</Label>
-                    <Input id="chargeable-item-edit-name" v-model="form.name" :disabled="isCatalogLinked" />
-                    <p v-if="fieldError('name')" class="text-xs text-destructive">{{ fieldError('name') }}</p>
+                    <fieldset class="grid gap-3 rounded-lg border p-3">
+                        <legend class="px-2 text-sm font-medium text-muted-foreground">Item details</legend>
+                        <div class="grid gap-1.5">
+                            <Label for="chargeable-item-edit-name">Name</Label>
+                            <Input id="chargeable-item-edit-name" v-model="form.name" :disabled="isCatalogLinked" />
+                            <p v-if="fieldError('name')" class="text-xs text-destructive">{{ fieldError('name') }}</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="grid gap-1.5">
+                                <Label for="chargeable-item-edit-category">Category <span class="text-muted-foreground">(optional)</span></Label>
+                                <Input id="chargeable-item-edit-category" v-model="form.category" placeholder="e.g. General, Specialist" />
+                                <p v-if="fieldError('category')" class="text-xs text-destructive">{{ fieldError('category') }}</p>
+                            </div>
+                            <div class="grid gap-1.5">
+                                <Label for="chargeable-item-edit-unit">Default unit <span class="text-muted-foreground">(optional)</span></Label>
+                                <Input id="chargeable-item-edit-unit" v-model="form.defaultUnit" placeholder="e.g. visit, day, test" />
+                                <p v-if="fieldError('defaultUnit')" class="text-xs text-destructive">{{ fieldError('defaultUnit') }}</p>
+                            </div>
+                        </div>
+                    </fieldset>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="grid gap-1.5">
-                        <Label for="chargeable-item-edit-category">Category</Label>
-                        <Input id="chargeable-item-edit-category" v-model="form.category" />
-                        <p v-if="fieldError('category')" class="text-xs text-destructive">{{ fieldError('category') }}</p>
-                    </div>
-                    <div class="grid gap-1.5">
-                        <Label for="chargeable-item-edit-unit">Default unit</Label>
-                        <Input id="chargeable-item-edit-unit" v-model="form.defaultUnit" />
-                        <p v-if="fieldError('defaultUnit')" class="text-xs text-destructive">{{ fieldError('defaultUnit') }}</p>
-                    </div>
-                </div>
-            </div>
+            </ScrollArea>
 
             <SheetFooter class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <Button variant="outline" @click="open = false">Cancel</Button>

@@ -112,6 +112,7 @@ type PriceOverride = {
     id: string | null;
     billingPayerContractId: string | null;
     billingServiceCatalogItemId: string | null;
+    chargeableItemId: string | null;
     serviceCode: string | null;
     serviceName: string | null;
     serviceType: string | null;
@@ -154,6 +155,30 @@ type CatalogItem = {
     effectiveTo: string | null;
     status: string | null;
 };
+/**
+ * Additive "pricing engine" link for negotiated prices -- separate from
+ * CatalogItem (the legacy billing_service_catalog_items lookup) so the
+ * Authorization Rule picker, which has no chargeable_item_id column yet,
+ * stays entirely untouched by this.
+ */
+type ChargeableItemPriceEntry = { unitPrice: number; currencyCode: string; status: string };
+type ChargeableItemApiEntry = {
+    id: string;
+    code: string;
+    name: string;
+    catalogType: string;
+    status: string;
+    prices: ChargeableItemPriceEntry[];
+};
+type ChargeableItemListResponse = { data: ChargeableItemApiEntry[] };
+type ChargeableItemLookupEntry = {
+    id: string;
+    code: string;
+    name: string;
+    catalogType: string;
+    basePrice: string | null;
+    currencyCode: string | null;
+};
 type ListResponse<T> = { data: T[]; meta: Pagination };
 type ItemResponse<T> = { data: T };
 type CountsResponse = { data: StatusCounts };
@@ -162,6 +187,7 @@ type PriceCatalogListResponse = { data: CatalogItem[]; meta: Pagination };
 type PolicySummaryResponse = { data: PolicySummary };
 type PriceOverrideFormState = {
     billingServiceCatalogItemId: string;
+    chargeableItemId: string;
     serviceCode: string;
     serviceName: string;
     serviceType: string;
@@ -260,6 +286,7 @@ const canRead = computed(() => permissionState('billing.payer-contracts.read') =
 const canManage = computed(() => permissionState('billing.payer-contracts.manage') === 'allowed');
 const canAudit = computed(() => permissionState('billing.payer-contracts.view-audit-logs') === 'allowed');
 const canReadServiceCatalog = computed(() => permissionState('billing.service-catalog.read') === 'allowed');
+const canReadChargeableItems = computed(() => permissionState('billing.chargeable-items.read') === 'allowed');
 const canManagePriceOverrides = computed(() => permissionState('billing.payer-contracts.manage-price-overrides') === 'allowed');
 const canPriceOverrideAudit = computed(() => permissionState('billing.payer-contracts.view-price-override-audit-logs') === 'allowed');
 const canManageRules = computed(() => permissionState('billing.payer-contracts.manage-authorization-rules') === 'allowed');
@@ -341,10 +368,15 @@ const serviceCatalogLookupLoading = ref(false);
 const serviceCatalogLookupError = ref<string | null>(null);
 const serviceCatalogLookupItems = ref<CatalogItem[]>([]);
 
+const chargeableItemLookupLoading = ref(false);
+const chargeableItemLookupError = ref<string | null>(null);
+const chargeableItemLookupItems = ref<ChargeableItemLookupEntry[]>([]);
+
 const createPriceOverrideLoading = ref(false);
 const createPriceOverrideRequestKey = ref(generateRequestKey('billing-payer-contract-price-override-create'));
 const createPriceOverrideForm = reactive({
     billingServiceCatalogItemId: '',
+    chargeableItemId: '',
     serviceCode: '',
     serviceName: '',
     serviceType: '',
@@ -363,6 +395,7 @@ const editPriceOverrideRequestKey = ref(generateRequestKey('billing-payer-contra
 const editPriceOverrideTarget = ref<PriceOverride | null>(null);
 const editPriceOverrideForm = reactive({
     billingServiceCatalogItemId: '',
+    chargeableItemId: '',
     serviceCode: '',
     serviceName: '',
     serviceType: '',
@@ -554,6 +587,51 @@ const serviceCatalogPriceOptions = computed<SearchableSelectOption[]>(() =>
         })
         .filter((item): item is SearchableSelectOption => item !== null),
 );
+const chargeableItemPriceOptions = computed<SearchableSelectOption[]>(() =>
+    chargeableItemLookupItems.value.map((item) => ({
+        value: item.id,
+        label: item.name,
+        description: [
+            item.code,
+            formatEnumLabel(item.catalogType),
+            item.basePrice ? `${(item.currencyCode || defaultCurrencyCode.value).toUpperCase()} ${item.basePrice}` : 'No active price',
+        ].filter(Boolean).join(' | '),
+        keywords: [item.code, item.name, item.catalogType].filter(Boolean),
+        group: formatEnumLabel(item.catalogType),
+    } satisfies SearchableSelectOption)),
+);
+const createPriceOverrideChargeableItemOptions = computed<SearchableSelectOption[]>(() =>
+    withSyntheticChargeableItemOption(chargeableItemPriceOptions.value, createPriceOverrideForm.chargeableItemId),
+);
+const editPriceOverrideChargeableItemOptions = computed<SearchableSelectOption[]>(() =>
+    withSyntheticChargeableItemOption(chargeableItemPriceOptions.value, editPriceOverrideForm.chargeableItemId),
+);
+const selectedCreateChargeableItem = computed(() => findChargeableItemById(createPriceOverrideForm.chargeableItemId));
+const selectedEditChargeableItem = computed(() => findChargeableItemById(editPriceOverrideForm.chargeableItemId));
+const createPriceOverrideChargeableItemValue = computed({
+    get: () => createPriceOverrideForm.chargeableItemId || '',
+    set: (value: string) => {
+        createPriceOverrideForm.chargeableItemId = value;
+    },
+});
+const editPriceOverrideChargeableItemValue = computed({
+    get: () => editPriceOverrideForm.chargeableItemId || '',
+    set: (value: string) => {
+        editPriceOverrideForm.chargeableItemId = value;
+    },
+});
+const chargeableItemLookupHelperText = computed(() => {
+    if (!canReadChargeableItems.value) {
+        return 'billing.chargeable-items.read permission is required to link a pricing-engine item.';
+    }
+    if (chargeableItemLookupLoading.value) {
+        return 'Loading active pricing-engine items.';
+    }
+    if (chargeableItemLookupError.value) {
+        return 'Pricing-engine items could not be loaded right now.';
+    }
+    return 'Optional: link to a live pricing-engine item so this negotiated price tracks its real-time base price.';
+});
 const createPriceOverrideServiceOptions = computed<SearchableSelectOption[]>(() =>
     withSyntheticServiceOption(
         serviceCatalogPriceOptions.value,
@@ -1332,6 +1410,31 @@ function withSyntheticRuleServiceOption(
     ];
 }
 
+function withSyntheticChargeableItemOption(options: SearchableSelectOption[], chargeableItemId: string | null | undefined): SearchableSelectOption[] {
+    const normalizedId = String(chargeableItemId ?? '').trim();
+    if (!normalizedId) return options;
+
+    const alreadyPresent = options.some((option) => option.value === normalizedId);
+    if (alreadyPresent) return options;
+
+    return [
+        {
+            value: normalizedId,
+            label: 'Currently linked item',
+            description: 'This pricing-engine item is linked but not in the active list (it may now be inactive).',
+            keywords: [normalizedId],
+            group: 'Existing link',
+        },
+        ...options,
+    ];
+}
+
+function findChargeableItemById(chargeableItemId: string | null | undefined): ChargeableItemLookupEntry | null {
+    const normalizedId = String(chargeableItemId ?? '').trim();
+    if (!normalizedId) return null;
+    return chargeableItemLookupItems.value.find((item) => item.id === normalizedId) ?? null;
+}
+
 function findCatalogItemByServiceCode(serviceCode: string | null | undefined, preferredItemId: string | null | undefined = null): CatalogItem | null {
     const normalizedCode = normalizeServiceCode(serviceCode);
     const normalizedItemId = String(preferredItemId ?? '').trim();
@@ -1411,6 +1514,16 @@ function formatCatalogBasePriceLabel(item: CatalogItem | null): string {
     const normalizedPrice = item?.basePrice?.trim();
     if (!normalizedPrice) return 'Base price pending';
     return `${(item?.currencyCode || selectedContract.value?.currencyCode || defaultCurrencyCode.value).toUpperCase()} ${normalizedPrice}`;
+}
+
+function chargeableItemSelectionSummary(item: ChargeableItemLookupEntry | null): string {
+    if (!item) return 'Not linked to a pricing-engine item -- negotiated price uses the service code above.';
+    return [item.code, formatEnumLabel(item.catalogType)].filter(Boolean).join(' | ');
+}
+
+function formatChargeableItemBasePriceLabel(item: ChargeableItemLookupEntry | null): string {
+    if (!item?.basePrice) return 'No active price';
+    return `${(item.currencyCode || defaultCurrencyCode.value).toUpperCase()} ${item.basePrice}`;
 }
 
 function ruleConditionsSummary(form: Pick<RuleFormState, 'diagnosisCode' | 'priority' | 'minPatientAgeYears' | 'maxPatientAgeYears' | 'gender' | 'amountThreshold' | 'quantityLimit' | 'authorizationValidityDays' | 'benefitLimitAmount' | 'effectiveFrom' | 'effectiveTo'>): string {
@@ -1891,6 +2004,7 @@ function resetCreateRuleForm() {
 function resetCreatePriceOverrideForm() {
     Object.assign(createPriceOverrideForm, {
         billingServiceCatalogItemId: '',
+        chargeableItemId: '',
         serviceCode: '',
         serviceName: '',
         serviceType: '',
@@ -2137,6 +2251,7 @@ function openPriceOverrideEdit(item: PriceOverride) {
     editPriceOverrideTarget.value = item;
     Object.assign(editPriceOverrideForm, {
         billingServiceCatalogItemId: item.billingServiceCatalogItemId || '',
+        chargeableItemId: item.chargeableItemId || '',
         serviceCode: item.serviceCode || '',
         serviceName: item.serviceName || '',
         serviceType: item.serviceType || '',
@@ -2221,7 +2336,7 @@ async function loadContracts() {
 }
 
 async function refreshPage() {
-    await Promise.all([loadCountryProfile(), loadContracts(), loadCounts()]);
+    await Promise.all([loadCountryProfile(), loadContracts(), loadCounts(), loadChargeableItemLookup()]);
     applyCurrencyDefaults();
     if (selectedContract.value?.id) {
         await Promise.all([loadPriceOverrides(), loadRules(), loadServiceCatalogLookup(), loadPolicySummary()]);
@@ -2441,6 +2556,44 @@ async function loadServiceCatalogLookup() {
     }
 }
 
+/**
+ * Additive lookup over the new pricing engine (chargeable_items), separate
+ * from loadServiceCatalogLookup() above -- not contract/currency scoped
+ * since linking here is optional metadata, not a hard requirement.
+ */
+async function loadChargeableItemLookup() {
+    if (!canReadChargeableItems.value) {
+        chargeableItemLookupItems.value = [];
+        chargeableItemLookupError.value = 'billing.chargeable-items.read permission is required to link a pricing-engine item.';
+        chargeableItemLookupLoading.value = false;
+        return;
+    }
+
+    chargeableItemLookupLoading.value = true;
+    chargeableItemLookupError.value = null;
+    try {
+        const response = await apiRequest<ChargeableItemListResponse>('GET', '/chargeable-items', {
+            query: { status: 'active' },
+        });
+        chargeableItemLookupItems.value = (response.data ?? []).map((item) => {
+            const activePrice = item.prices.find((price) => price.status === 'active') ?? item.prices[0] ?? null;
+            return {
+                id: item.id,
+                code: item.code,
+                name: item.name,
+                catalogType: item.catalogType,
+                basePrice: activePrice ? String(activePrice.unitPrice) : null,
+                currencyCode: activePrice ? activePrice.currencyCode : null,
+            };
+        });
+    } catch (error) {
+        chargeableItemLookupItems.value = [];
+        chargeableItemLookupError.value = messageFromUnknown(error, 'Unable to load pricing-engine items for linking.');
+    } finally {
+        chargeableItemLookupLoading.value = false;
+    }
+}
+
 async function loadPolicySummary() {
     const contractId = selectedContract.value?.id?.trim();
     if (!contractId || !canRead.value) {
@@ -2510,6 +2663,7 @@ async function createPriceOverride() {
         const response = await apiRequest<ItemResponse<PriceOverride>>('POST', `/billing-payer-contracts/${contractId}/price-overrides`, {
             body: {
                 billingServiceCatalogItemId: nullableTrimmedValue(createPriceOverrideForm.billingServiceCatalogItemId),
+                chargeableItemId: nullableTrimmedValue(createPriceOverrideForm.chargeableItemId),
                 serviceCode,
                 serviceName: nullableTrimmedValue(createPriceOverrideForm.serviceName),
                 serviceType: createPriceOverrideForm.serviceType.trim() || null,
@@ -2610,6 +2764,7 @@ async function savePriceOverrideEdit() {
         await apiRequest<ItemResponse<PriceOverride>>('PATCH', `/billing-payer-contracts/${contractId}/price-overrides/${overrideId}`, {
             body: {
                 billingServiceCatalogItemId: nullableTrimmedValue(editPriceOverrideForm.billingServiceCatalogItemId),
+                chargeableItemId: nullableTrimmedValue(editPriceOverrideForm.chargeableItemId),
                 serviceCode,
                 serviceName: nullableTrimmedValue(editPriceOverrideForm.serviceName),
                 serviceType: editPriceOverrideForm.serviceType.trim() || null,
@@ -3317,6 +3472,7 @@ onMounted(refreshPage);
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <Badge variant="outline">{{ item.serviceCode || 'Service code pending' }}</Badge>
                                                 <Badge variant="outline">{{ item.serviceType ? formatEnumLabel(item.serviceType) : 'Service type not set' }}</Badge>
+                                                <Badge v-if="item.chargeableItemId" variant="secondary">Pricing engine linked</Badge>
                                                 <Badge variant="outline">{{ formatPricingStrategyLabel(item.pricingStrategy) }}</Badge>
                                                 <Badge :variant="negotiatedPriceImpactBadgeVariant(item.varianceDirection)">{{ negotiatedPriceImpactLabel(item) }}</Badge>
                                                 <Badge :variant="statusVariant(item.status)">{{ formatEnumLabel(item.status || 'unknown') }}</Badge>
@@ -3382,6 +3538,26 @@ onMounted(refreshPage);
                                             <Input id="create-price-override-department" v-model="createPriceOverrideForm.department" placeholder="Optional when service lookup is unavailable" />
                                         </FormFieldShell>
                                     </template>
+                                    <Alert v-if="chargeableItemLookupError" variant="destructive" class="md:col-span-2 xl:col-span-3">
+                                        <AlertTitle>Pricing-engine lookup issue</AlertTitle>
+                                        <AlertDescription>{{ chargeableItemLookupError }}</AlertDescription>
+                                    </Alert>
+                                    <ComboboxField
+                                        input-id="create-price-override-chargeable-item"
+                                        v-model="createPriceOverrideChargeableItemValue"
+                                        label="Pricing item (new engine)"
+                                        :options="createPriceOverrideChargeableItemOptions"
+                                        placeholder="Optionally link a pricing-engine item"
+                                        search-placeholder="Search chargeable items by code or name"
+                                        :helper-text="chargeableItemLookupHelperText"
+                                        empty-text="No active pricing-engine items matched this search."
+                                        container-class="md:col-span-2"
+                                    />
+                                    <div class="rounded-lg border bg-muted/10 p-3 md:col-span-2 xl:col-span-1">
+                                        <p class="text-sm font-medium">{{ selectedCreateChargeableItem?.name || 'Not linked' }}</p>
+                                        <p class="mt-1 text-xs text-muted-foreground">{{ chargeableItemSelectionSummary(selectedCreateChargeableItem) }}</p>
+                                        <p v-if="selectedCreateChargeableItem" class="mt-2 text-xs text-muted-foreground">{{ formatChargeableItemBasePriceLabel(selectedCreateChargeableItem) }}</p>
+                                    </div>
                                     <FormFieldShell input-id="create-price-override-strategy" label="Pricing style">
                                         <Select v-model="createPriceOverridePricingStrategySelectValue">
                                             <SelectTrigger id="create-price-override-strategy" class="w-full"><SelectValue /></SelectTrigger>
@@ -3743,6 +3919,26 @@ onMounted(refreshPage);
                             </FormFieldShell>
                             <FormFieldShell input-id="edit-price-override-department" label="Department"><Input id="edit-price-override-department" v-model="editPriceOverrideForm.department" /></FormFieldShell>
                         </template>
+                        <Alert v-if="chargeableItemLookupError" variant="destructive" class="md:col-span-2 xl:col-span-3">
+                            <AlertTitle>Pricing-engine lookup issue</AlertTitle>
+                            <AlertDescription>{{ chargeableItemLookupError }}</AlertDescription>
+                        </Alert>
+                        <ComboboxField
+                            input-id="edit-price-override-chargeable-item"
+                            v-model="editPriceOverrideChargeableItemValue"
+                            label="Pricing item (new engine)"
+                            :options="editPriceOverrideChargeableItemOptions"
+                            placeholder="Optionally link a pricing-engine item"
+                            search-placeholder="Search chargeable items by code or name"
+                            :helper-text="chargeableItemLookupHelperText"
+                            empty-text="No active pricing-engine items matched this search."
+                            container-class="md:col-span-2"
+                        />
+                        <div class="rounded-lg border bg-muted/10 p-3 md:col-span-2 xl:col-span-1">
+                            <p class="text-sm font-medium">{{ selectedEditChargeableItem?.name || 'Not linked' }}</p>
+                            <p class="mt-1 text-xs text-muted-foreground">{{ chargeableItemSelectionSummary(selectedEditChargeableItem) }}</p>
+                            <p v-if="selectedEditChargeableItem" class="mt-2 text-xs text-muted-foreground">{{ formatChargeableItemBasePriceLabel(selectedEditChargeableItem) }}</p>
+                        </div>
                         <FormFieldShell input-id="edit-price-override-strategy" label="Pricing style">
                             <Select v-model="editPriceOverridePricingStrategySelectValue">
                                 <SelectTrigger id="edit-price-override-strategy" class="w-full"><SelectValue /></SelectTrigger>

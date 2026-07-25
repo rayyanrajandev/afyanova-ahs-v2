@@ -771,6 +771,7 @@ class BillingPayerContractController extends Controller
     {
         $fieldMap = [
             'billingServiceCatalogItemId' => 'billing_service_catalog_item_id',
+            'chargeableItemId' => 'chargeable_item_id',
             'serviceCode' => 'service_code',
             'serviceName' => 'service_name',
             'serviceType' => 'service_type',
