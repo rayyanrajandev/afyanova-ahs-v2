@@ -20,12 +20,6 @@ interface BillingServiceCatalogItemRepositoryInterface
      */
     public function bulkUpdate(array $ids, array $attributes): array;
 
-    public function findActivePricingByServiceCode(
-        string $serviceCode,
-        string $currencyCode,
-        ?string $asOfDateTime = null
-    ): ?array;
-
     public function update(string $id, array $attributes): ?array;
 
     public function existsByServiceCode(
@@ -57,16 +51,6 @@ interface BillingServiceCatalogItemRepositoryInterface
         string $clinicalCatalogItemId,
         ?string $tenantId = null,
         ?string $facilityId = null,
-    ): array;
-
-    /**
-     * @param  list<string>  $serviceCodes
-     * @return array<string, array<string, mixed>>  Map of service_code => active pricing.
-     */
-    public function findActivePricingByServiceCodes(
-        array $serviceCodes,
-        string $currencyCode,
-        ?string $asOfDateTime = null
     ): array;
 
     /**

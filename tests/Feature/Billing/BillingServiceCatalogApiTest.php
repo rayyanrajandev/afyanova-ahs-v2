@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\User;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemAuditLogModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -567,41 +566,6 @@ it('keeps the linked clinical catalog definition on a new tariff revision', func
 
     expect($revision['clinicalCatalogItemId'])->toBe($clinicalItem['id']);
     expect($revision['clinicalCatalogItem']['id'])->toBe($clinicalItem['id']);
-});
-
-it('resolves active pricing from the correct tariff revision by effective date', function (): void {
-    $user = makeBillingServiceCatalogUser(['billing.service-catalog.manage']);
-    $created = createBillingServiceCatalogItem($user, [
-        'serviceCode' => 'LAB-VERSION-001',
-        'serviceName' => 'CBC',
-        'basePrice' => 15000,
-        'effectiveFrom' => now()->subDays(30)->toDateTimeString(),
-    ]);
-
-    createBillingServiceCatalogRevision($user, $created['id'], [
-        'basePrice' => 22000,
-        'effectiveFrom' => now()->addDays(5)->toDateTimeString(),
-    ]);
-
-    /** @var BillingServiceCatalogItemRepositoryInterface $repository */
-    $repository = app(BillingServiceCatalogItemRepositoryInterface::class);
-
-    $currentPricing = $repository->findActivePricingByServiceCode(
-        serviceCode: 'LAB-VERSION-001',
-        currencyCode: 'TZS',
-        asOfDateTime: now()->toDateTimeString(),
-    );
-    $futurePricing = $repository->findActivePricingByServiceCode(
-        serviceCode: 'LAB-VERSION-001',
-        currencyCode: 'TZS',
-        asOfDateTime: now()->addDays(6)->toDateTimeString(),
-    );
-
-    expect($currentPricing)->not->toBeNull();
-    expect($futurePricing)->not->toBeNull();
-    expect($currentPricing['base_price'])->toBe('15000.00');
-    expect($futurePricing['base_price'])->toBe('22000.00');
-    expect((int) $futurePricing['tariff_version'])->toBe(2);
 });
 
 it('lists tariff version history for a service code family', function (): void {
