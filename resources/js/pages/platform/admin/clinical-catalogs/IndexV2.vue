@@ -20,6 +20,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -2440,18 +2441,26 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <Badge v-if="canRead" variant="secondary">{{ pagination?.total ?? items.length }} {{ catalog.label.toLowerCase() }}</Badge>
-                        <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="listLoading" @click="loadItems()">
-                            <AppIcon :name="(listLoading ? 'loader-circle' : 'refresh-cw') as AppIconName" class="size-3.5" :class="listLoading ? 'animate-spin' : ''" />
-                            Refresh
-                        </Button>
                         <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                             <AppIcon name="plus" class="size-3.5" />
                             {{ createButtonLabel }}
                         </Button>
-                        <Button v-if="canRead" variant="outline" size="sm" class="h-8 gap-1.5" @click="bulkSheetOpen = true">
-                            <AppIcon name="layout-grid" class="size-3.5" />
-                            Bulk workspace
-                        </Button>
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <Button variant="outline" size="sm" class="h-8 w-8 p-0" :disabled="catalogExporting" @click="exportClinicalCatalogCsv">
+                                    <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Export CSV</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <Button variant="outline" size="sm" class="h-8 w-8 p-0" :disabled="catalogPrinting || loading || listLoading" @click="printClinicalCatalogItems">
+                                    <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Print</TooltipContent>
+                        </Tooltip>
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
                                 <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
@@ -2459,13 +2468,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" class="w-48">
-                                <DropdownMenuItem class="gap-2" :disabled="catalogExporting" @select="exportClinicalCatalogCsv">
-                                    <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-4" :class="{ 'animate-spin': catalogExporting }" />
-                                    Export CSV
-                                </DropdownMenuItem>
-                                <DropdownMenuItem class="gap-2" :disabled="catalogPrinting || loading || listLoading" @select="printClinicalCatalogItems">
-                                    <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-4" :class="{ 'animate-spin': catalogPrinting }" />
-                                    Print
+                                <DropdownMenuItem v-if="canRead" class="gap-2" @click="bulkSheetOpen = true">
+                                    <AppIcon name="layout-grid" class="size-4" />
+                                    Bulk workspace
                                 </DropdownMenuItem>
                                 <DropdownMenuItem as-child>
                                     <Link href="/chargeable-items" class="gap-2">
