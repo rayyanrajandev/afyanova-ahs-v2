@@ -29,6 +29,7 @@ class StoreInventoryStockMovementRequest extends FormRequest
             'manufactureDate' => ['nullable', 'date'],
             'expiryDate' => ['nullable', 'date', 'after_or_equal:manufactureDate'],
             'binLocation' => ['nullable', 'string', 'max:120'],
+            'manufacturer' => ['nullable', 'string', 'max:180'],
             'sourceSupplierId' => ['nullable', 'uuid'],
             'sourceWarehouseId' => ['nullable', 'uuid'],
             'destinationWarehouseId' => ['nullable', 'uuid'],

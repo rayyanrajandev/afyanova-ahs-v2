@@ -583,3 +583,81 @@ it('bulk updates clinical catalog item status when authorized', function (): voi
         ->assertOk()
         ->assertJsonPath('data.updatedCount', 2);
 });
+
+// Inventory_MasterData_Alignment_Plan.md Phase 6: manage-formulary is enough to create
+// or edit a drug definition, but not enough to flag it cold-chain or controlled-substance
+// -- that needs the separate, narrower inventory.procurement.manage-compliance permission.
+it('blocks setting cold-chain or controlled-substance on a formulary item without the compliance permission', function (): void {
+    $user = makeClinicalCatalogActor(['platform.clinical-catalog.manage-formulary']);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/platform/admin/clinical-catalogs/formulary-items', clinicalCatalogPayload([
+            'code' => 'MED-COMPLIANCE-001',
+            'name' => 'Test Cold Chain Vaccine',
+            'requiresColdChain' => true,
+            'isControlledSubstance' => true,
+            'controlledSubstanceSchedule' => 'schedule_II',
+        ]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['requiresColdChain', 'isControlledSubstance']);
+});
+
+it('allows setting cold-chain or controlled-substance on a formulary item with the compliance permission', function (): void {
+    $user = makeClinicalCatalogActor(['platform.clinical-catalog.manage-formulary', 'inventory.procurement.manage-compliance']);
+
+    $item = $this->actingAs($user)
+        ->postJson('/api/v1/platform/admin/clinical-catalogs/formulary-items', clinicalCatalogPayload([
+            'code' => 'MED-COMPLIANCE-002',
+            'name' => 'Test Cold Chain Vaccine 2',
+            'requiresColdChain' => true,
+            'isControlledSubstance' => true,
+            'controlledSubstanceSchedule' => 'schedule_II',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    expect($item['requiresColdChain'])->toBeTrue();
+    expect($item['isControlledSubstance'])->toBeTrue();
+    expect($item['controlledSubstanceSchedule'])->toBe('schedule_II');
+});
+
+// Regression test for a bug caught while building the frontend gate on top of this
+// permission: the admin form resends every field on every save (not a diff), so a
+// naive "reject if present and true" check would have blocked this routine edit --
+// changing an unrelated field on an item a compliance-permissioned user had already,
+// correctly, flagged cold-chain. Only a genuine true/false transition should require
+// the permission.
+it('allows editing an unrelated field on an already-compliance-flagged formulary item without the compliance permission', function (): void {
+    $complianceUser = makeClinicalCatalogActor(['platform.clinical-catalog.manage-formulary', 'inventory.procurement.manage-compliance']);
+    $item = createFormularyCatalogItem($complianceUser, [
+        'code' => 'MED-COMPLIANCE-003',
+        'name' => 'Test Cold Chain Vaccine 3',
+        'requiresColdChain' => true,
+        'isControlledSubstance' => true,
+        'controlledSubstanceSchedule' => 'schedule_II',
+    ]);
+
+    $formularyOnlyUser = makeClinicalCatalogActor(['platform.clinical-catalog.manage-formulary']);
+
+    $updated = $this->actingAs($formularyOnlyUser)
+        ->patchJson('/api/v1/platform/admin/clinical-catalogs/formulary-items/'.$item['id'], [
+            'description' => 'Updated description, unrelated to compliance fields',
+            'requiresColdChain' => true,
+            'isControlledSubstance' => true,
+            'controlledSubstanceSchedule' => 'schedule_II',
+        ])
+        ->assertOk()
+        ->json('data');
+
+    expect($updated['description'])->toBe('Updated description, unrelated to compliance fields');
+    expect($updated['requiresColdChain'])->toBeTrue();
+    expect($updated['isControlledSubstance'])->toBeTrue();
+
+    // But actually flipping either one still requires the permission.
+    $this->actingAs($formularyOnlyUser)
+        ->patchJson('/api/v1/platform/admin/clinical-catalogs/formulary-items/'.$item['id'], [
+            'requiresColdChain' => false,
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['requiresColdChain']);
+});

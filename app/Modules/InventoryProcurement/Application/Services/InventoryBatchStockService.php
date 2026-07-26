@@ -1184,6 +1184,11 @@ class InventoryBatchStockService
                 'warehouse_id' => $warehouseId,
                 'bin_location' => $binLocation ?? $batch->bin_location,
                 'supplier_id' => $this->stringOrNull($payload['source_supplier_id'] ?? null) ?? $batch->supplier_id,
+                // Inventory_MasterData_Alignment_Plan.md Phase 7: manufacturer is a
+                // receipt-time fact, not fixed per item -- an explicit value on this
+                // receipt wins, but a repeat receipt into the same open batch keeps
+                // whatever the batch was already recorded with.
+                'manufacturer' => $this->stringOrNull($payload['manufacturer'] ?? null) ?? $batch->manufacturer,
                 'unit_cost' => $receivedUnitCost ?? $batch->unit_cost,
                 'status' => 'available',
                 'notes' => $payload['notes'] ?? $batch->notes,
@@ -1201,6 +1206,9 @@ class InventoryBatchStockService
                         'warehouse_id' => $warehouseId,
                         'bin_location' => $binLocation,
                         'supplier_id' => $this->stringOrNull($payload['source_supplier_id'] ?? null),
+                        // Defaults to the item's manufacturer preference when this
+                        // receipt didn't specify one, same as CreateInventoryBatchUseCase.
+                        'manufacturer' => $this->stringOrNull($payload['manufacturer'] ?? null) ?? $this->stringOrNull($item->manufacturer ?? null),
                         'unit_cost' => $receivedUnitCost,
                         'status' => 'available',
                         'notes' => $payload['notes'] ?? null,

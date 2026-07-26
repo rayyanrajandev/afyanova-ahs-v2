@@ -431,6 +431,15 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Warehouse registry and status management',
     },
     {
+        title: 'Categories',
+        href: '/inventory-procurement/categories',
+        iconName: 'tag',
+        section: 'stores',
+        subGroup: 'admin',
+        permissionPrefixes: ['inventory.procurement.manage-items'],
+        helpNote: 'Category and subcategory reference data',
+    },
+    {
         title: 'Suppliers',
         href: '/inventory-procurement/suppliers',
         iconName: 'package',

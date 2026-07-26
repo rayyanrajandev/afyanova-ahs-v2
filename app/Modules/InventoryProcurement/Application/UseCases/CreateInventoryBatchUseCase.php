@@ -26,6 +26,16 @@ class CreateInventoryBatchUseCase
             throw new InventoryItemNotFoundException('Inventory item not found.');
         }
 
+        // Inventory_MasterData_Alignment_Plan.md Phase 7: manufacturer is a
+        // receipt-time fact -- generics are routinely sourced from different
+        // manufacturers across purchase orders. Default to the item's manufacturer
+        // preference when this receipt didn't specify one, rather than leaving it
+        // blank; an explicit value on the batch always wins.
+        $manufacturer = isset($payload['manufacturer']) ? trim((string) $payload['manufacturer']) : '';
+        if ($manufacturer === '') {
+            $manufacturer = trim((string) ($item['manufacturer'] ?? ''));
+        }
+
         return $this->batchRepository->create([
             'tenant_id' => $this->platformScopeContext->tenantId(),
             'facility_id' => $this->platformScopeContext->facilityId(),
@@ -38,6 +48,7 @@ class CreateInventoryBatchUseCase
             'warehouse_id' => $payload['warehouse_id'] ?? null,
             'bin_location' => $payload['bin_location'] ?? null,
             'supplier_id' => $payload['supplier_id'] ?? null,
+            'manufacturer' => $manufacturer !== '' ? $manufacturer : null,
             'unit_cost' => isset($payload['unit_cost']) ? (float) $payload['unit_cost'] : null,
             'status' => 'available',
             'notes' => $payload['notes'] ?? null,

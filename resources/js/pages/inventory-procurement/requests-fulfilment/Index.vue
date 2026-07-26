@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref, nextTick, onBeforeUnmount, onMounted, reactive, watch, type Ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
@@ -42,12 +42,14 @@ import { apiRequestJson } from '@/lib/apiClient';
 import { departmentDisplayName, departmentRequesterHeaderDescription } from '@/lib/departmentRequisitionContext';
 import type { AppIconName } from '@/lib/icons';
 import { generateRequestKey } from '@/lib/idempotency';
-import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
+import { INVENTORY_PROCUREMENT_HOME_PATH, supplyChainSectionHref, type SupplyChainSection } from '@/lib/inventoryProcurement';
 import { isInventoryDepartmentRequester, isInventoryStoreOperations, type InventoryProcurementAccess } from '@/lib/inventoryProcurementAccess';
 import { formatEnumLabel } from '@/lib/labels';
 import { departmentRequisitionStripeClass, shortageReadinessStripeClass } from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
+import SupplyChainInventoryOpsSheets from '@/pages/inventory-procurement/components/SupplyChainInventoryOpsSheets.vue';
+import SupplyChainItemDetailsSheet from '@/pages/inventory-procurement/components/SupplyChainItemDetailsSheet.vue';
 import SupplyChainProcurementLifecycleSheets from '@/pages/inventory-procurement/components/SupplyChainProcurementLifecycleSheets.vue';
 import SupplyChainRequestEntrySheets from '@/pages/inventory-procurement/components/SupplyChainRequestEntrySheets.vue';
 import SupplyChainRequisitionDetailsSheet from '@/pages/inventory-procurement/components/SupplyChainRequisitionDetailsSheet.vue';
@@ -307,7 +309,38 @@ const requestPipelineStages = computed<RequestPipelineStage[]>(() => [
 ]);
 
 const nextActions = ref<SupplyChainNextAction[]>([]);
-const openRequestPipelineStage = (stage: RequestPipelineStage, e?: MouseEvent) => {};
+const openRequestPipelineStage = (stage: RequestPipelineStage): void => {
+    if (stage.kind === 'requisition') {
+        activeTab.value = 'requisitions';
+        if (stage.status) {
+            deptReqSearch.status = stage.status;
+            deptReqSearch.page = 1;
+            loadDeptRequisitions();
+        }
+    } else if (stage.kind === 'shortage') {
+        activeTab.value = 'shortage-queue';
+        shortageQueueFilters.readiness = stage.readiness ?? 'all';
+        shortageQueueFilters.page = 1;
+        loadShortageQueue();
+    } else if (stage.kind === 'procurement') {
+        const href = supplyChainSectionHref(stage.target);
+        const url = new URL(href, window.location.origin);
+        url.searchParams.set('tab', 'procurement');
+        if (stage.status) url.searchParams.set('status', stage.status);
+        router.visit(`${url.pathname}${url.search}`);
+    }
+};
+
+function handleOverviewChangeTab(v: string): void {
+    if (rfTabs.includes(v as RFTab)) {
+        activeTab.value = v as RFTab;
+        return;
+    }
+    const href = supplyChainSectionHref(v as SupplyChainSection);
+    const url = new URL(href, window.location.origin);
+    url.searchParams.set('tab', v);
+    router.visit(`${url.pathname}${url.search}`);
+}
 
 // ── Department Requisitions tab state ──
 type LookupOption = { id: string; name: string; code: string | null };
@@ -321,6 +354,27 @@ const warehouses = ref<LookupOption[]>([]);
 const suppliers = ref<LookupOption[]>([]);
 const supplierReady = computed(() => suppliers.value.length > 0);
 const warehouseReady = computed(() => warehouses.value.length > 0);
+
+async function loadSuppliersAndWarehouses() {
+    try {
+        const [suppliersRes, warehousesRes, deptsRes] = await Promise.all([
+            apiRequest<{ data: any[] }>('GET', '/inventory-procurement/suppliers', { query: { perPage: 200 } }).catch(() => ({ data: [] })),
+            apiRequest<{ data: any[] }>('GET', '/inventory-procurement/warehouses', { query: { perPage: 200 } }).catch(() => ({ data: [] })),
+            canReadDepartments.value
+                ? apiRequest<{ data: any[] }>('GET', '/departments', { query: { perPage: 200, status: 'active' } }).catch(() => ({ data: [] }))
+                : Promise.resolve({ data: [] }),
+        ]);
+        suppliers.value = (suppliersRes.data ?? []).map((s: any) => ({ id: String(s.id), name: String(s.supplierName ?? s.name ?? ''), code: s.supplierCode ?? s.code ?? null })).filter((s: any) => s.id && s.name);
+        warehouses.value = (warehousesRes.data ?? []).map((w: any) => ({ id: String(w.id), name: String(w.warehouseName ?? w.name ?? ''), code: w.warehouseCode ?? w.code ?? null })).filter((w: any) => w.id && w.name);
+        departments.value = (deptsRes.data ?? []).map((d: any) => ({ id: String(d.id), name: String(d.name ?? ''), code: d.code ?? null })).filter((d: any) => d.id && d.name);
+    } catch {
+        suppliers.value = [];
+        warehouses.value = [];
+        departments.value = [];
+    } finally {
+        referenceStructureLoaded.value = true;
+    }
+}
 
 const deptRequisitions = ref<any[]>([]);
 const deptReqPagination = ref<{ currentPage: number; lastPage: number; total?: number } | null>(null);
@@ -862,10 +916,11 @@ const procurementSetupBlockedReason = computed(() => null);
 const procurementForm = reactive({ itemId: '', itemName: '', category: '', unit: '', reorderLevel: '', requestedQuantity: '', unitCostEstimate: '', neededBy: '', supplierId: '', sourceDepartmentRequisitionId: '', sourceDepartmentRequisitionLineId: '', sourceSummary: '', notes: '' });
 const procurementErrors = ref<Record<string, string[]>>({});
 const procurementSubmitting = ref(false);
+const procurementRequestError = ref<string | null>(null);
 const procurementSubmitDisabled = computed(() => (
     procurementSubmitting.value
     || !procurementForm.itemId.trim()
-    || procurementForm.requestedQuantity.trim() === ''
+    || !String(procurementForm.requestedQuantity ?? '').trim()
     || Number(procurementForm.requestedQuantity) <= 0
 ));
 const selectedProcurementItem = ref<any>(null);
@@ -885,7 +940,38 @@ function handleProcurementItemSelected(item: any): void {
     procurementForm.unit = String(item.unit ?? item.dispensingUnit ?? '');
 }
 
-function submitProcurementRequest(): Promise<void> { return Promise.resolve(); }
+async function submitProcurementRequest(): Promise<void> {
+    if (procurementSubmitDisabled.value) return;
+    procurementSubmitting.value = true;
+    procurementErrors.value = {};
+    procurementRequestError.value = null;
+    try {
+        await apiRequestJson('POST', '/inventory-procurement/procurement-requests', {
+            body: {
+                itemId: procurementForm.itemId,
+                requestedQuantity: procurementForm.requestedQuantity,
+                unitCostEstimate: procurementForm.unitCostEstimate || null,
+                neededBy: procurementForm.neededBy || null,
+                supplierId: procurementForm.supplierId || null,
+                sourceDepartmentRequisitionId: procurementForm.sourceDepartmentRequisitionId || null,
+                sourceDepartmentRequisitionLineId: procurementForm.sourceDepartmentRequisitionLineId || null,
+                notes: procurementForm.notes.trim() || null,
+            },
+            idempotencyKey: procurementRequestKey.value,
+            requestId: procurementRequestKey.value,
+            entitlementContext: 'Procurement request create',
+        });
+        notifySuccess('Procurement request created.');
+        closeCreateProcurementDialog();
+        await Promise.allSettled([loadShortageQueue(), loadRequestPipelineCounts()]);
+    } catch (error) {
+        procurementErrors.value = (error as ApiError).payload?.errors ?? {};
+        procurementRequestError.value = messageFromUnknown(error, 'Unable to create procurement request.');
+        notifyError(procurementRequestError.value);
+    } finally {
+        procurementSubmitting.value = false;
+    }
+}
 function closeCreateProcurementDialog(): void { createProcurementDialogOpen.value = false; }
 function handleProcurementDialogOpenChange(open: boolean): void { if (open) createProcurementDialogOpen.value = true; else closeCreateProcurementDialog(); }
 
@@ -1633,6 +1719,96 @@ interface HeaderAction {
     onClick?: () => void;
 }
 
+const requestsFulfilmentExporting = ref(false);
+
+function rowsToCsv(rows: Record<string, unknown>[]): string {
+    if (rows.length === 0) return '';
+    const columns = Array.from(rows.reduce((set, row) => {
+        Object.keys(row).forEach((key) => set.add(key));
+        return set;
+    }, new Set<string>()));
+    const escapeCell = (value: unknown): string => {
+        if (value === null || value === undefined) return '';
+        const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const lines = [columns.join(',')];
+    for (const row of rows) {
+        lines.push(columns.map((col) => escapeCell(row[col])).join(','));
+    }
+    return lines.join('\n');
+}
+
+function downloadCsvText(csv: string, filename: string): void {
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+}
+
+async function loadAllPages(path: string, baseQuery: Record<string, string | number>): Promise<any[]> {
+    const rows: any[] = [];
+    let page = 1;
+    let lastPage = 1;
+    do {
+        const response = await apiRequest<{ data: any[]; meta?: { lastPage?: number } }>('GET', path, {
+            query: { ...baseQuery, page, perPage: 100 },
+        });
+        rows.push(...(response.data ?? []));
+        lastPage = Math.max(response.meta?.lastPage ?? 1, 1);
+        page += 1;
+    } while (page <= lastPage && rows.length < 5000);
+    return rows;
+}
+
+async function exportRequestsFulfilmentCsv(): Promise<void> {
+    if (requestsFulfilmentExporting.value) return;
+    requestsFulfilmentExporting.value = true;
+    try {
+        let rows: any[] = [];
+        let baseName = 'requests-fulfilment';
+        if (activeTab.value === 'requisitions') {
+            baseName = 'department-requisitions';
+            const query: Record<string, string | number> = {};
+            if (deptReqSearch.q) query.q = deptReqSearch.q;
+            if (deptReqSearch.status) query.status = deptReqSearch.status;
+            if (deptReqSearch.departmentId) query.departmentId = deptReqSearch.departmentId;
+            rows = await loadAllPages('/inventory-procurement/department-requisitions', query);
+        } else if (activeTab.value === 'shortage-queue') {
+            baseName = 'shortage-queue';
+            const query: Record<string, string | number> = { readiness: shortageQueueFilters.readiness };
+            if (shortageQueueFilters.q) query.q = shortageQueueFilters.q;
+            if (shortageQueueFilters.departmentId) query.departmentId = shortageQueueFilters.departmentId;
+            rows = await loadAllPages('/inventory-procurement/shortage-queue', query);
+        } else if (activeTab.value === 'transfers') {
+            baseName = 'warehouse-transfers';
+            const query: Record<string, string | number> = {};
+            if (transferSearch.q) query.q = transferSearch.q;
+            if (transferSearch.status) query.status = transferSearch.status;
+            rows = await loadAllPages('/inventory-procurement/warehouse-transfers', query);
+        } else {
+            baseName = 'department-requisitions';
+            rows = await loadAllPages('/inventory-procurement/department-requisitions', {});
+        }
+        if (rows.length === 0) {
+            notifyError('No rows to export for the current view.');
+            return;
+        }
+        downloadCsvText(rowsToCsv(rows), `${baseName}-${new Date().toISOString().slice(0, 10)}.csv`);
+        notifySuccess('Export ready.');
+    } catch (error) {
+        notifyError(messageFromUnknown(error, 'Unable to export.'));
+    } finally {
+        requestsFulfilmentExporting.value = false;
+    }
+}
+
 const headerActions = computed<HeaderAction[]>(() => {
     const actions: HeaderAction[] = [];
     if (activeTab.value === 'overview') {
@@ -1642,7 +1818,11 @@ const headerActions = computed<HeaderAction[]>(() => {
     } else if (activeTab.value === 'transfers') {
         actions.push({ key: 'new-transfer', label: 'New Transfer', icon: 'plus', variant: 'default', show: true, onClick: () => { createTransferDialogOpen.value = true; } });
     }
-    actions.push({ key: 'export', label: 'Export', icon: 'download', variant: 'outline', show: true, onClick: () => {} });
+    actions.push({
+        key: 'export', label: 'Export', icon: 'download', variant: 'outline', show: true,
+        disabled: requestsFulfilmentExporting.value,
+        onClick: () => { void exportRequestsFulfilmentCsv(); },
+    });
     actions.push({ key: 'print', label: 'Print', icon: 'printer', variant: 'outline', show: true, onClick: () => { if (typeof window !== 'undefined') window.print(); } });
     return actions.filter((action) => action.show);
 });
@@ -1728,6 +1908,122 @@ function reloadAll(): void {
     void loadWarehouseTransfers();
 }
 
+const procurementFilters = reactive({ q: '', status: '' });
+
+const itemDetailsOpen = ref(false);
+function requestItemDetailsOpenChange(open: boolean): void { itemDetailsOpen.value = open; }
+const itemDetails = ref<any>(null);
+const itemUpdateForm = reactive({} as any);
+const itemUpdateErrors = ref<Record<string, string[]>>({});
+const itemUpdateSubmitting = ref(false);
+const itemStatusForm = reactive({ status: '', reason: '' });
+const itemStatusSubmitting = ref(false);
+const itemStatusError = ref<string | null>(null);
+
+async function loadItems() {
+    if (!canRead.value) return;
+    try {
+        const response = await apiRequest<{ data: any[]; meta: { currentPage: number; lastPage: number; total?: number } }>('GET', '/inventory-procurement/items', {
+            query: { perPage: 50 },
+        });
+        items.value = response.data ?? [];
+        itemCounts.value = { outOfStock: 0, lowStock: 0, healthy: 0, total: response.meta?.total ?? 0 };
+    } catch {
+        // handled silently
+    }
+}
+
+const statusDialogOpen = ref(false);
+const statusRequest = ref<any>(null);
+const statusValue = ref('');
+const statusReason = ref('');
+const statusError = ref<string | null>(null);
+const statusSubmitting = ref(false);
+function flashRequest(_requestId: string): void {}
+
+const clinicalCatalogItems = ref<any[]>([]);
+const clinicalCatalogLabel = (id: string | null | undefined) => { if (!id) return 'Unknown'; const item = clinicalCatalogItems.value?.find((c: any) => c.id === id); return item?.name ?? 'Unknown'; };
+const createClinicalCatalogOptions = computed(() => clinicalCatalogItems.value.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code})` })));
+const updateClinicalCatalogOptions = createClinicalCatalogOptions;
+const selectClinicalCatalogItem = (form: any, catalogItemId: string) => { const item = clinicalCatalogItems.value?.find((c: any) => c.id === catalogItemId); if (item) { form.clinicalCatalogItemId = catalogItemId; if (!form.itemName) form.itemName = item.name; if (!form.itemCode) form.itemCode = item.code; } };
+const selectedUpdateCategory = computed(() => null);
+const updateIdentityLockedToCatalog = computed(() => false);
+const updateSelectedCatalogItem = computed(() => null);
+const fieldError = (errors: Record<string, string[]>, field: string) => errors[field]?.[0] ?? null;
+const itemUpdateSubmitDisabled = computed(() => itemUpdateSubmitting.value);
+
+async function searchClinicalCatalog(q: string, catalogType?: string): Promise<any[]> {
+    try {
+        const response = await apiRequest<{ data: any[] }>('GET', '/inventory-procurement/clinical-catalog/search', {
+            query: { q, catalogType: catalogType ?? 'formulary_item', perPage: 50 },
+        });
+        return response.data ?? [];
+    } catch {
+        return [];
+    }
+}
+
+async function submitStatusUpdate() {
+    if (!statusRequest.value || statusSubmitting.value) return;
+    statusSubmitting.value = true;
+    statusError.value = null;
+    try {
+        await apiRequest('PATCH', `/inventory-procurement/procurement-requests/${statusRequest.value.id}/status`, {
+            body: { status: statusValue.value, reason: statusReason.value.trim() || null },
+            meta: { idempotencyKey: generateRequestKey(), requestId: generateRequestKey(), entitlementContext: 'Procurement request status update' },
+        });
+        notifySuccess(`Procurement request set to ${formatEnumLabel(statusValue.value)}.`);
+        statusDialogOpen.value = false;
+        await loadRequestPipelineCounts();
+        flashRequest(statusRequest.value.id);
+    } catch (error) {
+        statusError.value = messageFromUnknown(error, 'Unable to update status.');
+        notifyError(statusError.value);
+    } finally {
+        statusSubmitting.value = false;
+    }
+}
+
+async function submitItemUpdate() {
+    if (!itemDetails.value || !canManageItems.value || itemUpdateSubmitting.value) return;
+    itemUpdateSubmitting.value = true;
+    itemUpdateErrors.value = {};
+    try {
+        const response = await apiRequest<{ data: any }>('PATCH', `/inventory-procurement/items/${itemDetails.value.id}`, {
+            body: itemUpdateForm,
+            meta: { idempotencyKey: generateRequestKey(), requestId: generateRequestKey(), entitlementContext: 'Inventory item update' },
+        });
+        itemDetails.value = response.data;
+        notifySuccess('Inventory item updated.');
+        await loadItems();
+    } catch (error) {
+        itemUpdateErrors.value = (error as any).payload?.errors ?? {};
+        notifyError(messageFromUnknown(error, 'Unable to update inventory item.'));
+    } finally {
+        itemUpdateSubmitting.value = false;
+    }
+}
+
+async function submitItemStatus() {
+    if (!itemDetails.value || !canManageItems.value || itemStatusSubmitting.value) return;
+    itemStatusSubmitting.value = true;
+    itemStatusError.value = null;
+    try {
+        const response = await apiRequest<{ data: any }>('PATCH', `/inventory-procurement/items/${itemDetails.value.id}/status`, {
+            body: { status: itemStatusForm.status, reason: (itemStatusForm.reason || '').trim() || null },
+            meta: { idempotencyKey: generateRequestKey(), requestId: generateRequestKey(), entitlementContext: 'Inventory item status update' },
+        });
+        itemDetails.value = response.data;
+        notifySuccess('Inventory item status updated.');
+        await loadItems();
+    } catch (error) {
+        itemStatusError.value = messageFromUnknown(error, 'Unable to update item status.');
+        notifyError(itemStatusError.value);
+    } finally {
+        itemStatusSubmitting.value = false;
+    }
+}
+
 bindSupplyChainPageApi({
     canRead, canCreateRequest, canManageItems, canCreateMovement, canUpdateRequestStatus,
     canApproveRequisitions, canViewAudit, canReconcileStock, canSetOpeningStock,
@@ -1801,15 +2097,15 @@ bindSupplyChainPageApi({
     editingUnitId: ref(null), openEditUnitDialog: () => {}, itemUnits: ref([]),
     itemUnitsLoading: ref(false), loadItemUnits: () => Promise.resolve(), resetUnitForm: () => {},
     unitPrices: ref([]), unitPricesLoading: ref(false), loadItemUnitPrices: () => Promise.resolve(),
-    itemDetailsOpen: ref(false), itemDetailsLoading: ref(false), itemDetailsError: ref(null),
-    itemDetailsTab: ref('overview'), itemDetails: ref(null), itemUpdateForm: reactive({} as any),
-    itemUpdateErrors: ref({}), itemUpdateSubmitting: ref(false), submitItemUpdate: () => Promise.resolve(),
-    itemStatusForm: reactive({}), itemStatusSubmitting: ref(false), itemStatusError: ref(null),
-    submitItemStatus: () => Promise.resolve(), itemBatches: ref([]), itemBatchesLoading: ref(false),
+    itemDetailsOpen, itemDetailsLoading: ref(false), itemDetailsError: ref(null),
+    itemDetailsTab: ref('overview'), itemDetails, itemUpdateForm,
+    itemUpdateErrors, itemUpdateSubmitting, submitItemUpdate,
+    itemStatusForm, itemStatusSubmitting, itemStatusError,
+    submitItemStatus, itemBatches: ref([]), itemBatchesLoading: ref(false),
     loadItemBatches: () => Promise.resolve(), expiryBadgeClass: () => '',
-    clinicalCatalogLabel: () => '', itemAuditLogs: ref([]), itemAuditLoading: ref(false),
+    clinicalCatalogLabel, itemAuditLogs: ref([]), itemAuditLoading: ref(false),
     itemAuditError: ref(null), itemAuditMeta: ref(null), itemAuditFilters: reactive({}),
-    inventoryAccess, referenceStructureLoaded: ref(true), barcodeScannerOpen: ref(false),
+    inventoryAccess, referenceStructureLoaded, barcodeScannerOpen: ref(false),
     barcodeInput: ref(''), barcodeLookupLoading: ref(false), barcodeLookupError: ref(null),
     barcodeLookupResult: ref(null), onBarcodeKeydown: () => {}, lookupBarcode: () => Promise.resolve(),
     applyDetailsAuditFilters: () => {}, resetDetailsAuditFilters: () => {},
@@ -1838,10 +2134,10 @@ bindSupplyChainPageApi({
     receiveSubmitting: ref(false), receiveTrackedCategory: computed(() => null),
     submitReceiveGoods: () => Promise.resolve(), openReceiveDialog: () => {},
     sourceRequisitionOpeningId: ref(null),
-    statusDialogOpen: ref(false), statusError: ref(null),
-    statusReason: ref(''), statusRequest: ref(null),
-    statusSubmitting: ref(false), statusValue: ref(''),
-    submitStatusUpdate: () => Promise.resolve(), openStatusDialog: () => {},
+    statusDialogOpen, statusError,
+    statusReason, statusRequest,
+    statusSubmitting, statusValue,
+    submitStatusUpdate, openStatusDialog: () => {},
     supplierLabel: (id: string | null | undefined) => id ?? null,
     transferStatusForm: reactive({ status: '', reason: '' }),
     createPriceDialogOpen: ref(false),
@@ -1874,7 +2170,8 @@ bindSupplyChainPageApi({
     isSubmittingInventoryWorkflow: computed(() => false),
     hasPendingCreateItemWorkflow: computed(() => false),
     hasPendingItemDetailsWorkflow: computed(() => false),
-    itemCreateValidationMessages: computed(() => []),
+    createItemStep: ref(1), createItemSteps: [{ value: 1, label: 'Category' }, { value: 2, label: 'Identity' }, { value: 3, label: 'Compliance' }, { value: 4, label: 'Stock Policy' }],
+    createStepBlockedReason: computed(() => null), goToNextCreateStep: () => {}, goToPrevCreateStep: () => {},
     createItemRequestKey: ref(''), itemUpdateRequestKey: ref(''), itemStatusRequestKey: ref(''),
     createItemDiscardConfirmOpen: ref(false), itemDetailsDiscardConfirmOpen: ref(false),
     requestCreateItemOpenChange: () => {}, confirmCreateItemDiscard: () => {},
@@ -1894,14 +2191,16 @@ bindSupplyChainPageApi({
     canLaunchReconciliation: computed(() => false),
     itemPages: computed(() => 1), goToItemPage: () => {},
     itemSearch: reactive({ q: '', category: '', stockState: '', sortBy: 'itemName', sortDir: 'asc', page: 1, perPage: 50 }),
-    selectedUpdateCategory: computed(() => null), updateSubcategoryOptions: computed(() => []),
-    updateClinicalCatalogOptions: computed(() => []),
-    updateIdentityLockedToCatalog: computed(() => false),
-    updateSelectedCatalogItem: computed(() => null),
-    updateCategoryWorkflowBadges: computed(() => []),
+    selectedUpdateCategory, updateSubcategoryOptions: computed(() => []),
+    updateClinicalCatalogOptions,
+    updateIdentityLockedToCatalog,
+    updateSelectedCatalogItem,
     updateItemWarehouseOpen: ref(false), updateItemSupplierOpen: ref(false),
     itemCreateRequestError: ref(null), itemCreateSubmitReason: computed(() => null),
     itemCreateSubmitDisabled: computed(() => true),
+    clinicalCatalogItems, createClinicalCatalogOptions, selectClinicalCatalogItem,
+    fieldError, itemUpdateSubmitDisabled, searchClinicalCatalog, procurementFilters,
+    requestItemDetailsOpenChange,
 });
 let deptReqSearchTimer: ReturnType<typeof setTimeout> | null = null;
 let shortageQueueSearchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1966,6 +2265,9 @@ onMounted(async () => {
         loadDeptRequisitions(),
         loadShortageQueue(),
         loadWarehouseTransfers(),
+        loadSuppliersAndWarehouses(),
+        loadItems(),
+        loadRequestPipelineCounts(),
     ]);
     loading.value = false;
 });
@@ -2214,7 +2516,7 @@ onMounted(async () => {
                                 <SupplyChainOverviewTab
                                     :next-actions="nextActions"
                                     :request-pipeline-stages="requestPipelineStages"
-                                    @change-tab="(v: string) => { activeTab = v as RFTab; }"
+                                    @change-tab="handleOverviewChangeTab"
                                     @refresh-pipeline="loadRequestPipelineCounts"
                                     @open-pipeline-stage="openRequestPipelineStage"
                                 />
@@ -2239,6 +2541,8 @@ onMounted(async () => {
     <SupplyChainRequisitionDetailsSheet />
     <SupplyChainTransferSheets />
     <SupplyChainProcurementLifecycleSheets />
+    <SupplyChainItemDetailsSheet />
+    <SupplyChainInventoryOpsSheets />
 </template>
 
 

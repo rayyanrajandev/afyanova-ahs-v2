@@ -29,11 +29,13 @@ type SyncResult = {
     errors: Array<{ catalogItemId: string; code: string; name: string; error: string }>;
 };
 
+// Only formulary_item (medicines) is physically stock-trackable. The backend use case
+// (BulkCreateInventoryItemsFromCatalogUseCase) hardcodes every created item's category to
+// PHARMACEUTICAL with no per-type branching, so offering lab_test/radiology_procedure/
+// theatre_procedure here would create a real zero-stock inventory row -- misfiled as
+// "Pharmaceutical" -- for things a hospital doesn't physically stock (a lab test, an X-ray).
 const catalogTypeOptions = [
     { value: 'formulary_item', label: 'Medicines', icon: 'pill' as AppIconName },
-    { value: 'lab_test', label: 'Lab Tests', icon: 'flask-conical' as AppIconName },
-    { value: 'radiology_procedure', label: 'Radiology', icon: 'layers' as AppIconName },
-    { value: 'theatre_procedure', label: 'Theatre Procedures', icon: 'scissors' as AppIconName },
 ];
 
 const selectedCategory = ref('');

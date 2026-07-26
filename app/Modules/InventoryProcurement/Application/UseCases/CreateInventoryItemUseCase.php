@@ -5,11 +5,13 @@ namespace App\Modules\InventoryProcurement\Application\UseCases;
 use App\Modules\InventoryProcurement\Application\Exceptions\DuplicateInventoryItemCodeException;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
+use App\Modules\InventoryProcurement\Domain\Services\CatalogIdentityResolver;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemStatus;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
+use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemPackagingTemplateModel;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
 use Illuminate\Validation\ValidationException;
@@ -23,6 +25,7 @@ class CreateInventoryItemUseCase
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly InventoryClinicalLinkGuard $clinicalLinkGuard,
         private readonly StandardsCodeSupport $standardsCodeSupport,
+        private readonly CatalogIdentityResolver $catalogIdentityResolver,
     ) {}
 
     public function execute(array $payload, ?int $actorId = null): array
@@ -58,9 +61,9 @@ class CreateInventoryItemUseCase
             'barcode' => $this->nullableTrimmedValue($payload['barcode'] ?? null),
             'codes' => $catalogIdentity['codes'] ?? $this->standardsCodeSupport->normalize(is_array($payload['codes'] ?? null) ? $payload['codes'] : null),
             'item_name' => $catalogIdentity['item_name'] ?? $this->nullableTrimmedValue($payload['item_name'] ?? null) ?? '',
-            'generic_name' => $catalogIdentity['generic_name'] ?? $this->nullableTrimmedValue($payload['generic_name'] ?? null),
-            'dosage_form' => $catalogIdentity['dosage_form'] ?? $this->nullableTrimmedValue($payload['dosage_form'] ?? null),
-            'strength' => $catalogIdentity['strength'] ?? $this->nullableTrimmedValue($payload['strength'] ?? null),
+            // generic_name/dosage_form/strength dropped from inventory_items in Phase 3
+            // (Inventory_MasterData_Alignment_Plan.md) -- always read from the Clinical
+            // Catalog relation now (InventoryItemResponseTransformer), never stored here.
             'category' => $this->nullableTrimmedValue($payload['category'] ?? null),
             'subcategory' => $catalogIdentity['subcategory'] ?? $this->nullableTrimmedValue($payload['subcategory'] ?? null),
             'ven_classification' => $this->nullableTrimmedValue($payload['ven_classification'] ?? null),
@@ -70,10 +73,16 @@ class CreateInventoryItemUseCase
             'conversion_factor' => $catalogIdentity['conversion_factor'] ?? $this->nullableNumericValue($payload['conversion_factor'] ?? null),
             'bin_location' => $this->nullableTrimmedValue($payload['bin_location'] ?? null),
             'manufacturer' => $this->nullableTrimmedValue($payload['manufacturer'] ?? null),
+            // storage_conditions/requires_cold_chain stay on inventory_items -- Blood
+            // Product, Laboratory, and Food & Nutrition use them and can never
+            // catalog-link (only Pharmaceutical can), so Inventory is the only possible
+            // owner for those three categories. Phase 2's transformer already prefers
+            // the catalog's value for Pharmaceutical items when one is set; this is
+            // still the correct write path for every category.
             'storage_conditions' => $this->nullableTrimmedValue($payload['storage_conditions'] ?? null),
             'requires_cold_chain' => (bool) ($payload['requires_cold_chain'] ?? false),
-            'is_controlled_substance' => (bool) ($payload['is_controlled_substance'] ?? false),
-            'controlled_substance_schedule' => $this->nullableTrimmedValue($payload['controlled_substance_schedule'] ?? null),
+            // is_controlled_substance/controlled_substance_schedule dropped from
+            // inventory_items in Phase 3 -- Pharmaceutical-only, always catalog-linked.
             'current_stock' => 0,
             'reorder_level' => (float) ($payload['reorder_level'] ?? 0),
             'max_stock_level' => $this->nullableNumericValue($payload['max_stock_level'] ?? null),
@@ -86,9 +95,18 @@ class CreateInventoryItemUseCase
 
         $created = $this->inventoryItemRepository->create($createPayload);
 
+        // Inventory_MasterData_Alignment_Plan.md Phase 4: when the catalog item has a
+        // reusable packaging template, seed inventory_item_units from it -- a one-time
+        // copy, not a live reference, so this facility can freely diverge afterward
+        // (different local pack sizes are legitimate). Falls back to the single/dual
+        // unit auto-seed below when no template exists, so behavior for every drug
+        // that hasn't been given a template yet is unchanged.
+        $seededFromTemplate = $clinicalCatalogItemId !== null
+            && $this->seedUnitsFromCatalogTemplates($clinicalCatalogItemId, $created['id']);
+
         // Auto-seed base unit from the stock unit field
         $unitName = trim((string) ($catalogIdentity['unit'] ?? $payload['unit'] ?? ''));
-        if ($unitName !== '') {
+        if (! $seededFromTemplate && $unitName !== '') {
             InventoryItemUnitModel::query()->create([
                 'tenant_id' => $this->platformScopeContext->tenantId(),
                 'facility_id' => $this->platformScopeContext->facilityId(),
@@ -133,6 +151,41 @@ class CreateInventoryItemUseCase
         return $created;
     }
 
+    /**
+     * @return bool true when at least one unit was seeded from a catalog template
+     */
+    private function seedUnitsFromCatalogTemplates(string $clinicalCatalogItemId, string $inventoryItemId): bool
+    {
+        $templates = ClinicalCatalogItemPackagingTemplateModel::query()
+            ->where('clinical_catalog_item_id', $clinicalCatalogItemId)
+            ->orderByDesc('is_base_unit')
+            ->get();
+
+        if ($templates->isEmpty()) {
+            return false;
+        }
+
+        $tenantId = $this->platformScopeContext->tenantId();
+        $facilityId = $this->platformScopeContext->facilityId();
+
+        foreach ($templates as $template) {
+            InventoryItemUnitModel::query()->create([
+                'tenant_id' => $tenantId,
+                'facility_id' => $facilityId,
+                'item_id' => $inventoryItemId,
+                'unit_name' => $template->unit_name,
+                'unit_code' => $template->unit_code,
+                'base_quantity' => $template->base_quantity,
+                'is_base_unit' => $template->is_base_unit,
+                'is_default_sales_unit' => $template->is_default_sales_unit,
+                'is_default_purchase_unit' => $template->is_default_purchase_unit,
+                'is_active' => true,
+            ]);
+        }
+
+        return true;
+    }
+
     private function normalizeItemCode(string $value): string
     {
         return strtoupper(trim($value));
@@ -171,20 +224,7 @@ class CreateInventoryItemUseCase
             return [];
         }
 
-        $metadata = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
-        $codes = is_array($catalogItem->codes) ? $catalogItem->codes : [];
-
-        return [
-            'item_name' => trim((string) $catalogItem->name),
-            'generic_name' => $metadata['genericName'] ?? $metadata['generic_name'] ?? null,
-            'dosage_form' => $metadata['dosageForm'] ?? $metadata['dosage_form'] ?? null,
-            'strength' => $metadata['strength'] ?? null,
-            'unit' => $metadata['stockUnit'] ?? $metadata['stock_unit'] ?? $catalogItem->unit ?? 'Each',
-            'dispensing_unit' => $metadata['dispensingUnit'] ?? $metadata['dispensing_unit'] ?? $catalogItem->unit ?? null,
-            'conversion_factor' => $metadata['conversionFactor'] ?? $metadata['conversion_factor'] ?? null,
-            'subcategory' => $catalogItem->category ?? null,
-            'codes' => $this->standardsCodeSupport->normalize($codes),
-        ];
+        return $this->catalogIdentityResolver->resolve($catalogItem);
     }
 
     /**
@@ -202,9 +242,6 @@ class CreateInventoryItemUseCase
             'barcode',
             'codes',
             'item_name',
-            'generic_name',
-            'dosage_form',
-            'strength',
             'category',
             'subcategory',
             'ven_classification',
@@ -216,8 +253,6 @@ class CreateInventoryItemUseCase
             'manufacturer',
             'storage_conditions',
             'requires_cold_chain',
-            'is_controlled_substance',
-            'controlled_substance_schedule',
             'current_stock',
             'reorder_level',
             'max_stock_level',

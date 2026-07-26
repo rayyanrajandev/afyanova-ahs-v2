@@ -27,6 +27,7 @@ class InventoryBatchModel extends Model
         'warehouse_id',
         'bin_location',
         'supplier_id',
+        'manufacturer',
         'unit_cost',
         'status',
         'notes',

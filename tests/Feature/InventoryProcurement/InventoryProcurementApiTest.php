@@ -226,7 +226,8 @@ it('enforces category-specific create validation for cold-chain and expiry-sensi
 });
 
 it('enforces category-specific update validation using the stored item category when category is omitted', function (): void {
-    $user = makeInventoryProcurementUser(['inventory.procurement.manage-items']);
+    $user = makeInventoryProcurementUser(['inventory.procurement.manage-items', 'inventory.procurement.manage-warehouses']);
+    $warehouse = createInventoryWarehouse($user);
 
     $item = createInventoryItem($user, [
         'itemName' => 'Whole Blood Unit',
@@ -234,6 +235,7 @@ it('enforces category-specific update validation using the stored item category 
         'unit' => 'bag',
         'requiresColdChain' => true,
         'storageConditions' => 'refrigerated_2_8c',
+        'defaultWarehouseId' => $warehouse['id'],
     ]);
 
     $this->actingAs($user)
@@ -242,18 +244,170 @@ it('enforces category-specific update validation using the stored item category 
         ])
         ->assertStatus(422)
         ->assertJsonValidationErrors(['requiresColdChain']);
+});
 
-    $medicalConsumable = createInventoryItem($user, [
+// is_controlled_substance/controlled_substance_schedule were dropped from
+// inventory_items in Phase 3 (Inventory_MasterData_Alignment_Plan.md) --
+// Pharmaceutical inventory always requires a Clinical Catalog link, so that's
+// now the only place this is validated/persisted. Regression coverage for the
+// bug this replaced: StoreInventoryItemRequest/UpdateInventoryItemRequest used
+// to validate and compliance-gate these fields even though the use cases never
+// wrote them anywhere -- a silent no-op that looked like it worked.
+it('accepts and silently ignores isControlledSubstance/controlledSubstanceSchedule on inventory item writes', function (): void {
+    $user = makeInventoryProcurementUser(['inventory.procurement.manage-items', 'inventory.procurement.manage-warehouses']);
+    $warehouse = createInventoryWarehouse($user);
+
+    $item = createInventoryItem($user, [
         'itemName' => 'Sterile Gauze Pads',
         'category' => 'medical_consumable',
+        'defaultWarehouseId' => $warehouse['id'],
+        'isControlledSubstance' => true,
+        'controlledSubstanceSchedule' => 'schedule_II',
     ]);
 
-    $this->actingAs($user)
-        ->patchJson('/api/v1/inventory-procurement/items/'.$medicalConsumable['id'], [
+    expect($item['isControlledSubstance'] ?? null)->toBeFalsy();
+
+    $updated = $this->actingAs($user)
+        ->patchJson('/api/v1/inventory-procurement/items/'.$item['id'], [
+            'binLocation' => 'B-02-04',
             'isControlledSubstance' => true,
+            'controlledSubstanceSchedule' => 'schedule_II',
+        ])
+        ->assertOk()
+        ->json('data');
+
+    expect($updated['binLocation'])->toBe('B-02-04');
+    expect($updated['isControlledSubstance'] ?? null)->toBeFalsy();
+});
+
+// Inventory_MasterData_Alignment_Plan.md Phase 9: conversionFactor used to be
+// writable on update regardless of catalog link, unlike its siblings
+// (item_name/unit/dispensing_unit/codes/subcategory), which always re-sync from
+// the catalog. That let an inventory item silently drift from what Clinical
+// Catalog says about the same drug's packaging ratio. Now it follows the same
+// rule: the catalog wins whenever it has an opinion, and only acts as a
+// per-item fallback when the catalog doesn't define one yet.
+it('locks conversionFactor to the catalog value on update once the catalog defines one, but allows it as a fallback when the catalog has none', function (): void {
+    $user = makeInventoryProcurementUser(['inventory.procurement.manage-items', 'inventory.procurement.manage-warehouses']);
+    $warehouse = createInventoryWarehouse($user);
+
+    $catalogItemWithFactor = createApprovedMedicineCatalogItem([
+        'name' => 'Amoxicillin 500mg',
+        'category' => 'antibiotics',
+        'unit' => 'capsule',
+        'metadata' => ['conversionFactor' => 100],
+    ]);
+
+    $item = createInventoryItem($user, [
+        'clinicalCatalogItemId' => $catalogItemWithFactor->id,
+        'itemCode' => 'PHARM-'.Str::upper(Str::random(8)),
+        'itemName' => $catalogItemWithFactor->name,
+        'category' => 'pharmaceutical',
+        'unit' => 'box',
+        'conversionFactor' => 5,
+        'storageConditions' => 'room_temperature',
+        'defaultWarehouseId' => $warehouse['id'],
+    ]);
+    expect((float) $item['conversionFactor'])->toBe(100.0);
+
+    $updated = $this->actingAs($user)
+        ->patchJson('/api/v1/inventory-procurement/items/'.$item['id'], [
+            'binLocation' => 'B-05-01',
+            'conversionFactor' => 50,
+        ])
+        ->assertOk()
+        ->json('data');
+
+    expect($updated['binLocation'])->toBe('B-05-01');
+    expect((float) $updated['conversionFactor'])->toBe(100.0);
+
+    // Fallback: a catalog item with no conversionFactor opinion lets the payload through.
+    $catalogItemWithoutFactor = createApprovedMedicineCatalogItem([
+        'name' => 'Ceftriaxone 1g',
+        'category' => 'antibiotics',
+        'unit' => 'vial',
+        'metadata' => null,
+    ]);
+
+    $gapItem = createInventoryItem($user, [
+        'clinicalCatalogItemId' => $catalogItemWithoutFactor->id,
+        'itemCode' => 'PHARM-'.Str::upper(Str::random(8)),
+        'itemName' => $catalogItemWithoutFactor->name,
+        'category' => 'pharmaceutical',
+        'unit' => 'box',
+        'storageConditions' => 'room_temperature',
+        'defaultWarehouseId' => $warehouse['id'],
+    ]);
+
+    $gapUpdated = $this->actingAs($user)
+        ->patchJson('/api/v1/inventory-procurement/items/'.$gapItem['id'], [
+            'conversionFactor' => 30,
+        ])
+        ->assertOk()
+        ->json('data');
+
+    expect((float) $gapUpdated['conversionFactor'])->toBe(30.0);
+});
+
+// Inventory_MasterData_Alignment_Plan.md Phase 6: manage-items alone is not enough to
+// enable cold-chain for a category that doesn't mandate it (Laboratory supports storage
+// fields but Blood Product is the only one that requires cold chain) -- that needs
+// manage-compliance. Regression coverage for a bug caught while building the frontend
+// gate: buildItemPayload() resends every field on every save, so a naive "reject if
+// present and true" check would block routine edits to an already-flagged item.
+it('gates enabling cold chain for a non-mandatory category behind the compliance permission, without blocking unrelated edits', function (): void {
+    $complianceUser = makeInventoryProcurementUser(['inventory.procurement.manage-items', 'inventory.procurement.manage-compliance', 'inventory.procurement.manage-warehouses']);
+    $warehouse = createInventoryWarehouse($complianceUser);
+
+    $reagent = createInventoryItem($complianceUser, [
+        'itemName' => 'Cold-Stored Reagent',
+        'category' => 'laboratory',
+        'unit' => 'bottle',
+        'requiresColdChain' => true,
+        'storageConditions' => 'refrigerated_2_8c',
+        'defaultWarehouseId' => $warehouse['id'],
+    ]);
+
+    $itemsOnlyUser = makeInventoryProcurementUser(['inventory.procurement.manage-items']);
+
+    // Editing an unrelated field while resending the existing true value: allowed.
+    $updated = $this->actingAs($itemsOnlyUser)
+        ->patchJson('/api/v1/inventory-procurement/items/'.$reagent['id'], [
+            'binLocation' => 'B-02-04',
+            'requiresColdChain' => true,
+            'storageConditions' => 'refrigerated_2_8c',
+        ])
+        ->assertOk()
+        ->json('data');
+
+    expect($updated['binLocation'])->toBe('B-02-04');
+    expect($updated['requiresColdChain'])->toBeTrue();
+
+    // Actually flipping it off still requires the permission.
+    $this->actingAs($itemsOnlyUser)
+        ->patchJson('/api/v1/inventory-procurement/items/'.$reagent['id'], [
+            'requiresColdChain' => false,
         ])
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['isControlledSubstance']);
+        ->assertJsonValidationErrors(['requiresColdChain']);
+
+    // And enabling it from scratch on a category that doesn't mandate it also requires it.
+    $freshReagent = createInventoryItem($complianceUser, [
+        'itemName' => 'Room-Temp Reagent',
+        'category' => 'laboratory',
+        'unit' => 'bottle',
+        'requiresColdChain' => false,
+        'storageConditions' => 'cool_dry_place',
+        'defaultWarehouseId' => $warehouse['id'],
+    ]);
+
+    $this->actingAs($itemsOnlyUser)
+        ->patchJson('/api/v1/inventory-procurement/items/'.$freshReagent['id'], [
+            'requiresColdChain' => true,
+            'storageConditions' => 'refrigerated_2_8c',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['requiresColdChain']);
 });
 
 it('filters inventory item lookup by category and subcategory together', function (): void {

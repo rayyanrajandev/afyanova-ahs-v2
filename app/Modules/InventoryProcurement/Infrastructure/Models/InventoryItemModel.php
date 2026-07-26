@@ -34,9 +34,10 @@ class InventoryItemModel extends Model
         'default_warehouse_id',
         'default_supplier_id',
         'item_name',
-        'generic_name',
-        'dosage_form',
-        'strength',
+        // generic_name/dosage_form/strength/is_controlled_substance/
+        // controlled_substance_schedule dropped in Phase 3 (Inventory_MasterData_Alignment_Plan.md):
+        // Pharmaceutical-only, and Pharmaceutical is always catalog-linked, so these
+        // are always read through clinicalCatalogItem() now, never stored here.
         'category',
         'subcategory',
         'ven_classification',
@@ -46,10 +47,11 @@ class InventoryItemModel extends Model
         'conversion_factor',
         'bin_location',
         'manufacturer',
+        // storage_conditions/requires_cold_chain stay: Blood Product, Laboratory, and
+        // Food & Nutrition use them and can never catalog-link, so Inventory is the
+        // only possible owner for those three categories.
         'storage_conditions',
         'requires_cold_chain',
-        'is_controlled_substance',
-        'controlled_substance_schedule',
         'current_stock',
         'reorder_level',
         'max_stock_level',
@@ -68,7 +70,6 @@ class InventoryItemModel extends Model
             'max_stock_level' => 'decimal:3',
             'conversion_factor' => 'decimal:4',
             'requires_cold_chain' => 'boolean',
-            'is_controlled_substance' => 'boolean',
             'codes' => 'array',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',

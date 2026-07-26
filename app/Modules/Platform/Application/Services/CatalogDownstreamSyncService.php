@@ -5,6 +5,7 @@ namespace App\Modules\Platform\Application\Services;
 use App\Modules\Billing\Application\Support\BillingClinicalCatalogIdentitySynchronizer;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Billing\Domain\ValueObjects\BillingServiceCatalogItemStatus;
+use App\Modules\InventoryProcurement\Domain\Services\CatalogIdentityResolver;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
@@ -21,6 +22,7 @@ class CatalogDownstreamSyncService
         private readonly BillingClinicalCatalogIdentitySynchronizer $identitySynchronizer,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly StandardsCodeSupport $standardsCodeSupport,
+        private readonly CatalogIdentityResolver $catalogIdentityResolver,
     ) {}
 
     public function syncToBilling(string $clinicalCatalogItemId, ?int $actorId = null): void
@@ -107,15 +109,22 @@ class CatalogDownstreamSyncService
 
         $tenantId = $this->platformScopeContext->tenantId();
         $facilityId = $this->platformScopeContext->facilityId();
-        $meta = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
 
-        $dosageForm = $meta['dosageForm'] ?? $meta['dosage_form'] ?? null;
-        $strength = $meta['strength'] ?? null;
-        $stockUnit = $meta['stockUnit'] ?? $meta['stock_unit'] ?? $catalogItem->unit;
-        $dispensingUnit = $meta['dispensingUnit'] ?? $meta['dispensing_unit'] ?? $catalogItem->unit;
-        $genericName = $meta['genericName'] ?? $meta['generic_name'] ?? null;
-        $conversionFactor = $meta['conversionFactor'] ?? $meta['conversion_factor'] ?? null;
-        $codes = is_array($catalogItem->codes) ? $catalogItem->codes : [];
+        // generic_name/dosage_form/strength dropped from inventory_items in Phase 3
+        // (Inventory_MasterData_Alignment_Plan.md) -- always read from the catalog
+        // relation now, nothing to copy here. Phase 9: unit/dispensing_unit/
+        // conversion_factor/codes derivation now shared via CatalogIdentityResolver.
+        $identity = $this->catalogIdentityResolver->resolve($catalogItem);
+        $stockUnit = $identity['unit'];
+        $dispensingUnit = $identity['dispensing_unit'];
+        $conversionFactor = $identity['conversion_factor'];
+        $codes = $identity['codes'];
+        // storage_conditions/requires_cold_chain stay on inventory_items (see
+        // CreateInventoryItemUseCase's comment) -- must be copied here too, or an
+        // auto-provisioned item silently disagrees with its own catalog entry the
+        // moment InventoryClinicalLinkGuard's Phase 2 divergence check is live.
+        $storageConditions = $catalogItem->storage_conditions;
+        $requiresColdChain = (bool) $catalogItem->requires_cold_chain;
 
         $itemCode = $catalogItem->code;
         if (InventoryItemModel::query()->where('item_code', $itemCode)->exists()) {
@@ -129,24 +138,23 @@ class CatalogDownstreamSyncService
 
         DB::transaction(function () use (
             $tenantId, $facilityId, $clinicalCatalogItemId, $catalogItem,
-            $itemCode, $codes, $genericName, $dosageForm, $strength,
-            $stockUnit, $dispensingUnit, $conversionFactor
+            $itemCode, $codes, $stockUnit, $dispensingUnit, $conversionFactor,
+            $storageConditions, $requiresColdChain,
         ): void {
             $inventoryItem = InventoryItemModel::query()->create([
                 'tenant_id' => $tenantId,
                 'facility_id' => $facilityId,
                 'clinical_catalog_item_id' => $clinicalCatalogItemId,
                 'item_code' => $itemCode,
-                'codes' => $this->standardsCodeSupport->normalize($codes),
+                'codes' => $codes,
                 'item_name' => $catalogItem->name,
-                'generic_name' => $genericName,
-                'dosage_form' => $dosageForm ? (is_string($dosageForm) ? $dosageForm : null) : null,
-                'strength' => $strength ? (is_string($strength) ? $strength : null) : null,
                 'category' => InventoryItemCategory::PHARMACEUTICAL->value,
                 'subcategory' => $catalogItem->category,
                 'unit' => $stockUnit ?? 'Each',
                 'dispensing_unit' => $dispensingUnit ? (is_string($dispensingUnit) ? $dispensingUnit : null) : null,
                 'conversion_factor' => $conversionFactor ? (is_numeric($conversionFactor) ? (float) $conversionFactor : null) : null,
+                'storage_conditions' => $storageConditions,
+                'requires_cold_chain' => $requiresColdChain,
                 'current_stock' => 0,
                 'reorder_level' => 0,
                 'status' => 'active',

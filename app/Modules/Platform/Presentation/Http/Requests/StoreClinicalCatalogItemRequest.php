@@ -3,6 +3,7 @@
 namespace App\Modules\Platform\Presentation\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreClinicalCatalogItemRequest extends FormRequest
 {
@@ -25,6 +26,17 @@ class StoreClinicalCatalogItemRequest extends FormRequest
             'unit' => ['nullable', 'string', 'max:50'],
             'billingServiceCode' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'],
+            // Clinical descriptors (Inventory_MasterData_Alignment_Plan.md Phase 1).
+            // Meaningful for catalogType=formulary_item; harmless-nullable for other types.
+            'genericName' => ['nullable', 'string', 'max:180'],
+            'dosageForm' => ['nullable', 'string', 'max:60'],
+            'strength' => ['nullable', 'string', 'max:60'],
+            'route' => ['nullable', 'string', 'max:60'],
+            'storageConditions' => ['nullable', 'string', 'max:60'],
+            'requiresColdChain' => ['nullable', 'boolean'],
+            'isControlledSubstance' => ['nullable', 'boolean'],
+            'controlledSubstanceSchedule' => ['nullable', 'string', 'max:20', 'required_if:isControlledSubstance,true'],
+            'genericGroupCode' => ['nullable', 'string', 'max:120'],
             'metadata' => ['nullable', 'array'],
             'codes' => ['nullable', 'array'],
             'codes.LOCAL' => ['nullable', 'string', 'max:120'],
@@ -35,5 +47,28 @@ class StoreClinicalCatalogItemRequest extends FormRequest
             'codes.CPT' => ['nullable', 'string', 'max:120'],
             'codes.ICD' => ['nullable', 'string', 'max:120'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            // Inventory_MasterData_Alignment_Plan.md Phase 6: this is now the primary
+            // place these two fields are actually set for a formulary item (Phase 2/3
+            // made them catalog-owned) -- manage-formulary alone (already required by
+            // the route) is not enough to flag a drug cold-chain or controlled;  that
+            // needs the narrower compliance permission.
+            $canManageCompliance = $this->user()?->can('inventory.procurement.manage-compliance') ?? false;
+            if ($canManageCompliance) {
+                return;
+            }
+
+            if ($this->boolean('requiresColdChain')) {
+                $validator->errors()->add('requiresColdChain', 'Setting cold-chain requirements requires the compliance permission.');
+            }
+
+            if ($this->boolean('isControlledSubstance')) {
+                $validator->errors()->add('isControlledSubstance', 'Marking a medicine as a controlled substance requires the compliance permission.');
+            }
+        });
     }
 }

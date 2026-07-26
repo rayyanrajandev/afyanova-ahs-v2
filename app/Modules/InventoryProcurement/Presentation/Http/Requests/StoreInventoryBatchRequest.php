@@ -26,6 +26,7 @@ class StoreInventoryBatchRequest extends FormRequest
             'warehouseId' => ['nullable', 'uuid'],
             'binLocation' => ['nullable', 'string', 'max:60'],
             'supplierId' => ['nullable', 'uuid'],
+            'manufacturer' => ['nullable', 'string', 'max:180'],
             'unitCost' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];

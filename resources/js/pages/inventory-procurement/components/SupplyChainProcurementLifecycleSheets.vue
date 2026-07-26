@@ -172,12 +172,12 @@ const ws = useSupplyChainPageApi();
                 <div class="grid gap-4 sm:grid-cols-3">
                     <div class="grid gap-2">
                         <Label for="inv-receive-unit">Received Unit</Label>
-                        <Select :model-value="(ws.receiveForm as any).receivedUnit || undefined" @update:model-value="(ws.receiveForm as any).receivedUnit = ($event ?? '')">
+                        <Select :model-value="ws.toSelectValue((ws.receiveForm as any).receivedUnit)" @update:model-value="(ws.receiveForm as any).receivedUnit = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
                             <SelectTrigger id="inv-receive-unit" class="w-full">
                                 <SelectValue placeholder="Select unit" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">Base / default</SelectItem>
+                                <SelectItem :value="ws.EMPTY_SELECT_VALUE">Base / default</SelectItem>
                                 <SelectItem v-for="u in (ws as any).receiveItemUnits ?? []" :key="u.id ?? u.unitName" :value="u.unitName">{{ u.unitName }} ({{ u.baseQuantity }} {{ ws.receiveRequest?.unit ?? 'base' }})</SelectItem>
                             </SelectContent>
                         </Select>

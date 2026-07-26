@@ -23,6 +23,12 @@ export default defineConfigWithVueTs(
         },
         rules: {
             'vue/multi-word-component-names': 'off',
+            // Catches template tags with no resolvable import/registration (e.g. <Link> used
+            // without `import { Link } from '@inertiajs/vue3'`) -- Vue silently renders these
+            // as inert native elements at runtime with only a console warning, and vue-tsc does
+            // not treat unresolved template components as a type error, so this was previously
+            // an invisible bug class. Not part of any eslint-plugin-vue preset; opt-in only.
+            'vue/no-undef-components': 'error',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/consistent-type-imports': [
                 'error',

@@ -4,6 +4,7 @@ namespace App\Modules\InventoryProcurement\Application\UseCases;
 
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
+use App\Modules\InventoryProcurement\Domain\Services\CatalogIdentityResolver;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryWarehouseStatus;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
@@ -17,7 +18,6 @@ use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
-use App\Support\CatalogGovernance\StandardsCodeSupport;
 use Illuminate\Validation\ValidationException;
 
 class BulkCreateInventoryItemsFromCatalogUseCase
@@ -28,8 +28,8 @@ class BulkCreateInventoryItemsFromCatalogUseCase
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly InventoryClinicalLinkGuard $clinicalLinkGuard,
-        private readonly StandardsCodeSupport $standardsCodeSupport,
         private readonly FeatureFlagResolverInterface $featureFlagResolver,
+        private readonly CatalogIdentityResolver $catalogIdentityResolver,
     ) {}
 
     /**
@@ -113,15 +113,17 @@ class BulkCreateInventoryItemsFromCatalogUseCase
         foreach ($catalogItems as $catalogItem) {
             $catalogId = (string) $catalogItem->id;
 
-            $metadata = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
-            $codes = is_array($catalogItem->codes) ? $catalogItem->codes : [];
-
-            $dosageForm = $metadata['dosageForm'] ?? $metadata['dosage_form'] ?? null;
-            $strength = $metadata['strength'] ?? null;
-            $stockUnit = $metadata['stockUnit'] ?? $metadata['stock_unit'] ?? $catalogItem->unit;
-            $dispensingUnit = $metadata['dispensingUnit'] ?? $metadata['dispensing_unit'] ?? $catalogItem->unit;
-            $genericName = $metadata['genericName'] ?? $metadata['generic_name'] ?? null;
-            $conversionFactor = $metadata['conversionFactor'] ?? $metadata['conversion_factor'] ?? null;
+            // generic_name/dosage_form/strength dropped from inventory_items in Phase 3
+            // (Inventory_MasterData_Alignment_Plan.md) -- always read from the catalog
+            // relation now, nothing to resolve or write onto the inventory row here.
+            // Phase 9: unit/dispensing_unit/conversion_factor/codes derivation now
+            // shared with CreateInventoryItemUseCase, UpdateInventoryItemUseCase, and
+            // CatalogDownstreamSyncService via CatalogIdentityResolver.
+            $identity = $this->catalogIdentityResolver->resolve($catalogItem);
+            $stockUnit = $identity['unit'];
+            $dispensingUnit = $identity['dispensing_unit'];
+            $conversionFactor = $identity['conversion_factor'];
+            $codes = $identity['codes'];
 
             try {
                 if (isset($existingLinkedMap[$catalogId])) {
@@ -141,11 +143,8 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                     }
 
                     $updatePayload = [
-                        'codes' => $this->standardsCodeSupport->normalize($codes),
+                        'codes' => $codes,
                         'item_name' => $catalogItem->name,
-                        'generic_name' => $genericName,
-                        'dosage_form' => $dosageForm ? (is_string($dosageForm) ? $dosageForm : null) : null,
-                        'strength' => $strength ? (is_string($strength) ? $strength : null) : null,
                         'subcategory' => $catalogItem->category,
                         'unit' => $stockUnit ?? 'Each',
                         'dispensing_unit' => $dispensingUnit ? (is_string($dispensingUnit) ? $dispensingUnit : null) : null,
@@ -188,11 +187,8 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                         'facility_id' => $facilityId,
                         'clinical_catalog_item_id' => $catalogId,
                         'item_code' => $itemCode,
-                        'codes' => $this->standardsCodeSupport->normalize($codes),
+                        'codes' => $codes,
                         'item_name' => $catalogItem->name,
-                        'generic_name' => $genericName,
-                        'dosage_form' => $dosageForm ? (is_string($dosageForm) ? $dosageForm : null) : null,
-                        'strength' => $strength ? (is_string($strength) ? $strength : null) : null,
                         'category' => InventoryItemCategory::PHARMACEUTICAL->value,
                         'subcategory' => $catalogItem->category,
                         'unit' => $stockUnit ?? 'Each',
@@ -324,9 +320,6 @@ class BulkCreateInventoryItemsFromCatalogUseCase
             'clinical_catalog_item_id',
             'item_code',
             'item_name',
-            'generic_name',
-            'dosage_form',
-            'strength',
             'category',
             'subcategory',
             'unit',

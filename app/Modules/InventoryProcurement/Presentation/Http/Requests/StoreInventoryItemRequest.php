@@ -59,8 +59,6 @@ class StoreInventoryItemRequest extends FormRequest
             'manufacturer' => ['nullable', 'string', 'max:180'],
             'storageConditions' => ['nullable', 'string', 'max:60'],
             'requiresColdChain' => ['nullable', 'boolean'],
-            'isControlledSubstance' => ['nullable', 'boolean'],
-            'controlledSubstanceSchedule' => ['nullable', 'string', 'max:20', 'required_if:isControlledSubstance,true'],
             'reorderLevel' => ['nullable', 'numeric', 'min:0'],
             'maxStockLevel' => ['nullable', 'numeric', 'min:0'],
             'defaultWarehouseId' => ['required', 'uuid'],
@@ -78,8 +76,6 @@ class StoreInventoryItemRequest extends FormRequest
 
             $storageConditions = trim((string) $this->input('storageConditions', ''));
             $requiresColdChain = $this->boolean('requiresColdChain');
-            $isControlledSubstance = $this->boolean('isControlledSubstance');
-            $schedule = trim((string) $this->input('controlledSubstanceSchedule', ''));
             $clinicalCatalogItemId = trim((string) $this->input('clinicalCatalogItemId', ''));
             $hasCatalogLink = $clinicalCatalogItemId !== '';
 
@@ -132,12 +128,18 @@ class StoreInventoryItemRequest extends FormRequest
                 $validator->errors()->add('storageConditions', 'Storage conditions are required for expiry-sensitive or cold-chain inventory.');
             }
 
-            if (! $category->isControlledSubstanceEligible() && $isControlledSubstance) {
-                $validator->errors()->add('isControlledSubstance', 'Controlled substance handling is only available for pharmaceutical items.');
-            }
-
-            if (! $category->isControlledSubstanceEligible() && $schedule !== '') {
-                $validator->errors()->add('controlledSubstanceSchedule', 'Controlled substance schedules are only available for pharmaceutical items.');
+            // Inventory_MasterData_Alignment_Plan.md Phase 6: manage-items alone is not
+            // enough to opt a non-mandatory category into cold-chain handling -- that
+            // needs manage-compliance. Categories where the category itself mandates
+            // cold chain (Blood Product) aren't gated here: choosing that category, not
+            // this field, is the discretionary act, and it already requires manage-items.
+            // (is_controlled_substance/controlled_substance_schedule are validated on
+            // the Clinical Catalog item instead -- see StoreClinicalCatalogItemRequest --
+            // since those columns were dropped from inventory_items in Phase 3 and
+            // Pharmaceutical inventory always requires a catalog link.)
+            $canManageCompliance = $this->user()?->can('inventory.procurement.manage-compliance') ?? false;
+            if (! $canManageCompliance && $requiresColdChain && ! $category->requiresColdChain()) {
+                $validator->errors()->add('requiresColdChain', 'Enabling cold chain for this category requires the compliance permission.');
             }
         });
     }

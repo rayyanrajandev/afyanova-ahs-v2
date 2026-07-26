@@ -18,6 +18,7 @@ use App\Modules\EmergencyTriage\Presentation\Http\Controllers\EmergencyTriageCas
 use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryAnalyticsController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryDepartmentAccessController;
+use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryCategoryAdminController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryExtendedController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryItemUnitController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementController;
@@ -35,6 +36,7 @@ use App\Modules\Platform\Presentation\Http\Controllers\DashboardContextControlle
 use App\Modules\Platform\Presentation\Http\Controllers\FacilityConfigurationController;
 use App\Modules\Platform\Presentation\Http\Controllers\FacilityResourceRegistryController;
 use App\Modules\Platform\Presentation\Http\Controllers\MultiFacilityRolloutController;
+use App\Modules\Platform\Presentation\Http\Controllers\ClinicalCatalogPackagingTemplateController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformAdminController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformClinicalCatalogController;
@@ -523,6 +525,18 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/clinical-catalogs/formulary-items/{id}/audit-logs', [PlatformClinicalCatalogController::class, 'formularyItemAuditLogs'])
         ->middleware('can:platform.clinical-catalog.view-audit-logs')
         ->name('platform.admin.clinical-catalogs.formulary-items.audit-logs');
+
+    // Inventory_MasterData_Alignment_Plan.md Phase 4: reusable packaging default per
+    // formulary item, copied into inventory_item_units when an inventory item links to it.
+    Route::get('platform/admin/clinical-catalogs/formulary-items/{id}/packaging-templates', [ClinicalCatalogPackagingTemplateController::class, 'index'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.formulary-items.packaging-templates.index');
+    Route::post('platform/admin/clinical-catalogs/formulary-items/{id}/packaging-templates', [ClinicalCatalogPackagingTemplateController::class, 'store'])
+        ->middleware('can:platform.clinical-catalog.manage-formulary')
+        ->name('platform.admin.clinical-catalogs.formulary-items.packaging-templates.store');
+    Route::delete('platform/admin/clinical-catalogs/formulary-items/{id}/packaging-templates/{templateId}', [ClinicalCatalogPackagingTemplateController::class, 'destroy'])
+        ->middleware('can:platform.clinical-catalog.manage-formulary')
+        ->name('platform.admin.clinical-catalogs.formulary-items.packaging-templates.destroy');
 
     Route::get('platform/admin/clinical-catalogs/sync-candidates', [PlatformClinicalCatalogController::class, 'syncCandidates'])
         ->middleware('can:platform.clinical-catalog.read')
@@ -1623,6 +1637,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('inventory-procurement/procurement-requests/active', [InventoryProcurementController::class, 'activeProcurementRequests'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.procurement-requests.active');
+    Route::get('inventory-procurement/procurement-requests/export', [InventoryProcurementController::class, 'exportProcurementRequestsCsv'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.procurement-requests.export');
     Route::post('inventory-procurement/procurement-requests', [InventoryProcurementController::class, 'storeProcurementRequest'])
         ->middleware('can:inventory.procurement.create-request')
         ->name('inventory-procurement.procurement-requests.store');
@@ -1737,6 +1754,25 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('inventory-procurement/reference-data', [InventoryExtendedController::class, 'referenceData'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.reference-data');
+
+    // ─── Category / Subcategory Admin (Inventory_MasterData_Alignment_Plan.md Phase 5) ───
+    Route::get('inventory-procurement/categories', [InventoryCategoryAdminController::class, 'index'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.categories.index');
+    Route::patch('inventory-procurement/categories/{id}', [InventoryCategoryAdminController::class, 'update'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.categories.update');
+    Route::post('inventory-procurement/categories/{categoryId}/subcategories', [InventoryCategoryAdminController::class, 'storeSubcategory'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.categories.subcategories.store');
+    Route::patch('inventory-procurement/categories/{categoryId}/subcategories/{id}', [InventoryCategoryAdminController::class, 'updateSubcategory'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.categories.subcategories.update');
+
+    // ─── Clinical Catalog Search ────────────────────────────────
+    Route::get('inventory-procurement/clinical-catalog/search', [InventoryExtendedController::class, 'clinicalCatalogSearch'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.clinical-catalog.search');
 
     // ─── Bulk Sync from Clinical Catalog ─────────────────────
     Route::post('inventory-procurement/items/bulk-create-from-catalog', [InventoryExtendedController::class, 'bulkCreateFromCatalog'])

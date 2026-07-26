@@ -33,12 +33,13 @@ use App\Modules\InventoryProcurement\Domain\Repositories\InventorySupplierLeadTi
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryWarehouseTransferRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Services\MsdApiClientInterface;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryDispensingClaimStatus;
-use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryMsdOrderStatus;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryVenClassification;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryWarehouseTransferReceiptVarianceType;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryWarehouseTransferStatus;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryWarehouseTransferVarianceReviewStatus;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryCategoryModel;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryStockMovementModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryWarehouseModel;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\StoreInventoryBatchRequest;
@@ -648,8 +649,13 @@ class InventoryExtendedController extends Controller
     {
         $userDepartmentId = $departmentScopeResolver->contextForUser($request->user())['lockedDepartment']['id'] ?? null;
         $allowedCategoryValues = $departmentScopeResolver->allowedCategoriesForDepartmentId($userDepartmentId);
-        $allCategories = InventoryItemCategory::labelMap();
-        $allOptions = InventoryItemCategory::optionMetadata();
+
+        // Inventory_MasterData_Alignment_Plan.md Phase 5: categoryOptions now reads
+        // from inventory_categories (configurable master data) instead of the
+        // InventoryItemCategory enum directly -- same response shape as before, so
+        // this is a transparent swap for every existing consumer. The enum itself is
+        // untouched and still backs Domain-layer behavior (guards, validation).
+        [$allCategories, $allOptions, $subcategoryOptionsByCategory] = $this->loadCategoryMasterData();
 
         if ($allowedCategoryValues !== null) {
             $allowedCategoryValues = array_flip($allowedCategoryValues);
@@ -658,14 +664,17 @@ class InventoryExtendedController extends Controller
                 $allOptions,
                 static fn (array $option): bool => isset($allowedCategoryValues[$option['value']]),
             ));
+            $subcategoryOptions = array_intersect_key($subcategoryOptionsByCategory, $allowedCategoryValues);
         } else {
             $categories = $allCategories;
             $categoryOptions = $allOptions;
+            $subcategoryOptions = $subcategoryOptionsByCategory;
         }
 
         return response()->json([
             'categories' => $categories,
             'categoryOptions' => $categoryOptions,
+            'subcategoryOptions' => $subcategoryOptions,
             'venClassifications' => array_map(
                 static fn ($case) => ['value' => $case->value, 'label' => $case->label()],
                 InventoryVenClassification::cases(),
@@ -725,12 +734,56 @@ class InventoryExtendedController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * @return array{0: array<string, string>, 1: array<int, array<string, mixed>>, 2: array<string, array<int, array<string, string>>>}
+     */
+    private function loadCategoryMasterData(): array
+    {
+        $categoryRows = InventoryCategoryModel::query()
+            ->with(['subcategories' => fn ($query) => $query->where('is_active', true)->orderBy('sort_order')])
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get();
+
+        $categories = [];
+        $categoryOptions = [];
+        $subcategoryOptions = [];
+
+        foreach ($categoryRows as $row) {
+            $categories[$row->code] = $row->label;
+            $categoryOptions[] = [
+                'value' => $row->code,
+                'label' => $row->label,
+                'template' => $row->form_template,
+                'description' => $row->description,
+                'requiresExpiryTracking' => $row->requires_expiry_tracking,
+                'requiresColdChain' => $row->requires_cold_chain,
+                'controlledSubstanceEligible' => $row->controlled_substance_eligible,
+                'supportsMedicineDetails' => $row->supports_medicine_details,
+                'supportsStorageFields' => $row->supports_storage_fields,
+                'supportsClinicalClassification' => $row->supports_clinical_classification,
+            ];
+            $subcategoryOptions[$row->code] = $row->subcategories
+                ->map(static fn ($subcategory): array => ['value' => $subcategory->code, 'label' => $subcategory->label])
+                ->values()
+                ->all();
+        }
+
+        return [$categories, $categoryOptions, $subcategoryOptions];
+    }
+
     private function clinicalCatalogItems(
         PlatformScopeQueryApplier $platformScopeQueryApplier,
         FeatureFlagResolverInterface $featureFlagResolver,
     ): array {
         $query = ClinicalCatalogItemModel::query()
-            ->select(['id', 'catalog_type', 'code', 'name', 'category', 'unit', 'description', 'metadata', 'codes', 'status'])
+            ->select([
+                'id', 'catalog_type', 'code', 'name', 'category', 'unit', 'description', 'metadata', 'codes', 'status',
+                // Inventory_MasterData_Alignment_Plan.md Phase 1: structured clinical descriptors --
+                // the authoritative source for a catalog-linked item's clinical fields as of Phase 3.
+                'generic_name', 'dosage_form', 'strength', 'storage_conditions',
+                'requires_cold_chain', 'is_controlled_substance', 'controlled_substance_schedule',
+            ])
             ->where('catalog_type', ClinicalCatalogType::FORMULARY_ITEM->value)
             ->where('status', ClinicalCatalogItemStatus::ACTIVE->value)
             ->orderBy('name');
@@ -739,9 +792,20 @@ class InventoryExtendedController extends Controller
             $platformScopeQueryApplier->apply($query);
         }
 
-        return $query
-            ->limit(500)
-            ->get()
+        $items = $query->limit(500)->get();
+
+        // Inventory_MasterData_Alignment_Plan.md: CatalogDownstreamSyncService::
+        // syncToInventory() auto-provisions a bare inventory item (no warehouse yet)
+        // for every formulary item the moment it's created in Clinical Catalog --
+        // nothing previously told the Create Item picker this already happened, so
+        // picking that same medicine here would silently create a second, duplicate
+        // inventory record for the same drug. Surface the existing link instead so
+        // the frontend can send the user to finish that record rather than fork it.
+        $linkedInventoryItemIdsByCatalogId = InventoryItemModel::query()
+            ->whereIn('clinical_catalog_item_id', $items->pluck('id'))
+            ->pluck('id', 'clinical_catalog_item_id');
+
+        return $items
             ->map(static fn (ClinicalCatalogItemModel $item): array => [
                 'id' => (string) $item->id,
                 'catalogType' => $item->catalog_type,
@@ -753,6 +817,16 @@ class InventoryExtendedController extends Controller
                 'metadata' => is_array($item->metadata) ? $item->metadata : [],
                 'codes' => is_array($item->codes) ? $item->codes : [],
                 'status' => $item->status,
+                'genericName' => $item->generic_name,
+                'dosageForm' => $item->dosage_form,
+                'strength' => $item->strength,
+                'storageConditions' => $item->storage_conditions,
+                'requiresColdChain' => (bool) $item->requires_cold_chain,
+                'isControlledSubstance' => (bool) $item->is_controlled_substance,
+                'linkedInventoryItemId' => isset($linkedInventoryItemIdsByCatalogId[$item->id])
+                    ? (string) $linkedInventoryItemIdsByCatalogId[$item->id]
+                    : null,
+                'controlledSubstanceSchedule' => $item->controlled_substance_schedule,
             ])
             ->values()
             ->all();
@@ -1257,6 +1331,7 @@ class InventoryExtendedController extends Controller
             'warehouse_id' => $validated['warehouseId'] ?? null,
             'bin_location' => $validated['binLocation'] ?? null,
             'supplier_id' => $validated['supplierId'] ?? null,
+            'manufacturer' => $validated['manufacturer'] ?? null,
             'unit_cost' => $validated['unitCost'] ?? null,
             'notes' => $validated['notes'] ?? null,
         ];
@@ -1350,6 +1425,63 @@ class InventoryExtendedController extends Controller
                 'total' => 0,
             ],
         ];
+    }
+
+    // ─── Clinical Catalog Search ──────────────────────────────
+
+    public function clinicalCatalogSearch(Request $request, FeatureFlagResolverInterface $featureFlagResolver, PlatformScopeQueryApplier $platformScopeQueryApplier): JsonResponse
+    {
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'catalogType' => ['nullable', 'string', 'in:formulary_item,lab_test,radiology_procedure,theatre_procedure'],
+            'perPage' => ['nullable', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        $query = ClinicalCatalogItemModel::query()
+            ->select(['id', 'catalog_type', 'code', 'name', 'category', 'unit', 'description', 'metadata', 'codes', 'status'])
+            ->where('status', ClinicalCatalogItemStatus::ACTIVE->value)
+            ->orderBy('name');
+
+        $catalogType = $validated['catalogType'] ?? ClinicalCatalogType::FORMULARY_ITEM->value;
+        $query->where('catalog_type', $catalogType);
+
+        $search = trim($validated['q'] ?? '');
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('code', 'like', "%{$search}%");
+            });
+        }
+
+        if ($this->isPlatformScopingEnabled($featureFlagResolver)) {
+            $platformScopeQueryApplier->apply($query);
+        }
+
+        $perPage = min((int) ($validated['perPage'] ?? 50), 500);
+        $paginator = $query->paginate($perPage);
+
+        $data = collect($paginator->items())->map(static fn (ClinicalCatalogItemModel $item): array => [
+            'id' => (string) $item->id,
+            'catalogType' => $item->catalog_type,
+            'code' => $item->code,
+            'name' => $item->name,
+            'category' => $item->category,
+            'unit' => $item->unit,
+            'description' => $item->description,
+            'metadata' => is_array($item->metadata) ? $item->metadata : [],
+            'codes' => is_array($item->codes) ? $item->codes : [],
+            'status' => $item->status,
+        ])->values()->all();
+
+        return response()->json([
+            'data' => $data,
+            'meta' => [
+                'currentPage' => $paginator->currentPage(),
+                'lastPage' => $paginator->lastPage(),
+                'perPage' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ],
+        ]);
     }
 
     // ─── Bulk Sync from Clinical Catalog ─────────────────────

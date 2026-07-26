@@ -19,6 +19,7 @@ class InventoryBatchResponseTransformer
             'warehouseId' => $batch['warehouse_id'] ?? null,
             'binLocation' => $batch['bin_location'] ?? null,
             'supplierId' => $batch['supplier_id'] ?? null,
+            'manufacturer' => $batch['manufacturer'] ?? null,
             'unitCost' => $batch['unit_cost'] ?? null,
             'status' => $batch['status'] ?? null,
             'expiryState' => self::expiryState($batch),

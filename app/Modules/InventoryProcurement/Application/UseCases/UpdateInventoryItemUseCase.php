@@ -5,6 +5,7 @@ namespace App\Modules\InventoryProcurement\Application\UseCases;
 use App\Modules\InventoryProcurement\Application\Exceptions\DuplicateInventoryItemCodeException;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
+use App\Modules\InventoryProcurement\Domain\Services\CatalogIdentityResolver;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
@@ -18,6 +19,7 @@ class UpdateInventoryItemUseCase
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly InventoryClinicalLinkGuard $clinicalLinkGuard,
         private readonly StandardsCodeSupport $standardsCodeSupport,
+        private readonly CatalogIdentityResolver $catalogIdentityResolver,
     ) {}
 
     public function execute(string $id, array $payload, ?int $actorId = null): ?array
@@ -64,13 +66,22 @@ class UpdateInventoryItemUseCase
         // Identity fields: when catalog-linked, always read from catalog; otherwise allow user input
         if ($catalogIdentity !== null) {
             $updatePayload['item_name'] = $catalogIdentity['item_name'];
-            $updatePayload['generic_name'] = $catalogIdentity['generic_name'];
-            $updatePayload['dosage_form'] = $catalogIdentity['dosage_form'];
-            $updatePayload['strength'] = $catalogIdentity['strength'];
+            // generic_name/dosage_form/strength dropped from inventory_items in Phase 3 --
+            // always read from the Clinical Catalog relation now, nothing to write here.
             $updatePayload['unit'] = $catalogIdentity['unit'];
             $updatePayload['dispensing_unit'] = $catalogIdentity['dispensing_unit'];
             $updatePayload['codes'] = $catalogIdentity['codes'];
             $updatePayload['subcategory'] = $catalogIdentity['subcategory'];
+            // conversion_factor has no structured catalog column (still metadata-only,
+            // see CatalogIdentityResolver) but is otherwise treated the same as the
+            // fields above: the catalog wins whenever it has an opinion, re-syncing any
+            // drift on every save, and only the payload's value is used as a fallback
+            // when the catalog doesn't define one for this drug yet.
+            if ($catalogIdentity['conversion_factor'] !== null) {
+                $updatePayload['conversion_factor'] = $catalogIdentity['conversion_factor'];
+            } elseif (array_key_exists('conversion_factor', $payload)) {
+                $updatePayload['conversion_factor'] = $this->nullableNumericValue($payload['conversion_factor']);
+            }
         } else {
             if (array_key_exists('item_name', $payload)) {
                 $updatePayload['item_name'] = trim((string) $payload['item_name']);
@@ -83,18 +94,24 @@ class UpdateInventoryItemUseCase
             if (array_key_exists('unit', $payload)) {
                 $updatePayload['unit'] = trim((string) $payload['unit']);
             }
+
+            if (array_key_exists('conversion_factor', $payload)) {
+                $updatePayload['conversion_factor'] = $this->nullableNumericValue($payload['conversion_factor']);
+            }
         }
 
         if (array_key_exists('category', $payload)) {
             $updatePayload['category'] = $this->nullableTrimmedValue($payload['category']);
         }
 
+        // storage_conditions stays on inventory_items (see CreateInventoryItemUseCase's
+        // comment) -- controlled_substance_schedule dropped in Phase 3, catalog-only now.
         $nullableStringFields = [
             'clinical_catalog_item_id',
             'msd_code', 'nhif_code', 'barcode',
             'ven_classification', 'abc_classification',
             'bin_location', 'manufacturer', 'storage_conditions',
-            'controlled_substance_schedule', 'default_warehouse_id', 'default_supplier_id',
+            'default_warehouse_id', 'default_supplier_id',
         ];
         foreach ($nullableStringFields as $field) {
             if (array_key_exists($field, $payload)) {
@@ -102,15 +119,13 @@ class UpdateInventoryItemUseCase
             }
         }
 
-        $booleanFields = ['requires_cold_chain', 'is_controlled_substance'];
+        // requires_cold_chain stays (see above); is_controlled_substance dropped in
+        // Phase 3, catalog-only now.
+        $booleanFields = ['requires_cold_chain'];
         foreach ($booleanFields as $field) {
             if (array_key_exists($field, $payload)) {
                 $updatePayload[$field] = (bool) $payload[$field];
             }
-        }
-
-        if (array_key_exists('conversion_factor', $payload)) {
-            $updatePayload['conversion_factor'] = $this->nullableNumericValue($payload['conversion_factor']);
         }
 
         if (array_key_exists('reorder_level', $payload)) {
@@ -179,19 +194,7 @@ class UpdateInventoryItemUseCase
             return [];
         }
 
-        $metadata = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
-        $codes = is_array($catalogItem->codes) ? $catalogItem->codes : [];
-
-        return [
-            'item_name' => trim((string) $catalogItem->name),
-            'generic_name' => $metadata['genericName'] ?? $metadata['generic_name'] ?? null,
-            'dosage_form' => $metadata['dosageForm'] ?? $metadata['dosage_form'] ?? null,
-            'strength' => $metadata['strength'] ?? null,
-            'unit' => $metadata['stockUnit'] ?? $metadata['stock_unit'] ?? $catalogItem->unit ?? 'Each',
-            'dispensing_unit' => $metadata['dispensingUnit'] ?? $metadata['dispensing_unit'] ?? $catalogItem->unit ?? null,
-            'subcategory' => $catalogItem->category ?? null,
-            'codes' => $this->standardsCodeSupport->normalize($codes),
-        ];
+        return $this->catalogIdentityResolver->resolve($catalogItem);
     }
 
     /**

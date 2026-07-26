@@ -74,8 +74,40 @@ class UpdateClinicalCatalogItemUseCase
             $updatePayload['description'] = $this->nullableTrimmedValue($payload['description']);
         }
 
+        foreach (['generic_name', 'dosage_form', 'strength', 'route', 'storage_conditions', 'controlled_substance_schedule', 'generic_group_code'] as $stringField) {
+            if (array_key_exists($stringField, $payload)) {
+                $updatePayload[$stringField] = $this->nullableTrimmedValue($payload[$stringField]);
+            }
+        }
+
+        foreach (['requires_cold_chain', 'is_controlled_substance'] as $boolField) {
+            if (array_key_exists($boolField, $payload)) {
+                $updatePayload[$boolField] = (bool) $payload[$boolField];
+            }
+        }
+
         if (array_key_exists('metadata', $payload)) {
             $updatePayload['metadata'] = is_array($payload['metadata']) ? $payload['metadata'] : null;
+        }
+
+        // Inventory_MasterData_Alignment_Plan.md Phase 1: today's admin UI still
+        // nests dosageForm/strength/route inside metadata rather than sending the
+        // new top-level fields directly. When metadata changes on a formulary item,
+        // derive the typed columns from it too -- but only for fields this call
+        // didn't already set explicitly above, so an explicit top-level value
+        // always wins over a metadata-derived one.
+        if ($catalogType === ClinicalCatalogType::FORMULARY_ITEM->value && array_key_exists('metadata', $payload) && is_array($payload['metadata'])) {
+            $metadataFieldMap = ['dosage_form' => 'dosageForm', 'strength' => 'strength', 'route' => 'route'];
+            foreach ($metadataFieldMap as $snakeField => $metadataKey) {
+                if (array_key_exists($snakeField, $updatePayload)) {
+                    continue;
+                }
+
+                $derived = $this->nullableTrimmedValue($payload['metadata'][$metadataKey] ?? null);
+                if ($derived !== null) {
+                    $updatePayload[$snakeField] = $derived;
+                }
+            }
         }
 
         if (array_key_exists('codes', $payload)) {
@@ -159,6 +191,15 @@ class UpdateClinicalCatalogItemUseCase
             'code',
             'name',
             'facility_tier',
+            'generic_name',
+            'dosage_form',
+            'strength',
+            'route',
+            'storage_conditions',
+            'requires_cold_chain',
+            'is_controlled_substance',
+            'controlled_substance_schedule',
+            'generic_group_code',
             'department_id',
             'category',
             'unit',

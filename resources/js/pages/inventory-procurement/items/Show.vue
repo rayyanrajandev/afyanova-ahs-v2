@@ -1,23 +1,22 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGetBlob, apiRequestJson } from '@/lib/apiClient';
 import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { formatEnumLabel } from '@/lib/labels';
-import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import { messageFromUnknown, notifyError } from '@/lib/notify';
 import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue, formatDateTime, formatDateOnly, auditActorLabel } from '@/pages/inventory-procurement/constants';
 import { type BreadcrumbItem } from '@/types';
 
@@ -65,9 +64,6 @@ const batches = ref<any[]>([]);
 const unitsLoading = ref(false);
 const units = ref<any[]>([]);
 
-const unitPricesLoading = ref(false);
-const unitPrices = ref<any[]>([]);
-
 const auditLoading = ref(false);
 const auditError = ref<string | null>(null);
 const auditLogs = ref<any[]>([]);
@@ -77,58 +73,14 @@ const auditFilters = reactive({
     q: '', action: '', actorType: '', actorId: '', from: '', to: '', page: 1, perPage: 50,
 });
 
-const loading = ref(false);
-const errors = ref<Record<string, string[]>>({});
-const form = reactive({
-    clinicalCatalogItemId: '', itemCode: '', itemName: '', genericName: '', dosageForm: '',
-    strength: '', category: '', subcategory: '', venClassification: '', abcClassification: '',
-    unit: '', dispensingUnit: '', conversionFactor: '', binLocation: '', manufacturer: '',
-    storageConditions: '', requiresColdChain: false, isControlledSubstance: false,
-    controlledSubstanceSchedule: '', msdCode: '', nhifCode: '', barcode: '',
-    reorderLevel: '', maxStockLevel: '', defaultWarehouseId: '', defaultSupplierId: '',
-});
-
-function fieldError(errs: Record<string, string[]>, field: string): string {
-    return errs[field]?.[0] ?? '';
-}
-
 async function loadItem(): Promise<void> {
     itemLoading.value = true;
     itemError.value = null;
     try {
         const response = await apiRequestJson<{ data: any }>('GET', `/inventory-procurement/items/${props.itemId}`);
         item.value = response.data;
-        Object.assign(form, {
-            clinicalCatalogItemId: response.data.clinicalCatalogItemId ?? '',
-            itemCode: response.data.itemCode ?? '',
-            itemName: response.data.itemName ?? '',
-            genericName: response.data.genericName ?? '',
-            dosageForm: response.data.dosageForm ?? '',
-            strength: response.data.strength ?? '',
-            category: response.data.category ?? '',
-            subcategory: response.data.subcategory ?? '',
-            venClassification: response.data.venClassification ?? '',
-            abcClassification: response.data.abcClassification ?? '',
-            unit: response.data.unit ?? '',
-            dispensingUnit: response.data.dispensingUnit ?? '',
-            conversionFactor: response.data.conversionFactor ?? '',
-            binLocation: response.data.binLocation ?? '',
-            manufacturer: response.data.manufacturer ?? '',
-            storageConditions: response.data.storageConditions ?? '',
-            requiresColdChain: response.data.requiresColdChain ?? false,
-            isControlledSubstance: response.data.isControlledSubstance ?? false,
-            controlledSubstanceSchedule: response.data.controlledSubstanceSchedule ?? '',
-            msdCode: response.data.msdCode ?? '',
-            nhifCode: response.data.nhifCode ?? '',
-            barcode: response.data.barcode ?? '',
-            reorderLevel: response.data.reorderLevel ?? '',
-            maxStockLevel: response.data.maxStockLevel ?? '',
-            defaultWarehouseId: response.data.defaultWarehouseId ?? '',
-            defaultSupplierId: response.data.defaultSupplierId ?? '',
-        });
         void loadBatches();
         void loadUnits();
-        void loadUnitPrices();
         void loadAuditLogs();
     } catch (error) {
         item.value = null;
@@ -159,18 +111,6 @@ async function loadUnits(): Promise<void> {
         units.value = [];
     } finally {
         unitsLoading.value = false;
-    }
-}
-
-async function loadUnitPrices(): Promise<void> {
-    unitPricesLoading.value = true;
-    try {
-        const response = await apiRequestJson<{ data: any[] }>('GET', `/inventory-procurement/items/${props.itemId}/unit-prices`);
-        unitPrices.value = response.data ?? [];
-    } catch {
-        unitPrices.value = [];
-    } finally {
-        unitPricesLoading.value = false;
     }
 }
 
@@ -274,68 +214,62 @@ watch(
 onMounted(() => {
     loadItem();
 });
+
+const { scrollContainerHeight } = useStickyScrollContainer();
 </script>
 
 <template>
     <Head title="Inventory Item Details" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6">
-            <div v-if="itemLoading" class="flex flex-col gap-4">
-                <section class="rounded-lg border border-border bg-card shadow-sm">
-                    <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
-                        <div class="flex min-w-0 items-center gap-3">
-                            <Skeleton class="size-10 shrink-0 rounded-lg" />
-                            <div class="space-y-1">
-                                <Skeleton class="h-5 w-48" />
-                                <Skeleton class="h-3 w-72" />
-                            </div>
-                        </div>
+        <div
+            ref="scrollContainer"
+            class="flex flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-lg"
+            :style="{ height: scrollContainerHeight }"
+        >
+            <div v-if="itemLoading" class="flex flex-col gap-4 px-6 py-3">
+                <div class="flex min-w-0 items-center gap-3">
+                    <Skeleton class="size-10 shrink-0 rounded-lg" />
+                    <div class="space-y-1">
+                        <Skeleton class="h-5 w-48" />
+                        <Skeleton class="h-3 w-72" />
                     </div>
-                </section>
-
-                <Card class="min-w-0 flex-1">
-                    <CardHeader class="pb-3">
-                        <Skeleton class="h-5 w-32" />
-                        <Skeleton class="mt-1 h-3 w-64" />
-                    </CardHeader>
-                    <CardContent class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                </div>
+                <div class="overflow-hidden rounded-lg border bg-card p-4">
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <div v-for="i in 6" :key="i" class="space-y-1">
                             <Skeleton class="h-3 w-20" />
                             <Skeleton class="h-4 w-32" />
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             </div>
 
-            <Alert v-else-if="itemError" variant="destructive" class="m-4">
-                <AlertTitle>Item load failed</AlertTitle>
-                <AlertDescription>{{ itemError }}</AlertDescription>
-            </Alert>
+            <div v-else-if="itemError" class="px-6 py-3">
+                <Alert variant="destructive">
+                    <AlertTitle>Item load failed</AlertTitle>
+                    <AlertDescription>{{ itemError }}</AlertDescription>
+                </Alert>
+            </div>
 
-            <template v-else-if="item">
-                <section class="rounded-lg border border-border bg-card shadow-sm">
-                    <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
-                        <div class="flex min-w-0 items-center gap-3">
-                            <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
-                                <AppIcon name="package" class="size-5" />
+            <Tabs v-else-if="item" v-model="activeTab" class="flex flex-col">
+                <div class="sticky top-0 z-10 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-lg font-bold tracking-tight md:text-xl">{{ item.itemName || 'Inventory item' }}</h1>
+                                <Badge v-if="item.clinicalCatalogItemId" variant="secondary" class="gap-1">
+                                    <AppIcon name="check-circle" class="size-3" />
+                                    Catalog
+                                </Badge>
+                                <Badge v-else variant="outline">Manual</Badge>
+                                <Badge v-if="item.stockState" variant="secondary" class="capitalize">
+                                    {{ stockStateLabel(item.stockState) }}
+                                </Badge>
                             </div>
-                            <div class="min-w-0 space-y-0.5">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <h1 class="text-base font-semibold tracking-tight md:text-lg">{{ item.itemName || 'Inventory item' }}</h1>
-                                    <Badge v-if="item.clinicalCatalogItemId" variant="secondary" class="gap-1">
-                                        <AppIcon name="check-circle" class="size-3" />
-                                        Catalog
-                                    </Badge>
-                                    <Badge v-else variant="outline">Manual</Badge>
-                                    <Badge v-if="item.stockState" variant="secondary" class="capitalize">
-                                        {{ stockStateLabel(item.stockState) }}
-                                    </Badge>
-                                </div>
-                                <p class="truncate text-xs text-muted-foreground">
-                                    {{ item.itemCode || 'No code' }} · {{ item.category ? formatEnumLabel(item.category) : 'No category' }} · {{ item.unit || 'No unit' }}
-                                </p>
-                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                {{ item.itemCode || 'No code' }} · {{ item.category ? formatEnumLabel(item.category) : 'No category' }} · {{ item.unit || 'No unit' }}
+                            </p>
                         </div>
                         <div class="flex shrink-0 items-center gap-2">
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" as-child>
@@ -346,43 +280,29 @@ onMounted(() => {
                             </Button>
                         </div>
                     </div>
-                </section>
 
-                <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
+                    <TabsList class="mt-3 grid h-9 w-full gap-1" :class="canManageItems && canViewAudit ? 'grid-cols-4' : 'grid-cols-3'">
+                        <TabsTrigger value="overview" class="gap-1.5 text-xs">
+                            <AppIcon name="layout-grid" class="size-3" />
+                            Overview
+                        </TabsTrigger>
+                        <TabsTrigger value="stock" class="gap-1.5 text-xs">
+                            <AppIcon name="layers" class="size-3" />
+                            Batches
+                        </TabsTrigger>
+                        <TabsTrigger v-if="canManageItems" value="units" class="gap-1.5 text-xs">
+                            <AppIcon name="list" class="size-3" />
+                            Units
+                        </TabsTrigger>
+                        <TabsTrigger v-if="canViewAudit" value="audit" class="gap-1.5 text-xs">
+                            <AppIcon name="file-text" class="size-3" />
+                            Audit
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
 
-                <Tabs v-model="activeTab" class="flex h-full min-h-0 flex-col">
-                    <div class="shrink-0 border-b bg-muted/5 px-4 py-2.5">
-                        <TabsList class="grid h-9 w-full gap-1 bg-muted/40 p-1" :class="canManageItems && canViewAudit ? 'grid-cols-4' : 'grid-cols-3'">
-                            <TabsTrigger value="overview" class="gap-1.5 rounded-md border border-transparent px-2 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm">
-                                <span class="flex items-center gap-1 leading-none">
-                                    <AppIcon name="layout-grid" class="size-3" />
-                                    Overview
-                                </span>
-                            </TabsTrigger>
-                            <TabsTrigger value="stock" class="gap-1.5 rounded-md border border-transparent px-2 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm">
-                                <span class="flex items-center gap-1 leading-none">
-                                    <AppIcon name="layers" class="size-3" />
-                                    Batches
-                                </span>
-                            </TabsTrigger>
-                            <TabsTrigger v-if="canManageItems" value="units" class="gap-1.5 rounded-md border border-transparent px-2 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm">
-                                <span class="flex items-center gap-1 leading-none">
-                                    <AppIcon name="list" class="size-3" />
-                                    Units
-                                </span>
-                            </TabsTrigger>
-                            <TabsTrigger v-if="canViewAudit" value="audit" class="gap-1.5 rounded-md border border-transparent px-2 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm">
-                                <span class="flex items-center gap-1 leading-none">
-                                    <AppIcon name="file-text" class="size-3" />
-                                    Audit
-                                </span>
-                            </TabsTrigger>
-                        </TabsList>
-                    </div>
-
-                    <ScrollArea class="min-h-0 flex-1" viewport-class="pb-6">
-                        <div class="space-y-5 p-4">
-                            <TabsContent value="overview" class="mt-0 min-w-0 space-y-5">
+                <div class="px-6 pb-6">
+                            <TabsContent value="overview" class="m-0 min-w-0 space-y-5 overflow-hidden rounded-lg border bg-card p-4">
                                 <div class="grid gap-x-8 gap-y-4 sm:grid-cols-2">
                                     <div class="space-y-1.5">
                                         <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Item code</p>
@@ -490,7 +410,7 @@ onMounted(() => {
                                 </template>
                             </TabsContent>
 
-                            <TabsContent value="stock" class="mt-0 min-w-0 space-y-4">
+                            <TabsContent value="stock" class="m-0 min-w-0 space-y-4 overflow-hidden rounded-lg border bg-card p-4">
                                 <div v-if="batchesLoading" class="text-sm text-muted-foreground">Loading batches...</div>
                                 <div v-else-if="batches.length === 0" class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
                                     No batches have been recorded for this item yet.
@@ -526,7 +446,7 @@ onMounted(() => {
                                 </div>
                             </TabsContent>
 
-                            <TabsContent v-if="canManageItems" value="units" class="mt-0 min-w-0 space-y-4">
+                            <TabsContent v-if="canManageItems" value="units" class="m-0 min-w-0 space-y-4 overflow-hidden rounded-lg border bg-card p-4">
                                 <p v-if="unitsLoading" class="text-sm text-muted-foreground">Loading units...</p>
                                 <div v-else-if="units.length === 0" class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
                                     No units configured yet.
@@ -563,7 +483,7 @@ onMounted(() => {
                                 <p class="text-xs text-muted-foreground">Prices per unit are configured in <span class="font-medium">Billing Service Catalog</span>.</p>
                             </TabsContent>
 
-                            <TabsContent v-if="canViewAudit" value="audit" class="mt-0 min-w-0 space-y-4">
+                            <TabsContent v-if="canViewAudit" value="audit" class="m-0 min-w-0 space-y-4 overflow-hidden rounded-lg border bg-card p-4">
                                 <div class="grid gap-3 rounded-md border p-3 md:grid-cols-2">
                                     <div class="grid gap-1">
                                         <Label for="item-audit-q">Action Text Search</Label>
@@ -639,11 +559,8 @@ onMounted(() => {
                                     <Button size="sm" variant="outline" :disabled="auditLoading || !auditMeta || auditMeta.currentPage >= auditMeta.lastPage" @click="goToAuditPage((auditMeta?.currentPage ?? 0) + 1)">Next</Button>
                                 </div>
                             </TabsContent>
-                        </div>
-                    </ScrollArea>
-                </Tabs>
-            </Card>
-        </template>
+                </div>
+            </Tabs>
         </div>
     </AppLayout>
 </template>

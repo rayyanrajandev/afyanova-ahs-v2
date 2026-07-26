@@ -19,6 +19,7 @@ class ReceiveInventoryProcurementRequestRequest extends FormRequest
         return [
             'receivedQuantity' => ['required', 'numeric', 'gt:0'],
             'receivedUnitCost' => ['nullable', 'numeric', 'min:0'],
+            'receivedUnit' => ['nullable', 'string', 'max:100'],
             'warehouseId' => ['nullable', 'uuid'],
             'batchNumber' => ['nullable', 'string', 'max:100'],
             'lotNumber' => ['nullable', 'string', 'max:100'],

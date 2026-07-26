@@ -541,7 +541,7 @@ Route::get('platform/admin/branding', function (SystemBrandingManager $brandingM
 })->middleware(['auth', 'verified', 'can:platform.settings.manage-branding'])->name('platform-admin-branding.page');
 
 Route::get('platform/admin/clinical-catalogs/{catalog?}', function (?string $catalog = null) {
-    return Inertia::render('platform/admin/clinical-catalogs/Index', [
+    return Inertia::render('platform/admin/clinical-catalogs/IndexV2', [
         'catalog' => $catalog,
     ]);
 })->where('catalog', 'lab-tests|radiology-procedures|theatre-procedures|clinical-procedures|formulary-items')
@@ -629,7 +629,7 @@ Route::get('inventory-procurement/workspace', function () {
 })->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-workspace.page');
 
 Route::get('inventory-procurement/stock-control', function () {
-    return Inertia::render('inventory-procurement/stock-control/Index');
+    return Inertia::render('inventory-procurement/stock-control/IndexV2');
 })->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-stock-control.page');
 
 Route::get('inventory-procurement/items/{id}', function (string $id) {
@@ -671,6 +671,10 @@ Route::get('inventory-procurement/suppliers', function () {
 Route::get('inventory-procurement/warehouses', function () {
     return Inertia::render('inventory-procurement/warehouses/Index');
 })->middleware(['auth', 'verified', 'can:inventory.procurement.manage-warehouses', 'facility.entitlement:inventory.warehouses'])->name('inventory-procurement-warehouses.page');
+
+Route::get('inventory-procurement/categories', function () {
+    return Inertia::render('inventory-procurement/categories/Index');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.manage-items', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-categories.page');
 
 Route::get('inventory-procurement/procurement-requests/{id}/grn', [InventoryProcurementDocumentController::class, 'showGoodsReceivedNote'])
     ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])

@@ -301,7 +301,10 @@ const headerActions = computed<HeaderAction[]>(() => {
     if (activeTab.value === 'claims') {
         actions.push({ key: 'link-dispensing', label: 'Link Dispensing', icon: 'plus', variant: 'default', show: true, onClick: () => { createClaimLinkDialogOpen.value = true; } });
     }
-    actions.push({ key: 'export', label: 'Export', icon: 'download', variant: 'outline', show: true, onClick: () => {} });
+    actions.push({
+        key: 'export', label: 'Export', icon: 'download', variant: 'outline', show: activeTab.value === 'claims',
+        onClick: () => { void exportClaimLinksCsv(); },
+    });
     actions.push({ key: 'print', label: 'Print', icon: 'printer', variant: 'outline', show: true, onClick: () => { if (typeof window !== 'undefined') window.print(); } });
     return actions.filter((action) => action.show);
 });
@@ -324,6 +327,69 @@ async function loadClaimLinks() {
         claimLinks.value = response.data ?? [];
         claimLinkPagination.value = response.meta ?? null;
     } catch { claimLinks.value = []; claimLinkPagination.value = null; } finally { claimLinkLoading.value = false; }
+}
+
+const claimLinksExporting = ref(false);
+
+function rowsToCsv(rows: Record<string, unknown>[]): string {
+    if (rows.length === 0) return '';
+    const columns = Array.from(rows.reduce((set, row) => {
+        Object.keys(row).forEach((key) => set.add(key));
+        return set;
+    }, new Set<string>()));
+    const escapeCell = (value: unknown): string => {
+        if (value === null || value === undefined) return '';
+        const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const lines = [columns.join(',')];
+    for (const row of rows) {
+        lines.push(columns.map((col) => escapeCell(row[col])).join(','));
+    }
+    return lines.join('\n');
+}
+
+function downloadCsvText(csv: string, filename: string): void {
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+}
+
+async function exportClaimLinksCsv(): Promise<void> {
+    if (claimLinksExporting.value) return;
+    claimLinksExporting.value = true;
+    try {
+        const rows: any[] = [];
+        let page = 1;
+        let lastPage = 1;
+        do {
+            const query: Record<string, string | number> = { page, perPage: 100 };
+            if (claimLinkSearch.q) query.query = claimLinkSearch.q;
+            if (claimLinkSearch.claimStatus) query.claimStatus = claimLinkSearch.claimStatus;
+            const response = await apiRequest<{ data: any[]; meta?: { lastPage?: number } }>('GET', '/inventory-procurement/dispensing-claim-links', { query });
+            rows.push(...(response.data ?? []));
+            lastPage = Math.max(response.meta?.lastPage ?? 1, 1);
+            page += 1;
+        } while (page <= lastPage && rows.length < 5000);
+
+        if (rows.length === 0) {
+            notifyError('No rows to export for the current view.');
+            return;
+        }
+        downloadCsvText(rowsToCsv(rows), `dispensing-claim-links-${new Date().toISOString().slice(0, 10)}.csv`);
+        notifySuccess('Export ready.');
+    } catch (error) {
+        notifyError(messageFromUnknown(error, 'Unable to export.'));
+    } finally {
+        claimLinksExporting.value = false;
+    }
 }
 
 function hydrateReviewStateFromUrl(): void {

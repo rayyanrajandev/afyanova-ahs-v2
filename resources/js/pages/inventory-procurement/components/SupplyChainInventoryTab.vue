@@ -89,14 +89,6 @@ const ws = useSupplyChainPageApi();
                                             <AppIcon name="pencil" class="size-3.5" />
                                             Correct
                                         </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            class="h-8 rounded-lg text-xs"
-                                            @click="ws.openItemDetails(item)"
-                                        >
-                                            View details
-                                        </Button>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger as-child>
                                                 <Button
@@ -120,10 +112,6 @@ const ws = useSupplyChainPageApi();
                                                 <DropdownMenuItem @click="ws.openDepartmentStockForItem(item)">
                                                     <AppIcon name="building-2" class="mr-2 size-3.5" />
                                                     Where issued
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem v-if="ws.canManageItems" @click="ws.openItemDetails(item, 'maintenance')">
-                                                    <AppIcon name="pencil" class="mr-2 size-3.5" />
-                                                    Edit
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem v-if="ws.canManageItems" @click="ws.openItemDetails(item, 'status')">
                                                     <AppIcon name="shield-check" class="mr-2 size-3.5" />

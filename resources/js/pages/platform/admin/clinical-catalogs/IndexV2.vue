@@ -2553,9 +2553,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <label class="flex items-center gap-2 text-xs text-muted-foreground">
                         <Checkbox
                             id="clinical-catalog-select-page"
-                            :checked="allVisibleSelected"
+                            :model-value="allVisibleSelected"
                             :disabled="pageItemIds.length === 0 || bulkStatusBusy"
-                            @update:checked="toggleSelectAllVisible"
+                            @update:model-value="toggleSelectAllVisible"
                         />
                         <span class="font-medium text-foreground">{{ selectedCount }} selected</span>
                     </label>
@@ -2968,9 +2968,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 <div class="grid gap-3 md:grid-cols-2">
                                     <div class="flex items-start gap-2 rounded-md border p-2.5">
                                         <Checkbox
-                                            :checked="createForm.requiresColdChain"
+                                            :model-value="createForm.requiresColdChain"
                                             :disabled="!canManageCompliance"
-                                            @update:checked="createForm.requiresColdChain = Boolean($event)"
+                                            @update:model-value="(value) => (createForm.requiresColdChain = value === true)"
                                         />
                                         <div class="space-y-0.5">
                                             <Label class="text-xs font-medium">Requires cold chain</Label>
@@ -2979,9 +2979,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     </div>
                                     <div class="flex items-start gap-2 rounded-md border p-2.5">
                                         <Checkbox
-                                            :checked="createForm.isControlledSubstance"
+                                            :model-value="createForm.isControlledSubstance"
                                             :disabled="!canManageCompliance"
-                                            @update:checked="createForm.isControlledSubstance = Boolean($event)"
+                                            @update:model-value="(value) => (createForm.isControlledSubstance = value === true)"
                                         />
                                         <div class="space-y-0.5">
                                             <Label class="text-xs font-medium">Controlled substance</Label>
@@ -3331,9 +3331,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                     <Input v-model="packagingTemplateForm.baseQuantity" type="number" min="0" step="0.000001" placeholder="e.g. 10" class="h-8 text-xs" />
                                                 </div>
                                                 <div class="flex flex-col justify-end gap-1.5 text-xs">
-                                                    <label class="flex items-center gap-1.5"><Checkbox :checked="packagingTemplateForm.isBaseUnit" @update:checked="packagingTemplateForm.isBaseUnit = Boolean($event)" /> Base unit</label>
-                                                    <label class="flex items-center gap-1.5"><Checkbox :checked="packagingTemplateForm.isDefaultPurchaseUnit" @update:checked="packagingTemplateForm.isDefaultPurchaseUnit = Boolean($event)" /> Default purchase</label>
-                                                    <label class="flex items-center gap-1.5"><Checkbox :checked="packagingTemplateForm.isDefaultSalesUnit" @update:checked="packagingTemplateForm.isDefaultSalesUnit = Boolean($event)" /> Default sales</label>
+                                                    <label class="flex items-center gap-1.5"><Checkbox :model-value="packagingTemplateForm.isBaseUnit" @update:model-value="(value) => (packagingTemplateForm.isBaseUnit = value === true)" /> Base unit</label>
+                                                    <label class="flex items-center gap-1.5"><Checkbox :model-value="packagingTemplateForm.isDefaultPurchaseUnit" @update:model-value="(value) => (packagingTemplateForm.isDefaultPurchaseUnit = value === true)" /> Default purchase</label>
+                                                    <label class="flex items-center gap-1.5"><Checkbox :model-value="packagingTemplateForm.isDefaultSalesUnit" @update:model-value="(value) => (packagingTemplateForm.isDefaultSalesUnit = value === true)" /> Default sales</label>
                                                 </div>
                                                 <div class="md:col-span-2">
                                                     <Button
@@ -3628,9 +3628,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 <div class="grid gap-3 md:grid-cols-2">
                                     <div class="flex items-start gap-2 rounded-md border p-2.5">
                                         <Checkbox
-                                            :checked="editForm.requiresColdChain"
+                                            :model-value="editForm.requiresColdChain"
                                             :disabled="!canManageCompliance"
-                                            @update:checked="editForm.requiresColdChain = Boolean($event)"
+                                            @update:model-value="(value) => (editForm.requiresColdChain = value === true)"
                                         />
                                         <div class="space-y-0.5">
                                             <Label class="text-xs font-medium">Requires cold chain</Label>
@@ -3639,9 +3639,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     </div>
                                     <div class="flex items-start gap-2 rounded-md border p-2.5">
                                         <Checkbox
-                                            :checked="editForm.isControlledSubstance"
+                                            :model-value="editForm.isControlledSubstance"
                                             :disabled="!canManageCompliance"
-                                            @update:checked="editForm.isControlledSubstance = Boolean($event)"
+                                            @update:model-value="(value) => (editForm.isControlledSubstance = value === true)"
                                         />
                                         <div class="space-y-0.5">
                                             <Label class="text-xs font-medium">Controlled substance</Label>

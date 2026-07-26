@@ -26,6 +26,12 @@ return [
             'stage' => 'planned',
             'description' => 'Enable tenant isolation primitives and middleware enforcement.',
         ],
+        'inventory.catalog_first_reads' => [
+            'enabled' => true,
+            'owner' => 'inventory',
+            'stage' => 'beta',
+            'description' => 'Inventory_MasterData_Alignment_Plan.md Phase 2: read storage conditions, cold-chain, and controlled-substance status from the linked Clinical Catalog item instead of the inventory row. Flip back to false to roll back the cutover without a deploy.',
+        ],
         'platform.localization.swahili' => [
             'enabled' => true,
             'owner' => 'platform',

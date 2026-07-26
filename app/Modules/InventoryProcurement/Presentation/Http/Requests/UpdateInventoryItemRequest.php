@@ -46,8 +46,6 @@ class UpdateInventoryItemRequest extends FormRequest
         'manufacturer',
         'storageConditions',
         'requiresColdChain',
-        'isControlledSubstance',
-        'controlledSubstanceSchedule',
         'reorderLevel',
         'maxStockLevel',
         'defaultWarehouseId',
@@ -94,8 +92,6 @@ class UpdateInventoryItemRequest extends FormRequest
             'manufacturer' => ['nullable', 'string', 'max:180'],
             'storageConditions' => ['nullable', 'string', 'max:60'],
             'requiresColdChain' => ['nullable', 'boolean'],
-            'isControlledSubstance' => ['nullable', 'boolean'],
-            'controlledSubstanceSchedule' => ['nullable', 'string', 'max:20'],
             'reorderLevel' => ['sometimes', 'numeric', 'min:0'],
             'maxStockLevel' => ['nullable', 'numeric', 'min:0'],
             'defaultWarehouseId' => ['nullable', 'uuid'],
@@ -122,8 +118,6 @@ class UpdateInventoryItemRequest extends FormRequest
 
             $storageConditions = $this->effectiveString('storageConditions', 'storage_conditions');
             $requiresColdChain = $this->effectiveBoolean('requiresColdChain', 'requires_cold_chain');
-            $isControlledSubstance = $this->effectiveBoolean('isControlledSubstance', 'is_controlled_substance');
-            $schedule = $this->effectiveString('controlledSubstanceSchedule', 'controlled_substance_schedule');
             $clinicalCatalogItemId = $this->effectiveString('clinicalCatalogItemId', 'clinical_catalog_item_id');
             $clinicalTestPayload = [
                 'item_code' => $this->effectiveString('itemCode', 'item_code'),
@@ -155,12 +149,23 @@ class UpdateInventoryItemRequest extends FormRequest
                 $validator->errors()->add('storageConditions', 'Storage conditions are required for expiry-sensitive or cold-chain inventory.');
             }
 
-            if (! $category->isControlledSubstanceEligible() && $isControlledSubstance) {
-                $validator->errors()->add('isControlledSubstance', 'Controlled substance handling is only available for pharmaceutical items.');
-            }
-
-            if (! $category->isControlledSubstanceEligible() && $schedule !== '') {
-                $validator->errors()->add('controlledSubstanceSchedule', 'Controlled substance schedules are only available for pharmaceutical items.');
+            // Inventory_MasterData_Alignment_Plan.md Phase 6 -- see StoreInventoryItemRequest
+            // for the reasoning. On update this has to compare against the item's
+            // *current* value, not just "is it present and true": the frontend's
+            // buildItemPayload() always resends every field on every save (not just
+            // what changed), so "has('requiresColdChain') && true" would reject any
+            // routine edit -- even a bin location change -- to an item a
+            // compliance-permissioned user had already, correctly, flagged. Only a
+            // genuine transition needs the permission.
+            // (is_controlled_substance/controlled_substance_schedule are validated on
+            // the Clinical Catalog item instead -- see UpdateClinicalCatalogItemRequest --
+            // since those columns were dropped from inventory_items in Phase 3.)
+            $canManageCompliance = $this->user()?->can('inventory.procurement.manage-compliance') ?? false;
+            if (! $canManageCompliance) {
+                $currentRequiresColdChain = (bool) ($this->currentItem()?->requires_cold_chain ?? false);
+                if ($requiresColdChain !== $currentRequiresColdChain && ! $category->requiresColdChain()) {
+                    $validator->errors()->add('requiresColdChain', 'Changing cold-chain requirements for this category requires the compliance permission.');
+                }
             }
         });
     }

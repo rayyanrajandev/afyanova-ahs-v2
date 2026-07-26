@@ -4,6 +4,7 @@ namespace App\Support\CatalogGovernance;
 
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
+use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use Illuminate\Support\Facades\Schema;
@@ -11,8 +12,29 @@ use Illuminate\Validation\ValidationException;
 
 class InventoryClinicalLinkGuard
 {
+    /**
+     * generic_name/dosage_form/strength/controlled_substance_schedule no longer exist
+     * as inventory_items columns as of Phase 3 (Inventory_MasterData_Alignment_Plan.md)
+     * -- they're Pharmaceutical-only and Pharmaceutical is always catalog-linked, so
+     * there's no local value left to diverge from the catalog. storage_conditions
+     * stays here: Blood Product/Laboratory/Food & Nutrition use it and can't
+     * catalog-link, so it's still a real, comparable local column for Pharmaceutical.
+     *
+     * @var array<int, string>
+     */
+    private const CATALOG_OWNED_STRING_FIELDS = ['storage_conditions'];
+
+    /**
+     * is_controlled_substance dropped in Phase 3 (Pharmaceutical-only, always
+     * catalog-linked). requires_cold_chain stays -- same reasoning as storage_conditions.
+     *
+     * @var array<int, string>
+     */
+    private const CATALOG_OWNED_BOOL_FIELDS = ['requires_cold_chain'];
+
     public function __construct(
         private readonly CatalogPlacementAuditor $placementAuditor,
+        private readonly FeatureFlagResolverInterface $featureFlagResolver,
     ) {}
 
     /**
@@ -39,6 +61,8 @@ class InventoryClinicalLinkGuard
             'item_name' => $item->item_name,
             'category' => $item->category,
             'clinical_catalog_item_id' => $item->clinical_catalog_item_id,
+            'storage_conditions' => $item->storage_conditions,
+            'requires_cold_chain' => $item->requires_cold_chain,
         ];
 
         $this->assertPayloadCanPersist($payload);
@@ -107,6 +131,8 @@ class InventoryClinicalLinkGuard
                 $errors['clinicalCatalogItemId'][] = 'The linked Clinical Care Catalog item does not exist.';
             } elseif ((string) $catalogItem->catalog_type !== ClinicalCatalogType::FORMULARY_ITEM->value) {
                 $errors['clinicalCatalogItemId'][] = 'Inventory can only link to pharmaceutical formulary catalog items.';
+            } elseif ($this->featureFlagResolver->isEnabled('inventory.catalog_first_reads')) {
+                $this->assertNoClinicalFieldDivergence($merged, $catalogItem, $errors);
             }
         }
 
@@ -124,6 +150,53 @@ class InventoryClinicalLinkGuard
         }
 
         return ['errors' => $errors, 'warnings' => $warnings];
+    }
+
+    /**
+     * Inventory_MasterData_Alignment_Plan.md Phase 2: once catalog-first reads are
+     * on, these fields are owned by Clinical Catalog for a linked item. A write that
+     * *repeats* the catalog's own value (which is what the current UI does -- it
+     * pre-fills the form from the catalog selection and submits that back) is fine.
+     * A write that genuinely disagrees is rejected rather than silently accepted,
+     * so the drift the audit flagged can't happen through this path going forward.
+     *
+     * @param  array<string, mixed>  $merged
+     * @param  array<string, array<int, string>>  $errors
+     */
+    private function assertNoClinicalFieldDivergence(array $merged, ClinicalCatalogItemModel $catalogItem, array &$errors): void
+    {
+        foreach (self::CATALOG_OWNED_STRING_FIELDS as $field) {
+            $submitted = $this->normalizeNullableText($merged[$field] ?? $merged[$this->toCamelCase($field)] ?? null);
+            $catalogValue = $this->normalizeNullableText($catalogItem->{$field});
+
+            if ($submitted !== null && $catalogValue !== null && $submitted !== $catalogValue) {
+                $errors[$this->toCamelCase($field)][] = 'This value is owned by the linked Clinical Catalog item ('.$catalogValue.') and cannot be overridden here. Update the clinical definition instead.';
+            }
+        }
+
+        foreach (self::CATALOG_OWNED_BOOL_FIELDS as $field) {
+            // null on the catalog means "no opinion yet" (e.g. not backfilled) --
+            // only enforce once the catalog actually has a true/false answer.
+            $catalogValue = $catalogItem->{$field};
+            if ($catalogValue === null) {
+                continue;
+            }
+
+            if (! array_key_exists($field, $merged) && ! array_key_exists($this->toCamelCase($field), $merged)) {
+                continue;
+            }
+
+            $submitted = (bool) ($merged[$field] ?? $merged[$this->toCamelCase($field)] ?? false);
+
+            if ($submitted !== (bool) $catalogValue) {
+                $errors[$this->toCamelCase($field)][] = 'This value is owned by the linked Clinical Catalog item and cannot be overridden here. Update the clinical definition instead.';
+            }
+        }
+    }
+
+    private function toCamelCase(string $snakeCase): string
+    {
+        return lcfirst(str_replace(' ', '', ucwords(str_replace('_', ' ', $snakeCase))));
     }
 
     private function normalizeNullableText(mixed $value): ?string

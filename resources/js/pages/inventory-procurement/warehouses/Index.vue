@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -18,8 +18,10 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetDescrip
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import type { AppIconName } from '@/lib/icons';
 import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
@@ -60,12 +62,13 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Warehouses', href: '/inventory-procurement/warehouses' },
 ];
 
-const { permissionState } = usePlatformAccess();
+const { permissionNames: sharedPermissionNames, permissionState, scope: platformScope } = usePlatformAccess();
+const permissionsResolved = computed(() => sharedPermissionNames.value !== null);
 const canRead = computed(() => permissionState('inventory.procurement.read') === 'allowed');
 const canManage = computed(() => permissionState('inventory.procurement.manage-warehouses') === 'allowed');
 const canAudit = computed(() => permissionState('inventory.procurement.view-audit-logs') === 'allowed');
 
-const EMPTY_SELECT_VALUE = '';
+const EMPTY_SELECT_VALUE = '__warehouses_empty_select__';
 
 function toSelectValue(value: string | null | undefined): string {
     return value == null || value === '' ? EMPTY_SELECT_VALUE : value;
@@ -321,109 +324,140 @@ function nextPage() { if (pagination.value && pagination.value.currentPage < pag
 onMounted(() => {
     void refreshPage();
 });
+
+const { scrollContainerHeight } = useStickyScrollContainer();
 </script>
 
 <template>
     <Head title="Warehouses" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
+        <div
+            ref="scrollContainer"
+            class="flex flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-lg"
+            :style="{ height: scrollContainerHeight }"
+        >
+            <div class="sticky top-0 z-10 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 space-y-0.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h1 class="text-lg font-bold tracking-tight md:text-xl">Warehouses</h1>
+                            <Badge v-if="permissionsResolved && !canRead" variant="outline" class="h-5 px-1.5 text-[10px] font-medium">
+                                View only
+                            </Badge>
+                        </div>
+                        <p class="text-xs text-muted-foreground">Warehouse and store locations, contacts, and lifecycle status</p>
+                    </div>
+                    <div class="flex shrink-0 flex-wrap items-center gap-2">
+                        <Button variant="outline" size="sm" class="h-8 w-8 p-0" :disabled="listLoading" title="Refresh" @click="refreshPage">
+                            <AppIcon :name="(listLoading ? 'loader-circle' : 'refresh-cw') as AppIconName" class="size-3.5" :class="listLoading ? 'animate-spin' : ''" />
+                        </Button>
+                        <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="createOpen = true">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Create warehouse
+                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
+                                    <AppIcon name="ellipsis-vertical" class="size-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-48">
+                                <DropdownMenuItem as-child>
+                                    <Link :href="INVENTORY_PROCUREMENT_HOME_PATH" class="gap-2">
+                                        <AppIcon name="layout-grid" class="size-4" /> Supply chain home
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <Link href="/inventory-procurement/stock-control" class="gap-2">
+                                        <AppIcon name="package" class="size-4" /> Stock Control
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <Link href="/inventory-procurement/procurement" class="gap-2">
+                                        <AppIcon name="clipboard-list" class="size-4" /> Procurement
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <Link href="/inventory-procurement/suppliers" class="gap-2">
+                                        <AppIcon name="truck" class="size-4" /> Suppliers
+                                    </Link>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
 
-            <FacilityWorkspacePageHeader
-                title="Warehouse registry"
-                description="Manage warehouse and store locations, contacts, and lifecycle status."
-                icon="building-2"
-                :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
-                back-label="Supply chain home"
-            >
-                <template #actions>
-                    <Button variant="outline" size="sm" :disabled="listLoading" class="h-8 gap-1.5" @click="refreshPage">
-                        <AppIcon name="refresh-cw" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing…' : 'Refresh' }}
-                    </Button>
-                    <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="createOpen = true">
-                        <AppIcon name="plus" class="size-3.5" />
-                        Create warehouse
-                    </Button>
+                <template v-if="canRead">
+                    <div class="mt-3 grid grid-cols-3 gap-2">
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
+                            <p class="text-sm font-bold tabular-nums">{{ counts.total.toLocaleString() }}</p>
+                        </div>
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Active</p>
+                            <p class="text-sm font-bold tabular-nums">{{ counts.active.toLocaleString() }}</p>
+                        </div>
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Inactive</p>
+                            <p class="text-sm font-bold tabular-nums">{{ counts.inactive.toLocaleString() }}</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                        <div class="relative min-w-72 flex-1">
+                            <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                                v-model="filters.q"
+                                class="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                placeholder="Code, name, location"
+                                @keydown.enter="search"
+                            />
+                        </div>
+                        <Select :model-value="toSelectValue(filters.status)" @update:model-value="setStatus(fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)) as '' | 'active' | 'inactive')">
+                            <SelectTrigger class="h-9 w-36 bg-background"><SelectValue placeholder="All statuses" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="inactive">Inactive</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <input v-model="filters.warehouseType" class="h-9 w-44 rounded-lg border border-input bg-background px-3 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="Warehouse type" @keydown.enter="search" />
+                        <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event); search()">
+                            <SelectTrigger class="h-9 w-24 bg-background"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="20">20</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                                <SelectItem value="100">100</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button size="sm" class="h-9 gap-1.5" :disabled="listLoading" @click="search">
+                            <AppIcon name="search" class="size-3.5" />
+                            Search
+                        </Button>
+                        <Button v-if="hasActiveFilters" size="sm" variant="outline" class="h-9 gap-1.5" @click="reset">Reset</Button>
+                    </div>
                 </template>
-            </FacilityWorkspacePageHeader>
-
-            <div v-if="canRead" class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2">
-                <span class="text-xs font-medium text-muted-foreground">Quick filter:</span>
-                <Button size="sm" class="h-8" :variant="filters.status === '' ? 'default' : 'outline'" @click="setStatus('')">All</Button>
-                <Button size="sm" class="h-8" :variant="filters.status === 'active' ? 'default' : 'outline'" @click="setStatus('active')">Active</Button>
-                <Button size="sm" class="h-8" :variant="filters.status === 'inactive' ? 'default' : 'outline'" @click="setStatus('inactive')">Inactive</Button>
             </div>
 
-            <!-- Alerts -->
-            <Alert v-if="errors.length" variant="destructive">
-                <AlertTitle>Request error</AlertTitle>
-                <AlertDescription>
-                    <p v-for="errorMessage in errors" :key="errorMessage" class="text-xs">{{ errorMessage }}</p>
-                </AlertDescription>
-            </Alert>
+            <div v-if="!canRead" class="px-6">
+                <Alert variant="destructive">
+                    <AlertTitle>Access restricted</AlertTitle>
+                    <AlertDescription>Request <code>inventory.procurement.read</code> permission.</AlertDescription>
+                </Alert>
+            </div>
 
-            <!-- Single column layout -->
-            <div class="flex min-w-0 flex-col gap-4">
+            <div v-if="canRead" class="flex min-h-0 flex-1 flex-col gap-4 px-6 pb-6">
+
+                <!-- Alerts -->
+                <Alert v-if="errors.length" variant="destructive">
+                    <AlertTitle>Request error</AlertTitle>
+                    <AlertDescription>
+                        <p v-for="errorMessage in errors" :key="errorMessage" class="text-xs">{{ errorMessage }}</p>
+                    </AlertDescription>
+                </Alert>
 
                 <!-- Warehouse list card -->
-                <Card v-if="canRead" class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70">
-                    <CardHeader class="shrink-0 gap-3 pb-3">
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="min-w-0">
-                                <CardTitle class="flex items-center gap-2">
-                                    <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
-                                    Warehouse List
-                                </CardTitle>
-                                <CardDescription>
-                                    {{ items.length }} warehouses on this page · Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
-                                </CardDescription>
-                            </div>
-                            <div class="flex w-full flex-wrap items-center gap-2 lg:max-w-2xl">
-                                <!-- Inline search bar -->
-                                <SearchInput
-                                    v-model="filters.q"
-                                    placeholder="Code, name, location"
-                                    class="min-w-0 flex-1"
-                                    @keyup.enter="search"
-                                />
-                                <SupplyChainFilterPopover :filter-count="filterCountForBadge" label="Options">
-                                    <div class="grid gap-2">
-                                        <Label for="wh-status-popover">Status</Label>
-                                        <Select :model-value="toSelectValue(filters.status)" @update:model-value="filters.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                            <SelectTrigger id="wh-status-popover" class="w-full"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                            <SelectItem value="active">Active</SelectItem>
-                                            <SelectItem value="inactive">Inactive</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div class="grid gap-2">
-                                        <Label for="wh-type-popover">Warehouse Type</Label>
-                                        <Input id="wh-type-popover" v-model="filters.warehouseType" placeholder="e.g. Main, Pharmacy..." />
-                                    </div>
-                                    <div class="grid gap-2">
-                                        <Label for="wh-per-page-popover">Per page</Label>
-                                        <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                            <SelectTrigger id="wh-per-page-popover" class="w-full"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem value="20">20</SelectItem>
-                                            <SelectItem value="50">50</SelectItem>
-                                            <SelectItem value="100">100</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <template #footer>
-                                        <Button size="sm" variant="outline" class="flex-1 gap-1.5" @click="reset">Reset</Button>
-                                        <Button size="sm" class="flex-1 gap-1.5" :disabled="listLoading" @click="search">
-                                            <AppIcon name="search" class="size-3.5" />
-                                            Search
-                                        </Button>
-                                    </template>
-                                </SupplyChainFilterPopover>
-                            </div>
-                        </div>
-                    </CardHeader>
+                <Card class="flex min-h-0 flex-1 flex-col rounded-lg border bg-card">
                     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
                         <ScrollArea class="min-h-0 flex-1">
                             <div class="min-h-[12rem] space-y-2 p-4">
@@ -509,23 +543,6 @@ onMounted(() => {
                                 </Button>
                             </div>
                         </footer>
-                    </CardContent>
-                </Card>
-
-                <!-- No read permission card -->
-                <Card v-else class="rounded-lg border-sidebar-border/70">
-                    <CardHeader>
-                        <CardTitle class="flex items-center gap-2">
-                            <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
-                            Warehouse List
-                        </CardTitle>
-                        <CardDescription>Warehouse access is permission restricted.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Alert variant="destructive">
-                            <AlertTitle>Access restricted</AlertTitle>
-                            <AlertDescription>Request <code>inventory.procurement.read</code> permission.</AlertDescription>
-                        </Alert>
                     </CardContent>
                 </Card>
 

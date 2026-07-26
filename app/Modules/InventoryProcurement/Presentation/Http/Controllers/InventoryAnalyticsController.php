@@ -72,14 +72,17 @@ class InventoryAnalyticsController extends Controller
         $this->applyPlatformScopeIfEnabled($query);
 
         // Get counts per ABC × VEN cell
-        $matrix = $query
+        $matrix = (clone $query)
             ->select(
                 DB::raw("COALESCE(abc_classification, 'unclassified') as abc"),
                 DB::raw("COALESCE(ven_classification, 'unclassified') as ven"),
                 DB::raw('COUNT(*) as item_count'),
                 DB::raw('SUM(current_stock) as total_stock'),
             )
-            ->groupBy('abc', 'ven')
+            ->groupBy(
+                DB::raw("COALESCE(abc_classification, 'unclassified')"),
+                DB::raw("COALESCE(ven_classification, 'unclassified')"),
+            )
             ->get()
             ->map(fn ($row) => [
                 'abc' => $row->abc,

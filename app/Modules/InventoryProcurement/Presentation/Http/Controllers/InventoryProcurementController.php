@@ -25,6 +25,7 @@ use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryStockAlert
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryItemAuditLogsUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryItemsUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryProcurementRequestAuditLogsUseCase;
+use App\Modules\InventoryProcurement\Application\UseCases\ExportInventoryProcurementRequestsCsvUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryProcurementRequestsUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryStockMovementsUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\PlaceInventoryProcurementOrderUseCase;
@@ -229,7 +230,7 @@ class InventoryProcurementController extends Controller
             'catalogItemIds' => ['nullable', 'array'],
             'catalogItemIds.*' => ['uuid'],
             'catalogTypes' => ['nullable', 'array'],
-            'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,formulary_item'],
+            'catalogTypes.*' => ['string', 'in:formulary_item'],
             'defaultWarehouseId' => ['required', 'uuid'],
             'defaultSupplierId' => ['nullable', 'uuid'],
         ]);
@@ -535,6 +536,29 @@ class InventoryProcurementController extends Controller
         ]);
     }
 
+    public function exportProcurementRequestsCsv(Request $request, ExportInventoryProcurementRequestsCsvUseCase $useCase): StreamedResponse
+    {
+        $export = $useCase->execute($request->all());
+        $columns = $export['columns'];
+        $rows = $export['rows'];
+
+        return $this->streamCsvExport(
+            baseName: sprintf('inventory_procurement_requests_%s', now()->format('Ymd_His')),
+            columns: $columns,
+            writeRows: static function ($output) use ($columns, $rows): void {
+                foreach ($rows as $row) {
+                    $line = [];
+                    foreach ($columns as $column) {
+                        $line[] = $row[$column] ?? '';
+                    }
+                    fputcsv($output, $line);
+                }
+            },
+            schemaHeaderName: 'X-Inventory-Procurement-Requests-Csv-Schema',
+            schemaVersion: '1',
+        );
+    }
+
     /**
      * Get active procurement requests grouped by item and department
      * Used by workspace to prevent duplicate requests and show what's pending
@@ -782,6 +806,7 @@ class InventoryProcurementController extends Controller
             'manufactureDate' => 'manufacture_date',
             'expiryDate' => 'expiry_date',
             'binLocation' => 'bin_location',
+            'manufacturer' => 'manufacturer',
             'sourceSupplierId' => 'source_supplier_id',
             'sourceWarehouseId' => 'source_warehouse_id',
             'destinationWarehouseId' => 'destination_warehouse_id',
@@ -873,9 +898,11 @@ class InventoryProcurementController extends Controller
             'codes' => 'codes',
             'clinicalCatalogItemId' => 'clinical_catalog_item_id',
             'itemName' => 'item_name',
-            'genericName' => 'generic_name',
-            'dosageForm' => 'dosage_form',
-            'strength' => 'strength',
+            // genericName/dosageForm/strength/isControlledSubstance/controlledSubstanceSchedule
+            // dropped from inventory_items in Phase 3 (Inventory_MasterData_Alignment_Plan.md):
+            // Pharmaceutical-only and always catalog-linked, so the use cases no longer
+            // persist them regardless -- removed here too so the mapping doesn't imply
+            // they're still writable.
             'category' => 'category',
             'subcategory' => 'subcategory',
             'venClassification' => 'ven_classification',
@@ -887,8 +914,6 @@ class InventoryProcurementController extends Controller
             'manufacturer' => 'manufacturer',
             'storageConditions' => 'storage_conditions',
             'requiresColdChain' => 'requires_cold_chain',
-            'isControlledSubstance' => 'is_controlled_substance',
-            'controlledSubstanceSchedule' => 'controlled_substance_schedule',
             'reorderLevel' => 'reorder_level',
             'maxStockLevel' => 'max_stock_level',
             'defaultWarehouseId' => 'default_warehouse_id',
@@ -935,6 +960,7 @@ class InventoryProcurementController extends Controller
         $fieldMap = [
             'receivedQuantity' => 'received_quantity',
             'receivedUnitCost' => 'received_unit_cost',
+            'receivedUnit' => 'unit',
             'warehouseId' => 'receiving_warehouse_id',
             'batchNumber' => 'batch_number',
             'lotNumber' => 'lot_number',

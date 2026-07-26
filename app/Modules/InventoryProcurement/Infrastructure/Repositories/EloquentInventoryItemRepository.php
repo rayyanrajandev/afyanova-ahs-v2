@@ -136,7 +136,11 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
         ?string $sortBy,
         string $sortDirection
     ): array {
-        $sortBy = in_array($sortBy, ['item_code', 'item_name', 'category', 'current_stock', 'reorder_level', 'created_at', 'updated_at', 'generic_name', 'ven_classification', 'manufacturer'], true)
+        // generic_name dropped from inventory_items in Phase 3 (Inventory_MasterData_Alignment_Plan.md)
+        // -- it's Pharmaceutical-only now, living on the joined clinical catalog row.
+        // Sorting across that join isn't supported here; falls back to item_name, same
+        // as any other unrecognized sort key.
+        $sortBy = in_array($sortBy, ['item_code', 'item_name', 'category', 'current_stock', 'reorder_level', 'created_at', 'updated_at', 'ven_classification', 'manufacturer'], true)
             ? $sortBy
             : 'item_name';
 
@@ -267,18 +271,20 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
             $nestedQuery
                 ->whereRaw('LOWER(inventory_items.item_code) LIKE ?', [$like])
                 ->orWhereRaw('LOWER(inventory_items.item_name) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(inventory_items.generic_name) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(inventory_items.strength) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(inventory_items.dosage_form) LIKE ?', [$like])
                 ->orWhereRaw('LOWER(inventory_items.category) LIKE ?', [$like])
                 ->orWhereRaw('LOWER(inventory_items.subcategory) LIKE ?', [$like])
                 ->orWhereRaw('LOWER(inventory_items.msd_code) LIKE ?', [$like])
                 ->orWhereRaw('LOWER(inventory_items.nhif_code) LIKE ?', [$like])
                 ->orWhereRaw('LOWER(inventory_items.barcode) LIKE ?', [$like])
                 ->orWhereRaw('LOWER(inventory_items.manufacturer) LIKE ?', [$like])
-                // Search linked clinical catalog item name and code
+                // Search linked clinical catalog item name/code and, since Phase 3
+                // (Inventory_MasterData_Alignment_Plan.md) dropped generic_name/strength/
+                // dosage_form from inventory_items, their catalog-owned replacements too.
                 ->orWhereRaw('LOWER(cci.name) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(cci.code) LIKE ?', [$like]);
+                ->orWhereRaw('LOWER(cci.code) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(cci.generic_name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(cci.strength) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(cci.dosage_form) LIKE ?', [$like]);
         });
     }
 

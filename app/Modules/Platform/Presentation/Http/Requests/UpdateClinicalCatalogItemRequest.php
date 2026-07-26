@@ -2,11 +2,16 @@
 
 namespace App\Modules\Platform\Presentation\Http\Requests;
 
+use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
 class UpdateClinicalCatalogItemRequest extends FormRequest
 {
+    private bool $currentItemResolved = false;
+
+    private ?ClinicalCatalogItemModel $currentItem = null;
+
     /**
      * @var array<int, string>
      */
@@ -19,6 +24,15 @@ class UpdateClinicalCatalogItemRequest extends FormRequest
         'unit',
         'billingServiceCode',
         'description',
+        'genericName',
+        'dosageForm',
+        'strength',
+        'route',
+        'storageConditions',
+        'requiresColdChain',
+        'isControlledSubstance',
+        'controlledSubstanceSchedule',
+        'genericGroupCode',
         'metadata',
         'codes',
     ];
@@ -42,6 +56,15 @@ class UpdateClinicalCatalogItemRequest extends FormRequest
             'unit' => ['nullable', 'string', 'max:50'],
             'billingServiceCode' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'],
+            'genericName' => ['nullable', 'string', 'max:180'],
+            'dosageForm' => ['nullable', 'string', 'max:60'],
+            'strength' => ['nullable', 'string', 'max:60'],
+            'route' => ['nullable', 'string', 'max:60'],
+            'storageConditions' => ['nullable', 'string', 'max:60'],
+            'requiresColdChain' => ['nullable', 'boolean'],
+            'isControlledSubstance' => ['nullable', 'boolean'],
+            'controlledSubstanceSchedule' => ['nullable', 'string', 'max:20', 'required_if:isControlledSubstance,true'],
+            'genericGroupCode' => ['nullable', 'string', 'max:120'],
             'metadata' => ['nullable', 'array'],
             'codes' => ['nullable', 'array'],
             'codes.LOCAL' => ['nullable', 'string', 'max:120'],
@@ -66,6 +89,52 @@ class UpdateClinicalCatalogItemRequest extends FormRequest
             if (! $hasAllowedField) {
                 $validator->errors()->add('payload', 'At least one updatable field is required.');
             }
+
+            // Inventory_MasterData_Alignment_Plan.md Phase 6 -- see
+            // StoreClinicalCatalogItemRequest for the reasoning. Compares against the
+            // item's *current* value, not just "is it present and true": an admin UI
+            // that resends the whole form on every save (the pattern this codebase
+            // already uses for inventory items) would otherwise reject any routine
+            // edit to an already-flagged item. Only a genuine transition needs the
+            // permission.
+            $canManageCompliance = $this->user()?->can('inventory.procurement.manage-compliance') ?? false;
+            if ($canManageCompliance) {
+                return;
+            }
+
+            $current = $this->currentItem();
+
+            if ($this->has('requiresColdChain')) {
+                $currentRequiresColdChain = (bool) ($current?->requires_cold_chain ?? false);
+                if ($this->boolean('requiresColdChain') !== $currentRequiresColdChain) {
+                    $validator->errors()->add('requiresColdChain', 'Changing cold-chain requirements requires the compliance permission.');
+                }
+            }
+
+            if ($this->has('isControlledSubstance')) {
+                $currentIsControlledSubstance = (bool) ($current?->is_controlled_substance ?? false);
+                if ($this->boolean('isControlledSubstance') !== $currentIsControlledSubstance) {
+                    $validator->errors()->add('isControlledSubstance', 'Changing controlled-substance status requires the compliance permission.');
+                }
+            }
         });
+    }
+
+    private function currentItem(): ?ClinicalCatalogItemModel
+    {
+        if ($this->currentItemResolved) {
+            return $this->currentItem;
+        }
+
+        $this->currentItemResolved = true;
+
+        $itemId = $this->route('id');
+        if (! is_string($itemId) || $itemId === '') {
+            return null;
+        }
+
+        $this->currentItem = ClinicalCatalogItemModel::query()->find($itemId);
+
+        return $this->currentItem;
     }
 }
