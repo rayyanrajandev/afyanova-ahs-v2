@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             DskChargeableItemsSeeder::class,
             DskWarehouseSeeder::class,
             DskSuppliersSeeder::class,
+            DskInventoryItemsSeeder::class,
         ]);
     }
 }
