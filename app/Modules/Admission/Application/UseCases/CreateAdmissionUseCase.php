@@ -33,7 +33,8 @@ class CreateAdmissionUseCase
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
         $patientId = (string) $payload['patient_id'];
-        if (! $this->patientLookupService->isActivePatient($patientId)) {
+        $eligibility = $this->patientLookupService->findAdmissionEligibilityById($patientId);
+        if ($eligibility === null || ($eligibility['status'] ?? null) !== 'active') {
             throw new PatientNotEligibleForAdmissionException(
                 'Admission can only be created for an active patient.',
             );
@@ -54,6 +55,7 @@ class CreateAdmissionUseCase
         if ($bedResourceId !== '') {
             $normalizedPlacement = $this->admissionPlacementLookupService->validatePlacementByResource(
                 bedResourceId: $bedResourceId,
+                patientGender: $eligibility['gender'] ?? null,
             );
             $payload['bed_resource_id'] = $normalizedPlacement['bed_resource_id'];
             $payload['ward'] = $normalizedPlacement['ward'];

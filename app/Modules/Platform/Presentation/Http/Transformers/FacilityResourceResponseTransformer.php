@@ -17,6 +17,12 @@ class FacilityResourceResponseTransformer
             'servicePointType' => $resource['service_point_type'] ?? null,
             'wardName' => $resource['ward_name'] ?? null,
             'bedNumber' => $resource['bed_number'] ?? null,
+            // roomName/roomNumber are the observation-room-facing aliases of
+            // the same ward_name/bed_number columns — see
+            // StoreObservationRoomRequest for why the columns aren't renamed.
+            'roomName' => $resource['ward_name'] ?? null,
+            'roomNumber' => $resource['bed_number'] ?? null,
+            'genderRestriction' => $resource['gender_restriction'] ?? null,
             'location' => $resource['location'] ?? null,
             'chargeableItemId' => $resource['chargeable_item_id'] ?? null,
             'status' => $resource['status'] ?? null,

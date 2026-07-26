@@ -14,9 +14,11 @@ use App\Modules\Platform\Application\UseCases\ListFacilityResourceStatusCountsUs
 use App\Modules\Platform\Application\UseCases\UpdateFacilityResourceStatusUseCase;
 use App\Modules\Platform\Application\UseCases\UpdateFacilityResourceUseCase;
 use App\Modules\Platform\Domain\ValueObjects\FacilityResourceType;
+use App\Modules\Platform\Presentation\Http\Requests\StoreObservationRoomRequest;
 use App\Modules\Platform\Presentation\Http\Requests\StoreServicePointRequest;
 use App\Modules\Platform\Presentation\Http\Requests\StoreWardBedRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateFacilityResourceStatusRequest;
+use App\Modules\Platform\Presentation\Http\Requests\UpdateObservationRoomRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateServicePointRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateWardBedRequest;
 use App\Modules\Platform\Presentation\Http\Transformers\FacilityResourceAuditLogResponseTransformer;
@@ -251,6 +253,143 @@ class FacilityResourceRegistryController extends Controller
         ListFacilityResourceAuditLogsUseCase $useCase
     ): StreamedResponse {
         return $this->exportAuditLogsCsv(FacilityResourceType::WARD_BED->value, 'ward-bed', $id, $request, $useCase);
+    }
+
+    /**
+     * Mirrors wardBeds() — observation rooms are patient-placed and billed
+     * the same way beds are (via bed_resource_id + chargeable_item_id), so
+     * they need the same occupancy join and occupied-room deactivation
+     * guard, unlike servicePoints() which has no occupancy concept.
+     */
+    public function observationRooms(
+        Request $request,
+        ListFacilityResourcesUseCase $useCase,
+        AdmissionRepositoryInterface $admissionRepository,
+    ): JsonResponse {
+        $result = $useCase->execute(FacilityResourceType::OBSERVATION_ROOM->value, $request->all());
+
+        $roomIds = array_values(array_filter(array_map(
+            static fn (array $resource): ?string => $resource['id'] ?? null,
+            $result['data'],
+        )));
+        $occupancy = $roomIds === [] ? [] : $admissionRepository->activeAdmissionsByBedResourceIds($roomIds);
+
+        return response()->json([
+            'data' => array_map(
+                fn (array $resource): array => $this->withBedOccupancy($resource, $occupancy),
+                $result['data'],
+            ),
+            'meta' => $result['meta'],
+        ]);
+    }
+
+    public function observationRoomStatusCounts(
+        Request $request,
+        ListFacilityResourceStatusCountsUseCase $useCase
+    ): JsonResponse {
+        return $this->resourceStatusCounts(FacilityResourceType::OBSERVATION_ROOM->value, $request, $useCase);
+    }
+
+    public function storeObservationRoom(StoreObservationRoomRequest $request, CreateFacilityResourceUseCase $useCase): JsonResponse
+    {
+        return $this->storeResource(
+            resourceType: FacilityResourceType::OBSERVATION_ROOM->value,
+            request: $request,
+            useCase: $useCase,
+            fieldMap: [
+                'code' => 'code',
+                'name' => 'name',
+                'departmentId' => 'department_id',
+                'roomName' => 'ward_name',
+                'roomNumber' => 'bed_number',
+                'genderRestriction' => 'gender_restriction',
+                'location' => 'location',
+                'notes' => 'notes',
+                'chargeableItemId' => 'chargeable_item_id',
+            ],
+        );
+    }
+
+    public function observationRoom(
+        string $id,
+        GetFacilityResourceUseCase $useCase,
+        AdmissionRepositoryInterface $admissionRepository,
+    ): JsonResponse {
+        $resource = $useCase->execute($id, FacilityResourceType::OBSERVATION_ROOM->value);
+        abort_if($resource === null, 404, 'Resource not found.');
+
+        $occupancy = $admissionRepository->activeAdmissionsByBedResourceIds([$id]);
+
+        return response()->json([
+            'data' => $this->withBedOccupancy($resource, $occupancy),
+        ]);
+    }
+
+    public function updateObservationRoom(
+        string $id,
+        UpdateObservationRoomRequest $request,
+        UpdateFacilityResourceUseCase $useCase
+    ): JsonResponse {
+        return $this->updateResource(
+            resourceType: FacilityResourceType::OBSERVATION_ROOM->value,
+            id: $id,
+            request: $request,
+            useCase: $useCase,
+            fieldMap: [
+                'code' => 'code',
+                'name' => 'name',
+                'departmentId' => 'department_id',
+                'roomName' => 'ward_name',
+                'roomNumber' => 'bed_number',
+                'genderRestriction' => 'gender_restriction',
+                'location' => 'location',
+                'notes' => 'notes',
+                'chargeableItemId' => 'chargeable_item_id',
+            ],
+        );
+    }
+
+    /**
+     * Blocks deactivating a room that currently has an active admission in
+     * it — same hard-block rule as updateWardBedStatus(), no override.
+     */
+    public function updateObservationRoomStatus(
+        string $id,
+        UpdateFacilityResourceStatusRequest $request,
+        UpdateFacilityResourceStatusUseCase $useCase,
+        AdmissionRepositoryInterface $admissionRepository,
+    ): JsonResponse {
+        if ($request->string('status')->value() === 'inactive') {
+            $occupancy = $admissionRepository->activeAdmissionsByBedResourceIds([$id]);
+            $occupyingAdmission = $occupancy[$id] ?? null;
+            if ($occupyingAdmission !== null) {
+                return $this->validationError(
+                    'status',
+                    sprintf(
+                        'This room is currently occupied by admission %s. Discharge or transfer the patient before deactivating it.',
+                        (string) ($occupyingAdmission['admission_number'] ?? 'an active admission'),
+                    ),
+                );
+            }
+        }
+
+        return $this->updateResourceStatus(FacilityResourceType::OBSERVATION_ROOM->value, $id, $request, $useCase);
+    }
+
+    public function observationRoomAuditLogs(
+        string $id,
+        Request $request,
+        ListFacilityResourceAuditLogsUseCase $useCase
+    ): JsonResponse {
+        return $this->auditLogs(FacilityResourceType::OBSERVATION_ROOM->value, $id, $request, $useCase);
+    }
+
+    public function exportObservationRoomAuditLogsCsv(
+        string $id,
+        Request $request,
+        ListFacilityResourceAuditLogsUseCase $useCase
+    ): StreamedResponse {
+        return $this->exportAuditLogsCsv(FacilityResourceType::OBSERVATION_ROOM->value, 'observation-room', $id, $request, $useCase);
     }
 
     /**

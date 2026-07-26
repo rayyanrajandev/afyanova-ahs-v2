@@ -43,5 +43,26 @@ interface FacilityResourceRepositoryInterface
         ?string $tenantId,
         ?string $facilityId
     ): bool;
+
+    /**
+     * Like search(), but across several resource types at once (whereIn
+     * rather than a single equality match) — for admission placement
+     * pickers that must offer both ward-beds and observation-rooms in one
+     * list, unlike the admin registry endpoints which always operate on
+     * exactly one type.
+     *
+     * @param  array<int, string>  $resourceTypes
+     */
+    public function searchAcrossResourceTypes(
+        array $resourceTypes,
+        ?string $query,
+        ?string $status,
+        ?string $departmentId,
+        ?string $subtype,
+        int $page,
+        int $perPage,
+        ?string $sortBy,
+        string $sortDirection
+    ): array;
 }
 

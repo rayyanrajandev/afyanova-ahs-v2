@@ -3,9 +3,9 @@ import type { AvailableBed } from './useAvailableBeds';
 
 /**
  * Derives a ward-then-bed cascade from an already-fetched bed list (facility
- * ward_bed resources have `wardName`/`bedNumber` on the same row, not a
- * separate wards table — so this filters client-side instead of a second
- * network round-trip). Shared by CreateAdmissionSheet.vue,
+ * ward_bed and observation_room resources both have `wardName`/`bedNumber`
+ * on the same row, not a separate wards table — so this filters client-side
+ * instead of a second network round-trip). Shared by CreateAdmissionSheet.vue,
  * AdmissionStatusDialog.vue's transfer bed picker, and
  * EmergencyStatusDialog.vue's admit bed picker — all three previously
  * showed every bed in one flat list, which is unusable once a facility has

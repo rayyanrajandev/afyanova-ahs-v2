@@ -42,6 +42,9 @@ class ListFacilityResourcesUseCase
         if ($resourceType === FacilityResourceType::WARD_BED->value) {
             $subtype = isset($filters['wardName']) ? trim((string) $filters['wardName']) : null;
         }
+        if ($resourceType === FacilityResourceType::OBSERVATION_ROOM->value) {
+            $subtype = isset($filters['roomName']) ? trim((string) $filters['roomName']) : null;
+        }
         $subtype = $subtype === '' ? null : $subtype;
 
         $sortMap = [

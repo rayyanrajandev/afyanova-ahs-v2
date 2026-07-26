@@ -509,6 +509,10 @@ Route::get('platform/admin/ward-beds', function () {
     return Inertia::render('platform/admin/ward-beds/IndexV2');
 })->middleware(['auth', 'verified', 'can:platform.resources.read'])->name('platform-admin-ward-beds.page');
 
+Route::get('platform/admin/observation-rooms', function () {
+    return Inertia::render('platform/admin/observation-rooms/IndexV2');
+})->middleware(['auth', 'verified', 'can:platform.resources.read'])->name('platform-admin-observation-rooms.page');
+
 Route::get('platform/admin/facility-rollouts', function () {
     return Inertia::render('platform/admin/facility-rollouts/Index');
 })->middleware(['auth', 'verified', 'can:platform.multi-facility.read'])->name('platform-admin-facility-rollouts.page');

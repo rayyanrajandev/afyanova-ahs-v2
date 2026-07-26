@@ -197,6 +197,10 @@ function onPriceAdded(item: ChargeableItem): void {
     invalidateChargeableItemQueries();
 }
 
+function onPriceUpdated(item: ChargeableItem): void {
+    detailsItem.value = item;
+}
+
 const detailsSheetOpen = ref(false);
 const detailsItem = ref<ChargeableItem | null>(null);
 
@@ -644,7 +648,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
         <ChargeableItemCreateSheet v-model:open="createSheetOpen" @created="onCreated" />
         <ChargeableItemAddPriceSheet v-model:open="addPriceSheetOpen" :item="addPriceItem" @added="onPriceAdded" />
         <ChargeableItemEditSheet v-model:open="editSheetOpen" :item="editItem" @updated="onUpdated" />
-        <ChargeableItemDetailsSheet v-model:open="detailsSheetOpen" :item="detailsItem" @edit="openEditSheet" />
+        <ChargeableItemDetailsSheet v-model:open="detailsSheetOpen" :item="detailsItem" @edit="openEditSheet" @price-updated="onPriceUpdated" />
         <ClinicalCatalogEditSheet
             v-if="clinicalCatalogItem"
             v-model:open="clinicalCatalogEditOpen"

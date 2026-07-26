@@ -386,6 +386,8 @@ return [
             'platform.clinical-catalog.read',
             'platform.clinical-catalog.manage-clinical-procedures',
             'platform.resources.read',
+            'platform.resources.manage-ward-beds',
+            'platform.resources.manage-observation-rooms',
             'inventory.procurement.read',
             'clinical-procedure.orders.read',
             'clinical-procedure.orders.view-audit-logs',

@@ -29,6 +29,7 @@ class FacilityResourceModel extends Model
         'service_point_type',
         'ward_name',
         'bed_number',
+        'gender_restriction',
         'location',
         'status',
         'status_reason',

@@ -295,6 +295,30 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/ward-beds/{id}/audit-logs', [FacilityResourceRegistryController::class, 'wardBedAuditLogs'])
         ->middleware('can:platform.resources.view-audit-logs')
         ->name('platform.admin.ward-beds.audit-logs');
+    Route::get('platform/admin/observation-rooms', [FacilityResourceRegistryController::class, 'observationRooms'])
+        ->middleware('can:platform.resources.read')
+        ->name('platform.admin.observation-rooms.index');
+    Route::get('platform/admin/observation-rooms/status-counts', [FacilityResourceRegistryController::class, 'observationRoomStatusCounts'])
+        ->middleware('can:platform.resources.read')
+        ->name('platform.admin.observation-rooms.status-counts');
+    Route::post('platform/admin/observation-rooms', [FacilityResourceRegistryController::class, 'storeObservationRoom'])
+        ->middleware('can:platform.resources.manage-observation-rooms')
+        ->name('platform.admin.observation-rooms.store');
+    Route::get('platform/admin/observation-rooms/{id}', [FacilityResourceRegistryController::class, 'observationRoom'])
+        ->middleware('can:platform.resources.read')
+        ->name('platform.admin.observation-rooms.show');
+    Route::patch('platform/admin/observation-rooms/{id}', [FacilityResourceRegistryController::class, 'updateObservationRoom'])
+        ->middleware('can:platform.resources.manage-observation-rooms')
+        ->name('platform.admin.observation-rooms.update');
+    Route::patch('platform/admin/observation-rooms/{id}/status', [FacilityResourceRegistryController::class, 'updateObservationRoomStatus'])
+        ->middleware('can:platform.resources.manage-observation-rooms')
+        ->name('platform.admin.observation-rooms.update-status');
+    Route::get('platform/admin/observation-rooms/{id}/audit-logs/export', [FacilityResourceRegistryController::class, 'exportObservationRoomAuditLogsCsv'])
+        ->middleware('can:platform.resources.view-audit-logs')
+        ->name('platform.admin.observation-rooms.audit-logs.export');
+    Route::get('platform/admin/observation-rooms/{id}/audit-logs', [FacilityResourceRegistryController::class, 'observationRoomAuditLogs'])
+        ->middleware('can:platform.resources.view-audit-logs')
+        ->name('platform.admin.observation-rooms.audit-logs');
 
     Route::get('platform/operational-flags', [PlatformOperationalFlagController::class, 'status'])
         ->name('platform.operational-flags.status');

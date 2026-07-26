@@ -9,10 +9,17 @@ class PatientLookupService implements PatientLookupServiceInterface
 {
     public function __construct(private readonly PatientRepositoryInterface $patientRepository) {}
 
-    public function isActivePatient(string $patientId): bool
+    public function findAdmissionEligibilityById(string $patientId): ?array
     {
         $patient = $this->patientRepository->findById($patientId);
 
-        return $patient !== null && ($patient['status'] ?? null) === 'active';
+        if ($patient === null) {
+            return null;
+        }
+
+        return [
+            'status' => $patient['status'] ?? null,
+            'gender' => $patient['gender'] ?? null,
+        ];
     }
 }

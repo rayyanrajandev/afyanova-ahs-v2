@@ -62,7 +62,9 @@ class UpdateFacilityResourceUseCase
             $updatePayload['service_point_type'] = $this->nullableTrimmedValue($payload['service_point_type']);
         }
 
-        if ($resourceType === 'ward_bed') {
+        // Ward-beds and observation rooms share the same storage fields —
+        // see CreateFacilityResourceUseCase for why.
+        if (in_array($resourceType, ['ward_bed', 'observation_room'], true)) {
             if (array_key_exists('ward_name', $payload)) {
                 $updatePayload['ward_name'] = $this->nullableTrimmedValue($payload['ward_name']);
             }
@@ -71,6 +73,9 @@ class UpdateFacilityResourceUseCase
             }
             if (array_key_exists('chargeable_item_id', $payload)) {
                 $updatePayload['chargeable_item_id'] = $this->nullableTrimmedValue($payload['chargeable_item_id']);
+            }
+            if (array_key_exists('gender_restriction', $payload)) {
+                $updatePayload['gender_restriction'] = $this->nullableTrimmedValue($payload['gender_restriction']);
             }
         }
 
@@ -123,6 +128,7 @@ class UpdateFacilityResourceUseCase
             'service_point_type',
             'ward_name',
             'bed_number',
+            'gender_restriction',
             'location',
             'status',
             'status_reason',

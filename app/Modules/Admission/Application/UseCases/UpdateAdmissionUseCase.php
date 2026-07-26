@@ -33,7 +33,8 @@ class UpdateAdmissionUseCase
         }
 
         $patientId = (string) ($payload['patient_id'] ?? $existing['patient_id']);
-        if (! $this->patientLookupService->isActivePatient($patientId)) {
+        $eligibility = $this->patientLookupService->findAdmissionEligibilityById($patientId);
+        if ($eligibility === null || ($eligibility['status'] ?? null) !== 'active') {
             throw new PatientNotEligibleForAdmissionException(
                 'Admission can only be assigned to an active patient.',
             );

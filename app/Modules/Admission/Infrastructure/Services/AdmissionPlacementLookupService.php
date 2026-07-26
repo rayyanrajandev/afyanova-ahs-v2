@@ -92,6 +92,7 @@ class AdmissionPlacementLookupService implements AdmissionPlacementLookupService
 
     public function validatePlacementByResource(
         string $bedResourceId,
+        ?string $patientGender = null,
         string $fieldName = 'bedResourceId',
         ?string $excludeAdmissionId = null,
     ): array {
@@ -106,13 +107,22 @@ class AdmissionPlacementLookupService implements AdmissionPlacementLookupService
         $tenantId = $this->platformScopeContext->tenantId();
         $facilityId = $this->platformScopeContext->facilityId();
 
+        $placeableTypes = [FacilityResourceType::WARD_BED->value, FacilityResourceType::OBSERVATION_ROOM->value];
+
         if (
             $resource === null
-            || ($resource['resource_type'] ?? null) !== FacilityResourceType::WARD_BED->value
+            || ! in_array($resource['resource_type'] ?? null, $placeableTypes, true)
             || ($resource['status'] ?? null) !== 'active'
             || ! $this->resourceInScope($resource, $tenantId, $facilityId)
         ) {
             $message = 'Selected bed is not an active bed in this facility.';
+
+            throw new InvalidAdmissionPlacementException($message, [$fieldName => [$message]]);
+        }
+
+        $genderRestriction = $this->normalize($resource['gender_restriction'] ?? null);
+        if ($genderRestriction !== null && $patientGender !== null && strtolower($patientGender) !== strtolower($genderRestriction)) {
+            $message = sprintf('This room is reserved for %s patients.', $genderRestriction);
 
             throw new InvalidAdmissionPlacementException($message, [$fieldName => [$message]]);
         }

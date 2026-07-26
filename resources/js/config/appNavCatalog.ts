@@ -552,6 +552,15 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Ward and bed capacity registry',
     },
     {
+        title: 'Observation rooms',
+        href: '/platform/admin/observation-rooms',
+        iconName: 'bed-double',
+        section: 'facility_setup',
+        subGroup: 'foundation',
+        permissionPrefixes: ['platform.resources.'],
+        helpNote: 'Gender-segregated observation room registry for facilities without full wards',
+    },
+    {
         title: 'Clinical specialties',
         href: '/platform/admin/specialties',
         iconName: 'activity',

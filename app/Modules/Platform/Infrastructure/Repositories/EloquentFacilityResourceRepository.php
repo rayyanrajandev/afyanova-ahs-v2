@@ -104,7 +104,43 @@ class EloquentFacilityResourceRepository implements FacilityResourceRepositoryIn
             ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
             ->when($subtype && $resourceType === 'service_point', fn (Builder $builder, string $value) => $builder->where('service_point_type', $value))
-            ->when($subtype && $resourceType === 'ward_bed', fn (Builder $builder, string $value) => $builder->where('ward_name', $value))
+            ->when($subtype && in_array($resourceType, ['ward_bed', 'observation_room'], true), fn (Builder $builder, string $value) => $builder->where('ward_name', $value))
+            ->orderBy($sortBy, $sortDirection);
+
+        $paginator = $queryBuilder->paginate(
+            perPage: $perPage,
+            columns: ['*'],
+            pageName: 'page',
+            page: $page,
+        );
+
+        return $this->toSearchResult($paginator);
+    }
+
+    public function searchAcrossResourceTypes(
+        array $resourceTypes,
+        ?string $query,
+        ?string $status,
+        ?string $departmentId,
+        ?string $subtype,
+        int $page,
+        int $perPage,
+        ?string $sortBy,
+        string $sortDirection
+    ): array {
+        $sortBy = in_array($sortBy, ['code', 'name', 'status', 'created_at', 'updated_at'], true)
+            ? $sortBy
+            : 'name';
+
+        $queryBuilder = FacilityResourceModel::query()
+            ->whereIn('resource_type', $resourceTypes);
+        $this->applyPlatformScopeIfEnabled($queryBuilder);
+
+        $queryBuilder
+            ->when($query, fn (Builder $builder, string $searchTerm) => $builder->where(fn (Builder $nestedQuery) => $this->applyCaseInsensitiveSearch($nestedQuery, $searchTerm)))
+            ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
+            ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
+            ->when($subtype, fn (Builder $builder, string $value) => $builder->where('ward_name', $value))
             ->orderBy($sortBy, $sortDirection);
 
         $paginator = $queryBuilder->paginate(
@@ -131,7 +167,7 @@ class EloquentFacilityResourceRepository implements FacilityResourceRepositoryIn
             ->when($query, fn (Builder $builder, string $searchTerm) => $builder->where(fn (Builder $nestedQuery) => $this->applyCaseInsensitiveSearch($nestedQuery, $searchTerm)))
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
             ->when($subtype && $resourceType === 'service_point', fn (Builder $builder, string $value) => $builder->where('service_point_type', $value))
-            ->when($subtype && $resourceType === 'ward_bed', fn (Builder $builder, string $value) => $builder->where('ward_name', $value));
+            ->when($subtype && in_array($resourceType, ['ward_bed', 'observation_room'], true), fn (Builder $builder, string $value) => $builder->where('ward_name', $value));
 
         $rows = $queryBuilder
             ->selectRaw('status, COUNT(*) as aggregate')

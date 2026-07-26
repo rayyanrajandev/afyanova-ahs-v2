@@ -18,6 +18,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     edit: [item: ChargeableItem];
+    priceUpdated: [item: ChargeableItem];
 }>();
 
 const editingPrice = ref<ChargeableItemPrice | null>(null);
@@ -54,8 +55,7 @@ function openEditPrice(price: ChargeableItemPrice): void {
 }
 
 function onPriceUpdated(updated: ChargeableItem): void {
-    if (!props.item) return;
-    Object.assign(props.item, updated);
+    emit('priceUpdated', updated);
 }
 </script>
 

@@ -97,6 +97,10 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['platform.resources.read'],
     },
     {
+        pathPrefix: '/platform/admin/observation-rooms',
+        requiredPermissions: ['platform.resources.read'],
+    },
+    {
         pathPrefix: '/platform/admin/departments',
         requiredPermissions: ['departments.read'],
     },

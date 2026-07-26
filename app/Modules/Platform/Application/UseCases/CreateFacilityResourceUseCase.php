@@ -41,6 +41,7 @@ class CreateFacilityResourceUseCase
             'service_point_type' => null,
             'ward_name' => null,
             'bed_number' => null,
+            'gender_restriction' => null,
             'location' => $this->nullableTrimmedValue($payload['location'] ?? null),
             'status' => FacilityResourceStatus::ACTIVE->value,
             'status_reason' => null,
@@ -51,10 +52,16 @@ class CreateFacilityResourceUseCase
             $createPayload['service_point_type'] = $this->nullableTrimmedValue($payload['service_point_type'] ?? null);
         }
 
-        if ($resourceType === FacilityResourceType::WARD_BED->value) {
+        // Ward-beds and observation rooms are both patient-placed, billable
+        // resources (occupancy-tracked via bed_resource_id + priced via
+        // chargeable_item_id) — they share the same storage fields.
+        // gender_restriction is generic here too, not observation-room-only,
+        // so ward-beds can adopt gender segregation later with no new code.
+        if (in_array($resourceType, [FacilityResourceType::WARD_BED->value, FacilityResourceType::OBSERVATION_ROOM->value], true)) {
             $createPayload['ward_name'] = $this->nullableTrimmedValue($payload['ward_name'] ?? null);
             $createPayload['bed_number'] = $this->nullableTrimmedValue($payload['bed_number'] ?? null);
             $createPayload['chargeable_item_id'] = $this->nullableTrimmedValue($payload['chargeable_item_id'] ?? null);
+            $createPayload['gender_restriction'] = $this->nullableTrimmedValue($payload['gender_restriction'] ?? null);
         }
 
         $created = $this->facilityResourceRepository->create($createPayload);
@@ -105,6 +112,7 @@ class CreateFacilityResourceUseCase
             'service_point_type',
             'ward_name',
             'bed_number',
+            'gender_restriction',
             'location',
             'status',
             'status_reason',

@@ -34,8 +34,12 @@ class ListAvailableBedsUseCase
         $departmentId = isset($filters['departmentId']) ? trim((string) $filters['departmentId']) : null;
         $departmentId = $departmentId === '' ? null : $departmentId;
 
-        $result = $this->facilityResourceRepository->search(
-            resourceType: FacilityResourceType::WARD_BED->value,
+        // Ward-beds and observation-rooms are both valid admission
+        // placements (see AdmissionPlacementLookupService::
+        // validatePlacementByResource()) — offer both in one list rather
+        // than hiding observation-rooms from the picker entirely.
+        $result = $this->facilityResourceRepository->searchAcrossResourceTypes(
+            resourceTypes: [FacilityResourceType::WARD_BED->value, FacilityResourceType::OBSERVATION_ROOM->value],
             query: $query,
             status: 'active',
             departmentId: $departmentId,

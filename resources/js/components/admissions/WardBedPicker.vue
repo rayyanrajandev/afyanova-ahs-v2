@@ -86,6 +86,7 @@ watch(selectedWard, () => {
                             :disabled="bed.isOccupied"
                         >
                             {{ bed.bedNumber }}
+                            <span v-if="bed.genderRestriction" class="text-muted-foreground">({{ bed.genderRestriction }} only)</span>
                             <span v-if="bed.isOccupied" class="text-muted-foreground">(occupied)</span>
                         </SelectItem>
                     </SelectContent>

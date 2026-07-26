@@ -485,3 +485,181 @@ it('allows deactivating a vacant ward bed once its admission is discharged', fun
         ->assertOk()
         ->assertJsonPath('data.status', 'inactive');
 });
+
+/**
+ * Observation rooms are a third facility_resources resource_type
+ * (dispensary/health-centre facilities without full wards), added on the
+ * same generic registry as service-points and ward-beds. These tests mirror
+ * the ward-bed ones above to prove the same generic create/list/status/
+ * occupancy/audit behavior extends to it unchanged, plus the new
+ * genderRestriction field it adds.
+ */
+it('creates lists and shows observation rooms when authorized', function (): void {
+    $actor = makeFacilityResourceRegistryActor([
+        'platform.resources.read',
+        'platform.resources.manage-observation-rooms',
+    ]);
+
+    $response = $this->actingAs($actor)
+        ->postJson('/api/v1/platform/admin/observation-rooms', [
+            'code' => 'obs-reg-001',
+            'name' => 'Female Observation Room 1',
+            'roomName' => 'Observation Room',
+            'roomNumber' => 'F-01',
+            'genderRestriction' => 'female',
+            'location' => 'Ground Floor',
+            'notes' => 'Female-only observation bay',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.code', 'OBS-REG-001')
+        ->assertJsonPath('data.status', 'active')
+        ->assertJsonPath('data.roomName', 'Observation Room')
+        ->assertJsonPath('data.roomNumber', 'F-01')
+        ->assertJsonPath('data.genderRestriction', 'female');
+
+    $resourceId = $response->json('data.id');
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/platform/admin/observation-rooms?q=OBS-REG-001')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.id', $resourceId);
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/platform/admin/observation-rooms/'.$resourceId)
+        ->assertOk()
+        ->assertJsonPath('data.id', $resourceId)
+        ->assertJsonPath('data.genderRestriction', 'female');
+
+    expect(
+        FacilityResourceAuditLogModel::query()
+            ->where('facility_resource_id', $resourceId)
+            ->where('action', 'facility-resource.created')
+            ->exists()
+    )->toBeTrue();
+});
+
+it('enforces observation-room status rules and writes transition parity metadata', function (): void {
+    $actor = makeFacilityResourceRegistryActor([
+        'platform.resources.manage-observation-rooms',
+    ]);
+    $context = makeFacilityResourceRegistryContext('TEN-OBS-STS', 'FAC-OBS-STS');
+    $room = seedFacilityResourceRecord($context['facility'], 'observation_room', 'OBS-STS-001', [
+        'ward_name' => 'Observation Room',
+        'bed_number' => 'F-01',
+        'gender_restriction' => 'female',
+    ]);
+
+    $this->actingAs($actor)
+        ->patchJson('/api/v1/platform/admin/observation-rooms/'.$room->id.'/status', [
+            'status' => 'inactive',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['reason']);
+
+    $this->actingAs($actor)
+        ->patchJson('/api/v1/platform/admin/observation-rooms/'.$room->id.'/status', [
+            'status' => 'inactive',
+            'reason' => 'Deep cleaning',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'inactive')
+        ->assertJsonPath('data.statusReason', 'Deep cleaning');
+});
+
+it('rejects lifecycle status fields on observation-room detail update endpoint', function (): void {
+    $actor = makeFacilityResourceRegistryActor([
+        'platform.resources.manage-observation-rooms',
+    ]);
+    $context = makeFacilityResourceRegistryContext('TEN-OBS-UPD', 'FAC-OBS-UPD');
+    $room = seedFacilityResourceRecord($context['facility'], 'observation_room', 'OBS-UPD-001', [
+        'name' => 'Original Observation Room',
+        'ward_name' => 'Observation Room',
+        'bed_number' => 'F-01',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($actor)
+        ->patchJson('/api/v1/platform/admin/observation-rooms/'.$room->id, [
+            'name' => 'Should Not Persist',
+            'status' => 'inactive',
+            'reason' => 'Must use status endpoint',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['status']);
+
+    $room->refresh();
+    expect($room->name)->toBe('Original Observation Room');
+    expect($room->status)->toBe('active');
+});
+
+it('round-trips chargeableItemId and genderRestriction through observation-room create and update', function (): void {
+    $actor = makeFacilityResourceRegistryActor([
+        'platform.resources.manage-observation-rooms',
+        'platform.resources.read',
+    ]);
+    $context = makeFacilityResourceRegistryContext('TEN-OBS-CHG', 'FAC-OBS-CHG');
+    $chargeableItem = makeWardBedChargeableItem('BEDDAY-OBS-FEMALE');
+
+    $room = $this->actingAs($actor)
+        ->postJson('/api/v1/platform/admin/observation-rooms', [
+            'code' => 'OBS-CHG-001',
+            'name' => 'Chargeable Observation Room',
+            'roomName' => 'Observation Room',
+            'roomNumber' => 'F-02',
+            'genderRestriction' => 'female',
+            'chargeableItemId' => $chargeableItem->id,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.chargeableItemId', $chargeableItem->id)
+        ->assertJsonPath('data.genderRestriction', 'female')
+        ->json('data');
+
+    $this->actingAs($actor)
+        ->patchJson('/api/v1/platform/admin/observation-rooms/'.$room['id'], [
+            'genderRestriction' => 'male',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.genderRestriction', 'male');
+
+    $resource = FacilityResourceModel::query()->find($room['id']);
+    expect($resource?->chargeable_item_id)->toBe($chargeableItem->id);
+    expect($resource?->gender_restriction)->toBe('male');
+});
+
+it('surfaces occupancy on the observation-room list and detail endpoints', function (): void {
+    $actor = makeFacilityResourceRegistryActor(['platform.resources.read']);
+    $context = makeFacilityResourceRegistryContext('TEN-OBS-OCC', 'FAC-OBS-OCC');
+    $occupiedRoom = seedFacilityResourceRecord($context['facility'], 'observation_room', 'OBS-OCC-001', [
+        'ward_name' => 'Observation Room', 'bed_number' => 'F-01',
+    ]);
+    $admission = occupyWardBedWithActiveAdmission($occupiedRoom);
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/platform/admin/observation-rooms')
+        ->assertOk()
+        ->assertJsonPath('data.0.isOccupied', true)
+        ->assertJsonPath('data.0.occupiedByAdmissionId', $admission->id);
+});
+
+it('blocks deactivating an observation room that has an active admission', function (): void {
+    $actor = makeFacilityResourceRegistryActor(['platform.resources.manage-observation-rooms']);
+    $context = makeFacilityResourceRegistryContext('TEN-OBS-BLK', 'FAC-OBS-BLK');
+    $room = seedFacilityResourceRecord($context['facility'], 'observation_room', 'OBS-BLK-001', [
+        'ward_name' => 'Observation Room', 'bed_number' => 'F-01',
+    ]);
+    $admission = occupyWardBedWithActiveAdmission($room, 'transferred');
+
+    $response = $this->actingAs($actor)
+        ->patchJson('/api/v1/platform/admin/observation-rooms/'.$room->id.'/status', [
+            'status' => 'inactive',
+            'reason' => 'Attempting to deactivate an occupied room',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['status']);
+
+    expect($response->json('errors.status.0'))->toContain($admission->admission_number);
+
+    $room->refresh();
+    expect($room->status)->toBe('active');
+});

@@ -15,8 +15,12 @@ export type AvailableBed = {
     id: string;
     code: string | null;
     name: string | null;
+    resourceType: string | null;
     wardName: string | null;
     bedNumber: string | null;
+    roomName: string | null;
+    roomNumber: string | null;
+    genderRestriction: string | null;
     departmentId: string | null;
     location: string | null;
     status: string | null;
