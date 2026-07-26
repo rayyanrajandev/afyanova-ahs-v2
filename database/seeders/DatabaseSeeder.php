@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
             DskLabClinicalCatalogSeeder::class,
             DskRadiologyClinicalCatalogSeeder::class,
             DskFormularyClinicalCatalogSeeder::class,
+            DskClinicalClinicalCatalogSeeder::class,
             DskTheatreClinicalCatalogSeeder::class,
         ]);
     }
