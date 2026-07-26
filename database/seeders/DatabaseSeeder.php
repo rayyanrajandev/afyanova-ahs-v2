@@ -11,7 +11,10 @@ class DatabaseSeeder extends Seeder
         $this->call([
             InitialFacilitySeeder::class,
             DskDepartmentsSeeder::class,
-            DskStaffSeeder::class,
+            DskLabClinicalCatalogSeeder::class,
+            DskRadiologyClinicalCatalogSeeder::class,
+            DskFormularyClinicalCatalogSeeder::class,
+            DskTheatreClinicalCatalogSeeder::class,
         ]);
     }
 }
