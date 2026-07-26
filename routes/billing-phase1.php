@@ -95,6 +95,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         Route::post('{chargeableItemId}/prices', [ChargeableItemController::class, 'storePrice'])
             ->middleware('can:billing.chargeable-items.manage')
             ->name('chargeable-items.store-price');
+        Route::patch('{chargeableItemId}/prices/{priceId}', [ChargeableItemController::class, 'updatePrice'])
+            ->middleware('can:billing.chargeable-items.manage')
+            ->name('chargeable-items.update-price');
     });
 
     // Apply discounts

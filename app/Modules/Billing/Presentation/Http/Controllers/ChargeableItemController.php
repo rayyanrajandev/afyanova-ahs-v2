@@ -7,6 +7,7 @@ use App\Modules\Billing\Presentation\Http\Concerns\RespondsWithBillingApi;
 use App\Modules\Billing\Presentation\Http\Requests\StoreChargeableItemRequest;
 use App\Modules\Billing\Presentation\Http\Requests\StorePriceBookEntryRequest;
 use App\Modules\Billing\Presentation\Http\Requests\UpdateChargeableItemRequest;
+use App\Modules\Billing\Presentation\Http\Requests\UpdatePriceBookEntryRequest;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
@@ -105,6 +106,56 @@ class ChargeableItemController
 
         $item->update($request->validated());
         $item->load(['priceBookEntries', 'clinicalCatalogItem']);
+
+        return $this->successResponse($this->transform($item));
+    }
+
+    public function updatePrice(string $chargeableItemId, string $priceId, UpdatePriceBookEntryRequest $request): JsonResponse
+    {
+        $item = ChargeableItemModel::query()->with('clinicalCatalogItem')->find($chargeableItemId);
+
+        if ($item === null) {
+            return $this->notFoundResponse('Chargeable item not found');
+        }
+
+        $price = PriceBookEntryModel::query()
+            ->where('chargeable_item_id', $chargeableItemId)
+            ->find($priceId);
+
+        if ($price === null) {
+            return $this->notFoundResponse('Price book entry not found');
+        }
+
+        $validated = $request->validated();
+
+        $updateData = [];
+        if (array_key_exists('currencyCode', $validated)) {
+            $updateData['currency_code'] = strtoupper($validated['currencyCode']);
+        }
+        if (array_key_exists('unitPrice', $validated)) {
+            $updateData['unit_price'] = $validated['unitPrice'];
+        }
+        if (array_key_exists('taxRatePercent', $validated)) {
+            $updateData['tax_rate_percent'] = $validated['taxRatePercent'] ?? 0;
+        }
+        if (array_key_exists('isTaxable', $validated)) {
+            $updateData['is_taxable'] = $validated['isTaxable'] ?? false;
+        }
+        if (array_key_exists('effectiveFrom', $validated)) {
+            $updateData['effective_from'] = $validated['effectiveFrom'];
+        }
+        if (array_key_exists('effectiveTo', $validated)) {
+            $updateData['effective_to'] = $validated['effectiveTo'];
+        }
+        if (array_key_exists('status', $validated)) {
+            $updateData['status'] = $validated['status'];
+        }
+        if (array_key_exists('statusReason', $validated)) {
+            $updateData['status_reason'] = $validated['statusReason'];
+        }
+
+        $price->update($updateData);
+        $item->load('priceBookEntries');
 
         return $this->successResponse($this->transform($item));
     }

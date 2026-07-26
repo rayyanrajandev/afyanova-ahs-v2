@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { Badge } from '@/components/ui/badge';
@@ -8,17 +8,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { ChargeableItem, ChargeableItemPrice } from '@/composables/chargeableItems/useChargeableItems';
 import { formatEnumLabel } from '@/lib/labels';
+import ChargeableItemEditPriceSheet from './ChargeableItemEditPriceSheet.vue';
 
-/**
- * Read-only details view -- everything it shows already comes down with
- * the list row itself (ChargeableItemController::index() includes the
- * full, unfiltered prices array per item), so this needs no extra fetch.
- * Deliberately no audit/history tab: price_book_entry_audit_logs exists as
- * a table but nothing writes to it yet, so a tab for it would just be
- * permanently empty. Shows every price_book_entries row instead (not just
- * the active one), which is the real, populated equivalent of "history"
- * available today.
- */
 const open = defineModel<boolean>('open', { required: true });
 
 const props = defineProps<{
@@ -28,6 +19,9 @@ const props = defineProps<{
 const emit = defineEmits<{
     edit: [item: ChargeableItem];
 }>();
+
+const editingPrice = ref<ChargeableItemPrice | null>(null);
+const editPriceOpen = ref(false);
 
 function statusVariant(status: string | null | undefined): 'outline' | 'secondary' | 'destructive' {
     const normalized = (status ?? '').toLowerCase();
@@ -52,6 +46,16 @@ function formatPrice(price: ChargeableItemPrice): string {
 function formatDate(value: string | null): string {
     if (!value) return '—';
     return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function openEditPrice(price: ChargeableItemPrice): void {
+    editingPrice.value = price;
+    editPriceOpen.value = true;
+}
+
+function onPriceUpdated(updated: ChargeableItem): void {
+    if (!props.item) return;
+    Object.assign(props.item, updated);
 }
 </script>
 
@@ -107,7 +111,12 @@ function formatDate(value: string | null): string {
                                         <span v-if="price.isTaxable && price.taxRatePercent"> · {{ price.taxRatePercent }}% tax</span>
                                     </p>
                                 </div>
-                                <Badge :variant="statusVariant(price.status)" class="shrink-0">{{ formatEnumLabel(price.status) }}</Badge>
+                                <div class="flex shrink-0 items-center gap-2">
+                                    <Badge :variant="statusVariant(price.status)">{{ formatEnumLabel(price.status) }}</Badge>
+                                    <Button variant="ghost" size="icon-sm" @click="openEditPrice(price)">
+                                        <AppIcon name="pencil" class="size-3.5" />
+                                    </Button>
+                                </div>
                             </li>
                         </ul>
                     </div>
@@ -127,4 +136,12 @@ function formatDate(value: string | null): string {
             </SheetFooter>
         </SheetContent>
     </Sheet>
+
+    <ChargeableItemEditPriceSheet
+        v-if="item && editingPrice"
+        v-model:open="editPriceOpen"
+        :item="item"
+        :price="editingPrice"
+        @updated="onPriceUpdated"
+    />
 </template>
