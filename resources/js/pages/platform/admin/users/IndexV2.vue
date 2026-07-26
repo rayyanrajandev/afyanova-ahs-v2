@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import ListPagination from '@/components/ListPagination.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -408,6 +409,94 @@ function createStaffProfileForDetailsUser(): void {
     if (user) openCreateStaffProfile(user);
 }
 
+function csvEscape(value: string | number | null | undefined): string {
+    const normalized = String(value ?? '');
+    return /[",\n]/.test(normalized) ? `"${normalized.replace(/"/g, '""')}"` : normalized;
+}
+
+function roleNames(user: PlatformUser): string {
+    return (user.roles ?? []).map((role) => (role.name ?? role.code ?? '').trim()).filter(Boolean).join('; ');
+}
+
+function exportUsersCsv(): void {
+    const header = ['Name', 'Email', 'Status', 'Verification', 'Roles', 'Created'];
+    const lines = users.value.map((user) =>
+        [
+            csvEscape(user.name),
+            csvEscape(user.email),
+            csvEscape(user.status ?? ''),
+            csvEscape(user.email ? (user.emailVerifiedAt ? 'Verified' : 'Unverified') : 'Email missing'),
+            csvEscape(roleNames(user)),
+            csvEscape(formatDate(user.createdAt)),
+        ].join(','),
+    );
+    const csv = [header.join(','), ...lines].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = 'facility-users.csv';
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+    notifySuccess('Users exported.');
+}
+
+function escapePrintHtml(value: string | number | null | undefined): string {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function printUsers(): void {
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) {
+        notifyError('Unable to open print preview.');
+        return;
+    }
+    const tableRows = users.value
+        .map(
+            (user) => `<tr>
+                <td>${escapePrintHtml(user.name)}</td>
+                <td>${escapePrintHtml(user.email)}</td>
+                <td>${escapePrintHtml(user.status ?? '')}</td>
+                <td>${escapePrintHtml(user.email ? (user.emailVerifiedAt ? 'Verified' : 'Unverified') : 'Email missing')}</td>
+                <td>${escapePrintHtml(roleNames(user))}</td>
+                <td>${escapePrintHtml(formatDate(user.createdAt))}</td>
+            </tr>`,
+        )
+        .join('');
+
+    printWindow.document.write(`<!doctype html>
+        <html><head><title>${escapePrintHtml(usersWorkspaceTitle.value)}</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+            h1 { font-size: 20px; margin: 0 0 4px; }
+            p { margin: 0 0 16px; color: #4b5563; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; vertical-align: top; }
+            th { background: #f3f4f6; font-weight: 700; }
+            @media print { body { margin: 12mm; } }
+        </style></head>
+        <body>
+            <h1>${escapePrintHtml(usersWorkspaceTitle.value)}</h1>
+            <p>Filtered records: ${escapePrintHtml(users.value.length)}. Printed ${escapePrintHtml(new Date().toLocaleString())}.</p>
+            <table>
+                <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Verification</th><th>Roles</th><th>Created</th></tr></thead>
+                <tbody>${tableRows || '<tr><td colspan="6">No records match the current filters.</td></tr>'}</tbody>
+            </table>
+        </body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+}
+
 const { scrollContainerHeight } = useStickyScrollContainer();
 </script>
 
@@ -423,6 +512,22 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <Badge v-if="meta" variant="secondary">{{ meta.total }} users</Badge>
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <Button variant="outline" size="sm" class="h-8 w-8 p-0" @click="exportUsersCsv">
+                                    <AppIcon name="download" class="size-3.5" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Export CSV</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <Button variant="outline" size="sm" class="h-8 w-8 p-0" @click="printUsers">
+                                    <AppIcon name="printer" class="size-3.5" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Print</TooltipContent>
+                        </Tooltip>
                         <Button v-if="canCreate" size="sm" class="h-8 gap-1.5" @click="registerSheetOpen = true">
                             <AppIcon name="plus" class="size-3.5" />
                             Create user
