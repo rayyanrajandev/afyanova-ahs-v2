@@ -7,6 +7,7 @@ import ComboboxField from '@/components/forms/ComboboxField.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import ClinicalCatalogBulkSheet from '@/components/platform/clinical-catalogs/ClinicalCatalogBulkSheet.vue';
+import ClinicalCatalogEditSheet from '@/components/platform/clinical-catalogs/ClinicalCatalogEditSheet.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -513,9 +514,6 @@ const detailsLoading = ref(false);
 const detailsError = ref<string | null>(null);
 const selected = ref<Item | null>(null);
 const detailsSheetTab = ref<'overview' | 'audit'>('overview');
-const editBusy = ref(false);
-const editErrors = ref<Record<string, string[]>>({});
-const editForm = reactive(createClinicalDefinitionForm());
 const consumptionRecipeLoading = ref(false);
 const consumptionRecipeSaving = ref(false);
 const consumptionRecipeError = ref<string | null>(null);
@@ -629,8 +627,6 @@ function findDepartmentOption(options: SearchableSelectOption[], value: string):
 }
 
 const createDepartmentOptions = computed<SearchableSelectOption[]>(() => buildDepartmentOptions(catalogKey.value));
-const editDepartmentOptions = computed<SearchableSelectOption[]>(() => buildDepartmentOptions(selectedCatalogKey.value));
-
 const createDepartmentFieldValue = computed({
     get: () => createForm.departmentId.trim() || SELECT_NOT_SPECIFIED_VALUE,
     set: (value: string) => {
@@ -638,20 +634,7 @@ const createDepartmentFieldValue = computed({
     },
 });
 
-const editDepartmentFieldValue = computed({
-    get: () => editForm.departmentId.trim() || SELECT_NOT_SPECIFIED_VALUE,
-    set: (value: string) => {
-        editForm.departmentId = value === SELECT_NOT_SPECIFIED_VALUE ? '' : value.trim();
-    },
-});
-
 const createDepartmentEmptyText = computed(() => {
-    if (departmentsLoading.value) return 'Loading departments...';
-    if (!departments.value.length) return 'No departments are available from the hospital directory.';
-    return 'No departments matched this search.';
-});
-
-const editDepartmentEmptyText = computed(() => {
     if (departmentsLoading.value) return 'Loading departments...';
     if (!departments.value.length) return 'No departments are available from the hospital directory.';
     return 'No departments matched this search.';
@@ -2031,8 +2014,6 @@ function closeDetails(): void {
 
 function openEditSheet(): void {
     if (!selected.value || !canManage.value) return;
-    editErrors.value = {};
-    hydrateEdit(selected.value);
     editSheetOpen.value = true;
 }
 
@@ -2045,26 +2026,15 @@ async function openEditFromRow(item: Item): Promise<void> {
     detailsOpen.value = false;
     statusSheetOpen.value = false;
     recipeSheetOpen.value = false;
-    editErrors.value = {};
     selected.value = item;
-    hydrateEdit(item);
     editSheetOpen.value = true;
 
     try {
         const response = await apiRequest<{ data: Item }>('GET', `${base.value}/${id}`);
         selected.value = response.data;
-        hydrateEdit(response.data);
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to load the latest item details.'));
     }
-}
-
-function closeEditSheet(open?: boolean): void {
-    if (open === true) {
-        editSheetOpen.value = true;
-        return;
-    }
-    editSheetOpen.value = false;
 }
 
 function openStatusSheet(preset?: CatalogStatus): void {
@@ -2109,58 +2079,11 @@ function toggleRecipeCollapsible(inventoryItemId: string): void {
     recipeCollapsibleOpen.value[inventoryItemId] = !recipeCollapsibleOpen.value[inventoryItemId];
 }
 
-async function saveItem(): Promise<void> {
-    const id = String(selected.value?.id ?? '').trim();
-    if (!id || !canManage.value || editBusy.value) return;
-
-    editBusy.value = true;
-    editErrors.value = {};
-    const metadata = buildMetadataPayload(editForm, itemCatalogKey(selected.value));
-    const localErrors: Record<string, string[]> = {};
-    if (!editForm.code.trim()) localErrors.code = ['Code is required.'];
-    if (!editForm.name.trim()) localErrors.name = ['Name is required.'];
-    if (metadata === 'invalid') localErrors.metadata = ['Additional metadata must be a valid JSON object.'];
-    applyDomainValidation(localErrors, editForm, itemCatalogKey(selected.value));
-    if (Object.keys(localErrors).length) {
-        editErrors.value = localErrors;
-        editBusy.value = false;
-        return;
-    }
-
-    try {
-        const response = await apiRequest<{ data: Item }>('PATCH', `${base.value}/${id}`, {
-            body: {
-                code: editForm.code.trim(),
-                name: editForm.name.trim(),
-                departmentId: editForm.departmentId.trim() || null,
-                category: editForm.category.trim() || null,
-                unit: editForm.unit.trim() || null,
-                billingServiceCode: editForm.billingServiceCode.trim() || null,
-                description: editForm.description.trim() || null,
-                facilityTier: editForm.facilityTier.trim() || null,
-                codes: standardsCodesFromForm(editForm),
-                metadata,
-                genericName: editForm.genericName.trim() || null,
-                storageConditions: editForm.storageConditions.trim() || null,
-                requiresColdChain: editForm.requiresColdChain,
-                isControlledSubstance: editForm.isControlledSubstance,
-                controlledSubstanceSchedule: editForm.controlledSubstanceSchedule.trim() || null,
-                genericGroupCode: editForm.genericGroupCode.trim() || null,
-            },
-        });
-        selected.value = response.data;
-        hydrateEdit(response.data);
-        syncItem(response.data);
-        editSheetOpen.value = false;
-        notifySuccess('Item updated.');
-        await Promise.all([loadCounts(), loadTypeCounts()]);
-    } catch (error) {
-        const apiError = error as ApiError;
-        if (apiError.status === 422 && apiError.payload?.errors) editErrors.value = apiError.payload.errors;
-        else notifyError(messageFromUnknown(error, 'Unable to update item.'));
-    } finally {
-        editBusy.value = false;
-    }
+function onEditUpdated(updated: Item): void {
+    selected.value = updated;
+    hydrateEdit(updated);
+    syncItem(updated);
+    void Promise.all([loadCounts(), loadTypeCounts()]);
 }
 
 async function saveStatus(): Promise<void> {
@@ -3044,7 +2967,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </details>
                         </div>
                     </ScrollArea>
-                    <SheetFooter class="shrink-0 gap-2 border-t px-4 py-3">
+                    <SheetFooter class="shrink-0 flex-row items-center justify-end gap-2 border-t px-4 py-3">
                         <Button variant="outline" :disabled="createBusy" @click="closeCreateSheet()">Cancel</Button>
                         <Button :disabled="createBusy" @click="createItem">{{ createBusy ? 'Creating...' : createButtonLabel }}</Button>
                     </SheetFooter>
@@ -3385,20 +3308,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </Tabs>
                     </div>
 
-                    <SheetFooter
-                        class="shrink-0 gap-2 border-t px-4 py-3 sm:px-6"
-                    >
+                    <SheetFooter class="shrink-0 flex-row items-center justify-end gap-2 border-t px-4 py-3 sm:px-6">
                         <Button v-if="selected && canManage" size="sm" class="gap-1.5" @click="openEditSheet">
                             <AppIcon name="pencil" class="size-3.5" />
                             {{ editSheetTitle }}
                         </Button>
-                        <Button
-                            v-if="selected && canManage"
-                            size="sm"
-                            variant="outline"
-                            class="gap-1.5"
-                            @click="openStatusSheet()"
-                        >
+                        <Button v-if="selected && canManage" size="sm" variant="outline" class="gap-1.5" @click="openStatusSheet()">
                             <AppIcon name="activity" class="size-3.5" />
                             Change status
                         </Button>
@@ -3408,304 +3323,15 @@ const { scrollContainerHeight } = useStickyScrollContainer();
             </Sheet>
 
 
-            
-            <Sheet v-if="canManage" :open="editSheetOpen" @update:open="closeEditSheet">
-                <SheetContent side="right" variant="workspace" size="3xl" class="flex h-full min-h-0 flex-col">
-                    <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
-                        <SheetTitle class="flex items-center gap-2">
-                            <AppIcon name="pencil" class="size-5 text-muted-foreground" />
-                            {{ editSheetTitle }}
-                        </SheetTitle>
-                        <SheetDescription v-if="selected">
-                            Update clinical details here. Change hospital prices in Billing Service Catalog.
-                        </SheetDescription>
-                    </SheetHeader>
-                    <ScrollArea class="min-h-0 flex-1">
-                        <div class="grid gap-4 px-6 py-4">
-                            <fieldset class="grid gap-3 rounded-lg border p-3 md:grid-cols-3">
-                                <legend class="px-2 text-sm font-medium text-muted-foreground md:col-span-3">Definition identity</legend>
-                                <div class="grid gap-1.5">
-                                    <Label>Code</Label>
-                                    <Input v-model="editForm.code" :placeholder="catalog.codePlaceholder" />
-                                    <p v-if="firstError(editErrors, 'code')" class="text-xs text-destructive">{{ firstError(editErrors, 'code') }}</p>
-                                </div>
-                                <div class="grid gap-1.5 md:col-span-2">
-                                    <Label>Name</Label>
-                                    <Input v-model="editForm.name" :placeholder="catalog.namePlaceholder" />
-                                    <p v-if="firstError(editErrors, 'name')" class="text-xs text-destructive">{{ firstError(editErrors, 'name') }}</p>
-                                </div>
-                                <ComboboxField
-                                    input-id="edit-clinical-definition-department"
-                                    label="Department"
-                                    v-model="editDepartmentFieldValue"
-                                    :options="editDepartmentOptions"
-                                    placeholder="Select department"
-                                    search-placeholder="Search department code or name"
-                                    :error-message="firstError(editErrors, 'departmentId')"
-                                    :empty-text="editDepartmentEmptyText"
-                                    :reserve-message-space="false"
-                                />
-                                <div class="grid gap-1.5">
-                                    <ComboboxField
-                                        v-if="selectedCatalogKey === 'lab-tests'"
-                                        input-id="edit-clinical-definition-discipline"
-                                        :label="catalog.categoryLabel"
-                                        v-model="editForm.category"
-                                        :options="labDisciplineOptions"
-                                        placeholder="Select discipline"
-                                        search-placeholder="Search lab discipline"
-                                        empty-text="No matching discipline found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <ComboboxField
-                                        v-else-if="selectedCatalogKey === 'formulary-items'"
-                                        input-id="edit-clinical-definition-therapeutic-class"
-                                        :label="catalog.categoryLabel"
-                                        v-model="editForm.category"
-                                        :options="therapeuticClassOptions"
-                                        placeholder="Select therapeutic class"
-                                        search-placeholder="Search therapeutic class"
-                                        empty-text="No matching therapeutic class found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <template v-else>
-                                        <Label>{{ catalog.categoryLabel }}</Label>
-                                        <Input v-model="editForm.category" :placeholder="catalog.categoryPlaceholder" />
-                                    </template>
-                                </div>
-                                <div class="grid gap-1.5">
-                                    <ComboboxField
-                                        v-if="selectedCatalogKey === 'lab-tests'"
-                                        input-id="edit-clinical-definition-reporting-unit"
-                                        :label="catalog.unitLabel"
-                                        v-model="editForm.unit"
-                                        :options="labReportingUnitOptions"
-                                        placeholder="Select reporting unit"
-                                        search-placeholder="Search reporting unit"
-                                        empty-text="No matching reporting unit found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <ComboboxField
-                                        v-else-if="selectedCatalogKey === 'formulary-items'"
-                                        input-id="edit-clinical-definition-dispensing-unit"
-                                        :label="catalog.unitLabel"
-                                        v-model="editForm.unit"
-                                        :options="dispensingUnitOptions"
-                                        placeholder="Select dispensing unit"
-                                        search-placeholder="Search dispensing unit"
-                                        empty-text="No matching dispensing unit found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <template v-else>
-                                        <Label>{{ catalog.unitLabel }}</Label>
-                                        <Input v-model="editForm.unit" :placeholder="catalog.unitPlaceholder" />
-                                    </template>
-                                </div>
-                                <div v-if="selected" class="md:col-span-3 rounded-lg border border-dashed bg-muted/10 p-3">
-                                    <p class="text-sm font-medium">Hospital pricing</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">{{ billingLinkDetail(selected) }}</p>
-                                    <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" as-child>
-                                        <Link href="/chargeable-items">
-                                            <AppIcon name="receipt" class="size-3.5" />
-                                            Open Chargeable Items
-                                        </Link>
-                                    </Button>
-                                </div>
-                                <details class="md:col-span-3 rounded-lg border bg-muted/10 p-3">
-                                    <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Billing service code (optional)</summary>
-                                    <p class="mt-2 text-xs text-muted-foreground">
-                                        Use this when the billing/tariff code should differ from the clinical definition code. Billing Service Catalog will use it when creating prices from this definition.
-                                    </p>
-                                    <div class="mt-3 grid gap-1.5">
-                                        <Label>Billing service code</Label>
-                                        <Input v-model="editForm.billingServiceCode" placeholder="e.g. LAB-CBC-001" />
-                                        <p v-if="firstError(editErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(editErrors, 'billingServiceCode') }}</p>
-                                    </div>
-                                </details>
-                                <div class="grid gap-1.5 md:col-span-3">
-                                    <Label>Description</Label>
-                                    <Textarea v-model="editForm.description" class="min-h-20" placeholder="Operational guidance for care teams" />
-                                </div>
-                            </fieldset>
-
-                            <fieldset class="grid gap-3 rounded-lg border p-3">
-                                <legend class="px-2 text-sm font-medium text-muted-foreground">{{ catalog.domainSectionTitle }}</legend>
-                                <p class="text-xs text-muted-foreground">{{ catalog.domainSectionDescription }}</p>
-                                <div v-if="selectedCatalogKey === 'lab-tests'" class="grid gap-3 md:grid-cols-2">
-                                    <div class="grid gap-1.5"><Label>Sample type</Label><Input v-model="editForm.sampleType" placeholder="blood" /></div>
-                                    <div class="grid gap-1.5"><Label>Specimen container</Label><Input v-model="editForm.specimenContainer" placeholder="EDTA tube" /></div>
-                                    <div class="grid gap-1.5"><Label>Turnaround hours</Label><Input v-model="editForm.turnaroundHours" inputmode="numeric" placeholder="4" /><p v-if="firstError(editErrors, 'turnaroundHours')" class="text-xs text-destructive">{{ firstError(editErrors, 'turnaroundHours') }}</p></div>
-                                    <div class="grid gap-1.5"><Label>Fasting required</Label><Select v-model="editForm.fastingRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
-                                </div>
-                                <div v-else-if="selectedCatalogKey === 'radiology-procedures'" class="grid gap-3 md:grid-cols-2">
-                                    <div class="grid gap-1.5"><Label>Modality</Label><Input v-model="editForm.modality" placeholder="ultrasound" /></div>
-                                    <div class="grid gap-1.5"><Label>Body site</Label><Input v-model="editForm.bodySite" placeholder="abdomen" /></div>
-                                    <div class="grid gap-1.5"><Label>Study duration minutes</Label><Input v-model="editForm.studyDurationMinutes" inputmode="numeric" placeholder="30" /><p v-if="firstError(editErrors, 'studyDurationMinutes')" class="text-xs text-destructive">{{ firstError(editErrors, 'studyDurationMinutes') }}</p></div>
-                                    <div class="grid gap-1.5"><Label>Contrast required</Label><Select v-model="editForm.contrastRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
-                                </div>
-                                <div v-else-if="selectedCatalogKey === 'theatre-procedures'" class="grid gap-3 md:grid-cols-2">
-                                    <div class="grid gap-1.5"><Label>Procedure class</Label><Input v-model="editForm.procedureClass" placeholder="major" /></div>
-                                    <div class="grid gap-1.5"><Label>Anaesthesia type</Label><Input v-model="editForm.anesthesiaType" placeholder="general" /></div>
-                                    <div class="grid gap-1.5"><Label>Expected duration minutes</Label><Input v-model="editForm.expectedDurationMinutes" inputmode="numeric" placeholder="90" /><p v-if="firstError(editErrors, 'expectedDurationMinutes')" class="text-xs text-destructive">{{ firstError(editErrors, 'expectedDurationMinutes') }}</p></div>
-                                    <div class="grid gap-1.5"><Label>Sterile prep required</Label><Select v-model="editForm.sterilePrepRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
-                                </div>
-                                <div v-else-if="selectedCatalogKey === 'clinical-procedures'" class="grid gap-3 md:grid-cols-2">
-                                    <div class="grid gap-1.5"><Label>Procedure setting</Label><Input v-model="editForm.procedureSetting" placeholder="outpatient" /></div>
-                                    <div class="grid gap-1.5"><Label>Performer role</Label><Input v-model="editForm.performerRole" placeholder="nurse" /></div>
-                                    <div class="grid gap-1.5"><Label>Estimated duration minutes</Label><Input v-model="editForm.estimatedDurationMinutes" inputmode="numeric" placeholder="20" /><p v-if="firstError(editErrors, 'estimatedDurationMinutes')" class="text-xs text-destructive">{{ firstError(editErrors, 'estimatedDurationMinutes') }}</p></div>
-                                    <div class="grid gap-1.5"><Label>Consent required</Label><Select v-model="editForm.consentRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
-                                </div>
-                                <div v-else class="grid gap-3 md:grid-cols-2">
-                                    <div class="grid gap-1.5"><Label>Strength</Label><Input v-model="editForm.strength" placeholder="500 mg" /></div>
-                                    <ComboboxField
-                                        input-id="edit-clinical-definition-dosage-form"
-                                        label="Dosage form"
-                                        v-model="editForm.dosageForm"
-                                        :options="dosageFormOptions"
-                                        placeholder="Select dosage form"
-                                        search-placeholder="Search tablet, capsule, syrup..."
-                                        empty-text="No matching dosage form found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <ComboboxField
-                                        input-id="edit-clinical-definition-route"
-                                        label="Route"
-                                        v-model="editForm.route"
-                                        :options="routeOfAdministrationOptions"
-                                        placeholder="Select route"
-                                        search-placeholder="Search oral, IV, IM..."
-                                        empty-text="No matching route found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <div class="grid gap-1.5"><Label>Prescription type</Label><Select v-model="editForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC</SelectItem><SelectItem value="no">Rx</SelectItem></SelectContent></Select></div>
-                                    <ComboboxField
-                                        input-id="edit-clinical-definition-stock-unit"
-                                        label="Stock unit"
-                                        v-model="editForm.stockUnit"
-                                        :options="dispensingUnitOptions"
-                                        placeholder="Select stock unit"
-                                        search-placeholder="Search bottle, box, vial..."
-                                        empty-text="No matching unit found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="editForm.packSize" placeholder="e.g. 28" /><p class="text-xs text-muted-foreground">How many dispensing units per pack</p></div>
-                                    <div class="grid gap-1.5">
-                                        <Label>Conversion</Label>
-                                        <Input v-model="editForm.conversionFactor" type="number" min="0" step="0.001" placeholder="e.g. 4" />
-                                        <p class="text-xs text-muted-foreground">1 stock unit = N dispensing units. Example: 4 if 1 blister = 4 tablets</p>
-                                    </div>
-                                    <ComboboxField
-                                        input-id="edit-clinical-definition-purchase-unit"
-                                        label="Purchase unit"
-                                        v-model="editForm.purchaseUnit"
-                                        :options="dispensingUnitOptions"
-                                        placeholder="Select purchase unit"
-                                        search-placeholder="Search box, carton, pack..."
-                                        empty-text="No matching unit found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <div class="grid gap-1.5 md:col-span-2">
-                                        <Label>Stock units per purchase unit</Label>
-                                        <Input v-model="editForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="e.g. 10" />
-                                        <p class="text-xs text-muted-foreground">How many stock units per purchase unit. Example: 10 if 1 box = 10 blisters</p>
-                                    </div>
-                                </div>
-                            </fieldset>
-
-                            <fieldset v-if="itemCatalogKey(selected) === 'formulary-items'" class="space-y-3 rounded-lg border p-3">
-                                <legend class="px-1 text-sm font-medium">Clinical classification &amp; compliance</legend>
-                                <div class="grid gap-3 md:grid-cols-2">
-                                    <div class="grid gap-1.5">
-                                        <Label>Generic name</Label>
-                                        <Input v-model="editForm.genericName" placeholder="e.g. Amoxicillin" />
-                                        <p class="text-xs text-muted-foreground">Defaults to the item name (minus strength) if left blank</p>
-                                    </div>
-                                    <div class="grid gap-1.5">
-                                        <Label>Generic group code</Label>
-                                        <Input v-model="editForm.genericGroupCode" placeholder="e.g. AMOXICILLIN" />
-                                        <p class="text-xs text-muted-foreground">Links brand/generic variants of the same drug together</p>
-                                    </div>
-                                    <div class="grid gap-1.5 md:col-span-2">
-                                        <Label>Storage conditions</Label>
-                                        <Input v-model="editForm.storageConditions" placeholder="e.g. Store below 25°C, protect from light" />
-                                    </div>
-                                </div>
-                                <div class="grid gap-3 md:grid-cols-2">
-                                    <div class="flex items-start gap-2 rounded-md border p-2.5">
-                                        <Checkbox
-                                            :model-value="editForm.requiresColdChain"
-                                            :disabled="!canManageCompliance"
-                                            @update:model-value="(value) => (editForm.requiresColdChain = value === true)"
-                                        />
-                                        <div class="space-y-0.5">
-                                            <Label class="text-xs font-medium">Requires cold chain</Label>
-                                            <p v-if="!canManageCompliance" class="text-[11px] text-muted-foreground">Requires the compliance permission to change</p>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-start gap-2 rounded-md border p-2.5">
-                                        <Checkbox
-                                            :model-value="editForm.isControlledSubstance"
-                                            :disabled="!canManageCompliance"
-                                            @update:model-value="(value) => (editForm.isControlledSubstance = value === true)"
-                                        />
-                                        <div class="space-y-0.5">
-                                            <Label class="text-xs font-medium">Controlled substance</Label>
-                                            <p v-if="!canManageCompliance" class="text-[11px] text-muted-foreground">Requires the compliance permission to change</p>
-                                        </div>
-                                    </div>
-                                    <div v-if="editForm.isControlledSubstance" class="grid gap-1.5 md:col-span-2">
-                                        <Label>Controlled substance schedule</Label>
-                                        <Input
-                                            v-model="editForm.controlledSubstanceSchedule"
-                                            :disabled="!canManageCompliance"
-                                            placeholder="e.g. Schedule II"
-                                        />
-                                        <p v-if="firstError(editErrors, 'controlledSubstanceSchedule')" class="text-xs text-destructive">{{ firstError(editErrors, 'controlledSubstanceSchedule') }}</p>
-                                    </div>
-                                </div>
-                            </fieldset>
-
-                            <details class="rounded-lg border bg-muted/10 p-3">
-                                <summary class="cursor-pointer text-sm font-medium">Advanced / standards</summary>
-                                <div class="mt-3 space-y-3">
-                                    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                        <div class="grid gap-1.5">
-                                            <Label>Minimum facility tier</Label>
-                                            <Select
-                                                :model-value="editForm.facilityTier || SELECT_NOT_SPECIFIED_VALUE"
-                                                @update:model-value="(value) => { editForm.facilityTier = value === SELECT_NOT_SPECIFIED_VALUE ? '' : String(value); }"
-                                            >
-                                                <SelectTrigger class="w-full"><SelectValue placeholder="All tiers" /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">All tiers</SelectItem>
-                                                    <SelectItem v-for="tier in facilityTierOptions" :key="tier.value" :value="tier.value">{{ tier.label }}</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div class="grid gap-1.5"><Label>Local code</Label><Input v-model="editForm.standardsLocal" placeholder="Internal code" /></div>
-                                        <div class="grid gap-1.5"><Label>NHIF code</Label><Input v-model="editForm.standardsNhif" placeholder="NHIF tariff code" /></div>
-                                        <div class="grid gap-1.5"><Label>MSD code</Label><Input v-model="editForm.standardsMsd" placeholder="MSD reference" /></div>
-                                        <div class="grid gap-1.5"><Label>LOINC</Label><Input v-model="editForm.standardsLoinc" placeholder="Lab standard" /></div>
-                                        <div class="grid gap-1.5"><Label>SNOMED CT</Label><Input v-model="editForm.standardsSnomedCt" placeholder="Clinical concept" /></div>
-                                        <div class="grid gap-1.5"><Label>CPT</Label><Input v-model="editForm.standardsCpt" placeholder="Optional procedure code" /></div>
-                                        <div class="grid gap-1.5"><Label>ICD</Label><Input v-model="editForm.standardsIcd" placeholder="Optional diagnosis link" /></div>
-                                    </div>
-                                    <div class="grid gap-1.5">
-                                        <Label>Additional metadata JSON</Label>
-                                        <Textarea v-model="editForm.metadataText" class="min-h-24 font-mono text-xs" />
-                                        <p v-if="firstError(editErrors, 'metadata')" class="text-xs text-destructive">{{ firstError(editErrors, 'metadata') }}</p>
-                                    </div>
-                                </div>
-                            </details>
-                        </div>
-                    </ScrollArea>
-                    <SheetFooter class="shrink-0 gap-2 border-t px-4 py-3">
-                        <Button variant="outline" :disabled="editBusy" @click="closeEditSheet()">Cancel</Button>
-                        <Button :disabled="editBusy" @click="saveItem">{{ editBusy ? 'Saving...' : 'Save changes' }}</Button>
-                    </SheetFooter>
-                </SheetContent>
-            </Sheet>
-
+        <ClinicalCatalogEditSheet
+            v-if="canManage"
+            v-model:open="editSheetOpen"
+            :item="selected"
+            :catalog-key="catalogKey"
+            :departments="departments"
+            :can-manage-compliance="canManageCompliance"
+            @updated="onEditUpdated"
+        />
 
             <Sheet v-if="canManage" :open="statusSheetOpen" @update:open="closeStatusSheet">
                 <SheetContent side="right" variant="form" size="md" class="flex h-full min-h-0 flex-col">
@@ -3742,7 +3368,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </div>
                         </div>
                     </div>
-                    <SheetFooter class="shrink-0 gap-2 border-t px-4 py-3">
+                    <SheetFooter class="shrink-0 flex-row items-center justify-end gap-2 border-t px-4 py-3">
                         <Button variant="outline" :disabled="statusBusy" @click="closeStatusSheet()">Cancel</Button>
                         <Button :disabled="statusBusy" @click="saveStatus">{{ statusBusy ? 'Saving...' : 'Save status' }}</Button>
                     </SheetFooter>
@@ -3899,7 +3525,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </template>
                         </div>
                     </ScrollArea>
-                    <SheetFooter class="shrink-0 gap-2 border-t px-4 py-3">
+                    <SheetFooter class="shrink-0 flex-row items-center justify-end gap-2 border-t px-4 py-3">
                         <Button variant="outline" :disabled="consumptionRecipeSaving" @click="closeRecipeSheet()">Cancel</Button>
                         <Button :disabled="consumptionRecipeSaving" @click="saveConsumptionRecipe">{{ consumptionRecipeSaving ? 'Saving...' : 'Save consumables' }}</Button>
                     </SheetFooter>

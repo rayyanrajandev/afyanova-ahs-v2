@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,10 @@ const open = defineModel<boolean>('open', { required: true });
 
 const props = defineProps<{
     item: ChargeableItem | null;
+}>();
+
+const emit = defineEmits<{
+    edit: [item: ChargeableItem];
 }>();
 
 function statusVariant(status: string | null | undefined): 'outline' | 'secondary' | 'destructive' {
@@ -52,7 +57,7 @@ function formatDate(value: string | null): string {
 
 <template>
     <Sheet :open="open" @update:open="(value) => (open = value)">
-        <SheetContent side="right" variant="workspace" size="2xl">
+        <SheetContent side="right" variant="workspace" size="3xl">
             <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <SheetTitle>{{ item?.name ?? 'Chargeable item details' }}</SheetTitle>
                 <SheetDescription>{{ item?.code }}</SheetDescription>
@@ -113,8 +118,12 @@ function formatDate(value: string | null): string {
                 </div>
             </ScrollArea>
 
-            <SheetFooter class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <SheetFooter class="shrink-0 flex-row items-center justify-end gap-2 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <Button variant="outline" @click="open = false">Close</Button>
+                <Button v-if="item" @click="emit('edit', item)">
+                    <AppIcon name="pencil" class="size-3.5" />
+                    Edit item
+                </Button>
             </SheetFooter>
         </SheetContent>
     </Sheet>

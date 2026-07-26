@@ -146,7 +146,7 @@ async function submit(): Promise<void> {
                 </div>
             </div>
 
-            <SheetFooter class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <SheetFooter class="shrink-0 flex-row items-center justify-end gap-2 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <Button variant="outline" @click="open = false">Cancel</Button>
                 <Button :disabled="!canSubmit" @click="submit">
                     <Badge v-if="createPrice.isPending.value" variant="secondary" class="mr-1">Saving…</Badge>

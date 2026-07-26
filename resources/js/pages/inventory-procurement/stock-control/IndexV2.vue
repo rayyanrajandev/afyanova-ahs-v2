@@ -2605,7 +2605,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
     <SupplyChainInventoryImportCsvDialog />
 
     <Sheet :open="createUnitDialogOpen" @update:open="createUnitDialogOpen = $event">
-        <SheetContent side="right" variant="form" size="2xl">
+        <SheetContent side="right" variant="form" size="3xl">
             <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                 <SheetTitle class="flex items-center gap-2">
                     <AppIcon name="package" class="size-5 text-muted-foreground" />

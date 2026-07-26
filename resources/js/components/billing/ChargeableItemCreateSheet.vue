@@ -192,7 +192,7 @@ async function submit(): Promise<void> {
 
 <template>
     <Sheet :open="open" @update:open="(value) => (open = value)">
-        <SheetContent side="right" variant="form" size="2xl">
+        <SheetContent side="right" variant="form" size="3xl">
             <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <SheetTitle class="flex items-center gap-2">
                     <AppIcon name="plus" class="size-5 text-muted-foreground" />

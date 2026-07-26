@@ -7,6 +7,7 @@ import ChargeableItemAddPriceSheet from '@/components/billing/ChargeableItemAddP
 import ChargeableItemCreateSheet from '@/components/billing/ChargeableItemCreateSheet.vue';
 import ChargeableItemDetailsSheet from '@/components/billing/ChargeableItemDetailsSheet.vue';
 import ChargeableItemEditSheet from '@/components/billing/ChargeableItemEditSheet.vue';
+import ClinicalCatalogEditSheet from '@/components/platform/clinical-catalogs/ClinicalCatalogEditSheet.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
@@ -22,6 +23,7 @@ import { useUpdateChargeableItem } from '@/composables/chargeableItems/useUpdate
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiRequestJson } from '@/lib/apiClient';
 import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
@@ -206,9 +208,69 @@ function openDetails(item: ChargeableItem): void {
 const editSheetOpen = ref(false);
 const editItem = ref<ChargeableItem | null>(null);
 
-function openEditSheet(item: ChargeableItem): void {
+const clinicalCatalogEditOpen = ref(false);
+const clinicalCatalogItem = ref<ClinicalCatalogEditItem | null>(null);
+
+type ClinicalCatalogEditItem = {
+    id: string | null;
+    catalogType: string | null;
+    code: string | null;
+    name: string | null;
+    departmentId: string | null;
+    category: string | null;
+    unit: string | null;
+    billingServiceCode: string | null;
+    billingLinkStatus: string | null;
+    billingLink: Record<string, unknown> | null;
+    description: string | null;
+    metadata: Record<string, unknown> | null;
+    codes: Record<string, string> | null;
+    facilityTier: string | null;
+    genericName: string | null;
+    dosageForm: string | null;
+    strength: string | null;
+    route: string | null;
+    storageConditions: string | null;
+    requiresColdChain: boolean;
+    isControlledSubstance: boolean;
+    controlledSubstanceSchedule: string | null;
+    genericGroupCode: string | null;
+    status: string | null;
+    statusReason: string | null;
+    updatedAt: string | null;
+};
+
+function catalogTypeToKey(catalogType: string): string | null {
+    const map: Record<string, string> = {
+        lab_test: 'lab-tests',
+        radiology_procedure: 'radiology-procedures',
+        theatre_procedure: 'theatre-procedures',
+        clinical_procedure: 'clinical-procedures',
+        formulary_item: 'formulary-items',
+    };
+    return map[catalogType] ?? null;
+}
+
+async function openEditSheet(item: ChargeableItem): Promise<void> {
+    if (item.clinicalCatalogItemId) {
+        const key = catalogTypeToKey(item.catalogType);
+        if (!key) return;
+        try {
+            const response = await apiRequestJson<{ data: ClinicalCatalogEditItem }>('GET', `/platform/admin/clinical-catalogs/${key}/${item.clinicalCatalogItemId}`);
+            clinicalCatalogItem.value = response.data;
+            clinicalCatalogEditOpen.value = true;
+        } catch (error) {
+            notifyError(messageFromUnknown(error, 'Unable to load the clinical catalog item.'));
+        }
+        return;
+    }
     editItem.value = item;
     editSheetOpen.value = true;
+}
+
+function onClinicalCatalogUpdated(): void {
+    clinicalCatalogEditOpen.value = false;
+    invalidateChargeableItemQueries();
 }
 
 function onUpdated(item: ChargeableItem): void {
@@ -546,16 +608,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     <Badge :variant="statusVariant(item.status)" class="h-5 px-1.5 text-[10px]">{{ formatEnumLabel(item.status) }}</Badge>
                                 </template>
                                 <template v-if="canManage" #actions>
-                                    <Button
-                                        v-if="!item.clinicalCatalogItemId"
-                                        size="sm"
-                                        variant="outline"
-                                        class="h-8 gap-1.5 rounded-lg text-xs"
-                                        @click="openEditSheet(item)"
-                                    >
-                                        <AppIcon name="pencil" class="size-3.5" />
-                                        Edit
-                                    </Button>
                                     <Button size="sm" variant="outline" class="h-8 gap-1.5 rounded-lg text-xs" @click="openAddPriceSheet(item)">
                                         <AppIcon name="banknote" class="size-3.5" />
                                         {{ hasActivePrice(item) ? 'New price' : 'Add price' }}
@@ -592,6 +644,15 @@ const { scrollContainerHeight } = useStickyScrollContainer();
         <ChargeableItemCreateSheet v-model:open="createSheetOpen" @created="onCreated" />
         <ChargeableItemAddPriceSheet v-model:open="addPriceSheetOpen" :item="addPriceItem" @added="onPriceAdded" />
         <ChargeableItemEditSheet v-model:open="editSheetOpen" :item="editItem" @updated="onUpdated" />
-        <ChargeableItemDetailsSheet v-model:open="detailsSheetOpen" :item="detailsItem" />
+        <ChargeableItemDetailsSheet v-model:open="detailsSheetOpen" :item="detailsItem" @edit="openEditSheet" />
+        <ClinicalCatalogEditSheet
+            v-if="clinicalCatalogItem"
+            v-model:open="clinicalCatalogEditOpen"
+            :item="clinicalCatalogItem"
+            :catalog-key="catalogTypeToKey(clinicalCatalogItem.catalogType ?? '') ?? 'lab-tests'"
+            :departments="[]"
+            :can-manage-compliance="false"
+            @updated="onClinicalCatalogUpdated"
+        />
     </AppLayout>
 </template>

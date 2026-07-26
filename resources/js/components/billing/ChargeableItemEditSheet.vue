@@ -85,7 +85,7 @@ async function submit(): Promise<void> {
 
 <template>
     <Sheet :open="open" @update:open="(value) => (open = value)">
-        <SheetContent side="right" variant="form" size="2xl">
+        <SheetContent side="right" variant="form" size="3xl">
             <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <SheetTitle class="flex items-center gap-2">
                     <AppIcon name="pencil" class="size-5 text-muted-foreground" />
@@ -133,7 +133,7 @@ async function submit(): Promise<void> {
                 </div>
             </ScrollArea>
 
-            <SheetFooter class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <SheetFooter class="shrink-0 flex-row items-center justify-end gap-2 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <Button variant="outline" @click="open = false">Cancel</Button>
                 <Button :disabled="!canSubmit" @click="submit">
                     {{ update.isPending.value ? 'Saving…' : 'Save changes' }}
