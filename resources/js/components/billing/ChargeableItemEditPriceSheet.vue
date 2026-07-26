@@ -37,17 +37,24 @@ const form = reactive({
     effectiveTo: '',
 });
 
-watch(open, (isOpen) => {
-    if (!isOpen || !props.price) return;
-    form.currencyCode = props.price.currencyCode;
-    form.unitPrice = String(props.price.unitPrice);
-    form.taxRatePercent = props.price.taxRatePercent !== null ? String(props.price.taxRatePercent) : '';
-    form.isTaxable = props.price.isTaxable ? 'true' : 'false';
-    form.status = props.price.status;
-    form.effectiveFrom = props.price.effectiveFrom ?? '';
-    form.effectiveTo = props.price.effectiveTo ?? '';
+function populateForm(p: ChargeableItemPrice): void {
+    form.currencyCode = p.currencyCode;
+    form.unitPrice = String(p.unitPrice);
+    form.taxRatePercent = p.taxRatePercent !== null ? String(p.taxRatePercent) : '';
+    form.isTaxable = p.isTaxable ? 'true' : 'false';
+    form.status = p.status;
+    form.effectiveFrom = p.effectiveFrom ?? '';
+    form.effectiveTo = p.effectiveTo ?? '';
     submitError.value = null;
     fieldErrors.value = {};
+}
+
+watch(() => props.price, (price) => {
+    if (price) populateForm(price);
+}, { immediate: true });
+
+watch(open, (isOpen) => {
+    if (isOpen && props.price) populateForm(props.price);
 });
 
 function fieldError(field: string): string | null {
