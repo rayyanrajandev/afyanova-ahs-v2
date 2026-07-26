@@ -13,13 +13,8 @@ import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { SearchInput } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useChargeableItems, type ChargeableItem } from '@/composables/chargeableItems/useChargeableItems';
@@ -409,29 +404,26 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <Badge variant="secondary">{{ items.length }} chargeable items</Badge>
-                        <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="list.isFetching.value" @click="invalidateChargeableItemQueries">
-                            <AppIcon name="refresh-cw" class="size-3.5" />
-                            Refresh
-                        </Button>
                         <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                             <AppIcon name="plus" class="size-3.5" />
                             New chargeable item
                         </Button>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger as-child>
-                                <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
-                                    <AppIcon name="ellipsis-vertical" class="size-4" />
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <Button variant="outline" size="sm" class="h-8 w-8 p-0" @click="exportChargeableItemsCsv">
+                                    <AppIcon name="download" class="size-3.5" />
                                 </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" class="w-44">
-                                <DropdownMenuItem class="gap-2" @select="exportChargeableItemsCsv">
-                                    <AppIcon name="download" class="size-4" />Export CSV
-                                </DropdownMenuItem>
-                                <DropdownMenuItem class="gap-2" @select="printChargeableItems">
-                                    <AppIcon name="printer" class="size-4" />Print
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                            </TooltipTrigger>
+                            <TooltipContent>Export CSV</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <Button variant="outline" size="sm" class="h-8 w-8 p-0" @click="printChargeableItems">
+                                    <AppIcon name="printer" class="size-3.5" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Print</TooltipContent>
+                        </Tooltip>
                     </div>
                 </div>
 
