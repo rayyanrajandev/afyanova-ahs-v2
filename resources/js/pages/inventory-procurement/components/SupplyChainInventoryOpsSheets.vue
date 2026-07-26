@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/components/AppIcon.vue';
-import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
-import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,7 +25,7 @@ const ws = useSupplyChainPageApi();
 
 <template>
 <Sheet :open="ws.createItemDialogOpen" @update:open="ws.createItemDialogOpen = $event">
-        <SheetContent side="right" variant="form" size="4xl">
+        <SheetContent side="right" variant="form" size="2xl">
             <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                 <SheetTitle class="flex items-center gap-2">
                     <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
@@ -36,6 +33,7 @@ const ws = useSupplyChainPageApi();
                 </SheetTitle>
                 <SheetDescription>Register an item in the catalog with stock policy baseline.</SheetDescription>
             </SheetHeader>
+
             <ScrollArea class="min-h-0 flex-1">
             <div class="px-6 py-4 grid gap-4">
                 <div
@@ -84,59 +82,18 @@ const ws = useSupplyChainPageApi();
                 </fieldset>
                 <!-- Basic Information -->
                 <fieldset v-if="ws.selectedCreateCategory" class="grid gap-3 sm:grid-cols-2 rounded-lg border p-3">
-                    <legend class="px-2 text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <legend class="px-2 text-sm font-medium text-muted-foreground">
                         Basic Information
-                        <CatalogLinkBadge
-                            v-if="ws.createIdentityLockedToCatalog && ws.createSelectedCatalogItem"
-                            source="clinical_catalog"
-                            :catalog-type="ws.createSelectedCatalogItem.catalogType"
-                            :catalog-name="ws.createSelectedCatalogItem.name"
-                            :catalog-code="ws.createSelectedCatalogItem.code"
-                        />
                     </legend>
-                    <div v-if="ws.selectedCreateCategory && ws.createClinicalCatalogOptions.length > 0" class="sm:col-span-2">
-                        <SearchableSelectField
-                            input-id="inv-item-clinical-catalog"
-                            :label="ws.selectedCreateCategory?.supportsMedicineDetails ? 'Clinical medicine' : 'Clinical catalog item'"
-                            :model-value="ws.itemCreateForm.clinicalCatalogItemId"
-                            :options="ws.createClinicalCatalogOptions"
-                            :placeholder="ws.selectedCreateCategory?.supportsMedicineDetails ? 'Select approved medicine' : 'Select linked clinical definition'"
-                            search-placeholder="Search Clinical Catalog"
-                            empty-text="Create or activate this definition in Clinical Catalog first."
-                            :disabled="ws.itemCreateSubmitting"
-                            :required="ws.selectedCreateCategory?.supportsMedicineDetails"
-                            :error-message="ws.fieldError(ws.itemCreateErrors, 'clinicalCatalogItemId')"
-                            @update:model-value="ws.selectClinicalCatalogItem(ws.itemCreateForm, String($event ?? ''))"
-                        />
-                    </div>
-                    <Alert v-else-if="ws.createClinicalCatalogSelectionRequired" class="sm:col-span-2">
-                        <AlertTitle>Clinical medicine is required first</AlertTitle>
-                        <AlertDescription class="flex flex-wrap items-center gap-2">
-                            <span>
-                                No active approved medicines are available in the current scope, so this pharmaceutical item cannot be saved yet.
-                            </span>
-                            <Link href="/platform/admin/clinical-catalogs" class="font-medium text-primary underline underline-offset-4">
-                                Open Clinical Catalog
-                            </Link>
-                        </AlertDescription>
-                    </Alert>
-                    <p v-if="ws.createIdentityLockedToCatalog" class="sm:col-span-2 text-xs text-muted-foreground">
-                        Identity fields are synced from the clinical catalog and cannot be edited here. To change name, code, or dosage details, update the linked clinical definition.
-                    </p>
-                    <p v-else-if="ws.selectedCreateCategory?.supportsMedicineDetails && ws.createClinicalCatalogOptions.length > 0" class="sm:col-span-2 text-xs text-muted-foreground">
-                        Select the approved medicine first. Code, name, strength, dosage form, dispensing unit, and standards codes load from the catalog.
-                    </p>
                     <div class="grid gap-2">
                         <Label for="inv-item-code">Item Code</Label>
-                        <Input id="inv-item-code" v-model="ws.itemCreateForm.itemCode" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'itemCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'itemCode') }}</p>
+                        <Input id="inv-item-code" v-model="ws.itemCreateForm.itemCode" :disabled="ws.itemCreateSubmitting" />
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'itemCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'itemCode') }}</p>
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-name">Item Name</Label>
-                        <Input id="inv-item-name" v-model="ws.itemCreateForm.itemName" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'itemName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'itemName') }}</p>
+                        <Input id="inv-item-name" v-model="ws.itemCreateForm.itemName" :disabled="ws.itemCreateSubmitting" />
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'itemName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'itemName') }}</p>
                     </div>
                     <FormFieldShell
                         input-id="inv-item-manufacturer"
@@ -152,54 +109,9 @@ const ws = useSupplyChainPageApi();
                     >
                         <Input id="inv-item-barcode" v-model="ws.itemCreateForm.barcode" :disabled="ws.itemCreateSubmitting" placeholder="e.g. 6291234567890" />
                     </FormFieldShell>
-                    <Alert v-if="ws.selectedCreateCategory" class="sm:col-span-2">
-                        <AlertTitle class="flex flex-wrap items-center gap-2">
-                            <span>{{ ws.selectedCreateCategory.label }} workflow</span>
-                            <Badge v-for="badge in ws.createCategoryWorkflowBadges" :key="badge" variant="secondary">{{ badge }}</Badge>
-                        </AlertTitle>
-                        <AlertDescription>{{ ws.selectedCreateCategory.description }}</AlertDescription>
-                    </Alert>
                 </fieldset>
 
-                <fieldset v-if="ws.selectedCreateCategory?.supportsMedicineDetails" class="grid gap-3 sm:grid-cols-2 rounded-lg border p-3">
-                    <legend class="px-2 text-sm font-medium text-muted-foreground">Medicine Profile</legend>
-                    <div class="grid gap-2">
-                        <Label for="inv-item-generic-name">Generic Name</Label>
-                        <Input id="inv-item-generic-name" v-model="ws.itemCreateForm.genericName" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Paracetamol" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'genericName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'genericName') }}</p>
-                    </div>
-                    <ComboboxField
-                        input-id="inv-item-dosage-form"
-                        label="Dosage Form"
-                        v-model="ws.itemCreateForm.dosageForm"
-                        :options="ws.DOSAGE_FORM_OPTIONS"
-                        placeholder="Select dosage form"
-                        search-placeholder="Search tablet, capsule, syrup, injection..."
-                        empty-text="No dosage form found."
-                        :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog"
-                        :error-message="ws.fieldError(ws.itemCreateErrors, 'dosageForm')"
-                        :reserve-message-space="false"
-                    />
-                    <div class="grid gap-2">
-                        <Label for="inv-item-strength">Strength</Label>
-                        <Input id="inv-item-strength" v-model="ws.itemCreateForm.strength" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. 500mg, 250mg/5ml" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'strength')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'strength') }}</p>
-                    </div>
-                    <div class="grid gap-2">
-                        <Label for="inv-item-dispensing-unit">Dispensing Unit</Label>
-                        <Input id="inv-item-dispensing-unit" v-model="ws.itemCreateForm.dispensingUnit" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Tablet, ml" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'dispensingUnit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'dispensingUnit') }}</p>
-                    </div>
-                    <div class="grid gap-2 sm:col-span-2">
-                        <Label for="inv-item-conversion-factor">Conversion Factor</Label>
-                        <Input id="inv-item-conversion-factor" v-model="ws.itemCreateForm.conversionFactor" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" type="number" min="0" step="0.001" placeholder="Stock to dispensing conversion" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'conversionFactor')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'conversionFactor') }}</p>
-                    </div>
-                </fieldset>
+
 
                 <fieldset v-if="ws.selectedCreateCategory?.supportsStorageFields || ws.selectedCreateCategory?.controlledSubstanceEligible" class="grid gap-3 sm:grid-cols-2 rounded-lg border p-3">
                     <legend class="px-2 text-sm font-medium text-muted-foreground">Handling &amp; Compliance</legend>
@@ -219,31 +131,11 @@ const ws = useSupplyChainPageApi();
                     <div v-if="ws.selectedCreateCategory?.supportsStorageFields" class="grid gap-2">
                         <Label>Temperature Handling</Label>
                         <label class="flex items-center gap-2 text-sm pt-2">
-                            <Checkbox :checked="ws.itemCreateForm.requiresColdChain" :disabled="ws.itemCreateSubmitting || Boolean(ws.selectedCreateCategory?.requiresColdChain)" @update:checked="ws.itemCreateForm.requiresColdChain = $event" />
+                            <Checkbox :model-value="ws.itemCreateForm.requiresColdChain" :disabled="ws.itemCreateSubmitting || Boolean(ws.selectedCreateCategory?.requiresColdChain) || !ws.canManageCompliance" @update:model-value="(value) => (ws.itemCreateForm.requiresColdChain = value === true)" />
                             {{ ws.selectedCreateCategory?.requiresColdChain ? 'Cold chain required for this category' : 'Requires cold chain' }}
                         </label>
+                        <p v-if="!ws.selectedCreateCategory?.requiresColdChain && !ws.canManageCompliance" class="text-[11px] text-muted-foreground">Requires the compliance permission to enable</p>
                         <p v-if="ws.fieldError(ws.itemCreateErrors, 'requiresColdChain')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'requiresColdChain') }}</p>
-                    </div>
-                    <div v-if="ws.selectedCreateCategory?.controlledSubstanceEligible" class="grid gap-2">
-                        <Label>Controlled Substance</Label>
-                        <label class="flex items-center gap-2 text-sm pt-2">
-                            <Checkbox :checked="ws.itemCreateForm.isControlledSubstance" :disabled="ws.itemCreateSubmitting" @update:checked="ws.itemCreateForm.isControlledSubstance = $event" />
-                            Controlled substance stock
-                        </label>
-                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'isControlledSubstance')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'isControlledSubstance') }}</p>
-                    </div>
-                    <div v-if="ws.itemCreateForm.isControlledSubstance" class="grid gap-2">
-                        <Label for="inv-item-schedule">Schedule</Label>
-                        <Select :model-value="ws.toSelectValue(ws.itemCreateForm.controlledSubstanceSchedule)" @update:model-value="ws.itemCreateForm.controlledSubstanceSchedule = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                            <SelectTrigger id="inv-item-schedule" class="w-full" :disabled="ws.itemCreateSubmitting">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                            <SelectItem :value="ws.EMPTY_SELECT_VALUE">— Select —</SelectItem>
-                            <SelectItem v-for="schedule in ws.controlledSubstanceScheduleOptions" :key="schedule.value" :value="schedule.value">{{ schedule.label }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'controlledSubstanceSchedule')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'controlledSubstanceSchedule') }}</p>
                     </div>
                     <Alert v-if="ws.selectedCreateCategory?.requiresExpiryTracking" class="sm:col-span-2">
                         <AlertTitle>Batch onboarding follows item creation</AlertTitle>
@@ -279,15 +171,13 @@ const ws = useSupplyChainPageApi();
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-msd">MSD Code</Label>
-                        <Input id="inv-item-msd" v-model="ws.itemCreateForm.msdCode" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="Medical Stores Department code" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'msdCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'msdCode') }}</p>
+                        <Input id="inv-item-msd" v-model="ws.itemCreateForm.msdCode" :disabled="ws.itemCreateSubmitting" placeholder="Medical Stores Department code" />
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'msdCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'msdCode') }}</p>
                     </div>
                     <div v-if="!ws.selectedCreateCategory || ws.selectedCreateCategory.supportsClinicalClassification" class="grid gap-2">
                         <Label for="inv-item-nhif">NHIF Code</Label>
-                        <Input id="inv-item-nhif" v-model="ws.itemCreateForm.nhifCode" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="NHIF tariff code" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'nhifCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'nhifCode') }}</p>
+                        <Input id="inv-item-nhif" v-model="ws.itemCreateForm.nhifCode" :disabled="ws.itemCreateSubmitting" placeholder="NHIF tariff code" />
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'nhifCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'nhifCode') }}</p>
                     </div>
                     <p v-if="ws.selectedCreateCategory && !ws.selectedCreateCategory.supportsClinicalClassification" class="sm:col-span-2 text-xs text-muted-foreground">
                         This category uses operational coding only. Clinical classification and NHIF mapping stay hidden.
@@ -298,9 +188,8 @@ const ws = useSupplyChainPageApi();
                     <legend class="px-2 text-sm font-medium text-muted-foreground">Stock Policy &amp; Defaults</legend>
                     <div class="grid gap-2">
                         <Label for="inv-item-unit">Stock Unit</Label>
-                        <Input id="inv-item-unit" v-model="ws.itemCreateForm.unit" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Box, Bottle, Piece" />
-                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
-                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'unit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'unit') }}</p>
+                        <Input id="inv-item-unit" v-model="ws.itemCreateForm.unit" :disabled="ws.itemCreateSubmitting" placeholder="e.g. Box, Bottle, Piece" />
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'unit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'unit') }}</p>
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-bin-location">Bin Location</Label>
@@ -348,7 +237,6 @@ const ws = useSupplyChainPageApi();
                                 </Command>
                             </PopoverContent>
                         </Popover>
-                        <p class="text-xs text-muted-foreground">Required for stock availability, reservation, consumption, and movement posting.</p>
                         <p v-if="ws.fieldError(ws.itemCreateErrors, 'defaultWarehouseId')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'defaultWarehouseId') }}</p>
                     </div>
                     <div class="grid gap-2">
@@ -413,19 +301,12 @@ const ws = useSupplyChainPageApi();
                 </fieldset>
             </div>
             </ScrollArea>
-            <Alert v-if="ws.itemCreateRequestError || ws.itemCreateValidationMessages.length" variant="destructive" class="mx-4 mb-3 shrink-0">
-                <AlertTitle>Create item needs attention</AlertTitle>
-                <AlertDescription class="space-y-2">
-                    <p v-if="ws.itemCreateRequestError">{{ ws.itemCreateRequestError }}</p>
-                    <ul v-if="ws.itemCreateValidationMessages.length" class="space-y-1 pl-4 list-disc">
-                        <li v-for="message in ws.itemCreateValidationMessages" :key="message" class="text-xs leading-5">
-                            {{ message }}
-                        </li>
-                    </ul>
-                </AlertDescription>
+            <Alert v-if="ws.itemCreateRequestError" variant="destructive" class="mx-4 mb-3 shrink-0">
+                <AlertTitle>Create item failed</AlertTitle>
+                <AlertDescription>{{ ws.itemCreateRequestError }}</AlertDescription>
             </Alert>
-            <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
-                <p v-if="ws.itemCreateSubmitReason && !ws.itemCreateRequestError && ws.itemCreateValidationMessages.length === 0" class="mr-auto text-xs text-muted-foreground">
+            <SheetFooter class="flex-row items-center justify-end gap-2 shrink-0 border-t bg-background px-4 py-3">
+                <p v-if="ws.itemCreateSubmitReason && !ws.itemCreateRequestError" class="mr-auto text-xs text-muted-foreground">
                     {{ ws.itemCreateSubmitReason }}
                 </p>
                 <Button type="button" variant="outline" @click="ws.createItemDialogOpen = false">Cancel</Button>
@@ -792,10 +673,15 @@ const ws = useSupplyChainPageApi();
                             :disabled="ws.stockMovementSubmitting"
                             :error-message="ws.fieldError(ws.stockMovementErrors, 'expiryDate')"
                         />
-                        <div class="grid gap-2 sm:col-span-2">
+                        <div class="grid gap-2">
                             <Label for="inv-movement-bin-location">Bin Location</Label>
                             <Input id="inv-movement-bin-location" v-model="ws.stockMovementForm.binLocation" :disabled="ws.stockMovementSubmitting" placeholder="Shelf, rack, or fridge position" />
                             <p v-if="ws.fieldError(ws.stockMovementErrors, 'binLocation')" class="text-xs text-destructive">{{ ws.fieldError(ws.stockMovementErrors, 'binLocation') }}</p>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="inv-movement-manufacturer">Manufacturer</Label>
+                            <Input id="inv-movement-manufacturer" v-model="ws.stockMovementForm.manufacturer" :disabled="ws.stockMovementSubmitting" placeholder="Defaults to the item's manufacturer if left blank" />
+                            <p v-if="ws.fieldError(ws.stockMovementErrors, 'manufacturer')" class="text-xs text-destructive">{{ ws.fieldError(ws.stockMovementErrors, 'manufacturer') }}</p>
                         </div>
                     </div>
 

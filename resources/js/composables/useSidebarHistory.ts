@@ -2,7 +2,7 @@ import { useStorage } from '@vueuse/core';
 import { computed } from 'vue';
 
 const HISTORY_STORAGE_KEY = 'afyanova-sidebar-history';
-const MAX_HISTORY = 5;
+const MAX_HISTORY = 6;
 
 type HistoryEntry = {
     id: string;
