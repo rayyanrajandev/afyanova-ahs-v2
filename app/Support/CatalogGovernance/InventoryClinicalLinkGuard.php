@@ -13,24 +13,18 @@ use Illuminate\Validation\ValidationException;
 class InventoryClinicalLinkGuard
 {
     /**
-     * generic_name/dosage_form/strength/controlled_substance_schedule no longer exist
-     * as inventory_items columns as of Phase 3 (Inventory_MasterData_Alignment_Plan.md)
-     * -- they're Pharmaceutical-only and Pharmaceutical is always catalog-linked, so
-     * there's no local value left to diverge from the catalog. storage_conditions
-     * stays here: Blood Product/Laboratory/Food & Nutrition use it and can't
-     * catalog-link, so it's still a real, comparable local column for Pharmaceutical.
+     * Storage/compliance fields are inventory-owned (operational decisions
+     * per facility/warehouse), not clinical catalog attributes. The arrays
+     * are kept empty so the divergence check is a no-op.
      *
      * @var array<int, string>
      */
-    private const CATALOG_OWNED_STRING_FIELDS = ['storage_conditions'];
+    private const CATALOG_OWNED_STRING_FIELDS = [];
 
     /**
-     * is_controlled_substance dropped in Phase 3 (Pharmaceutical-only, always
-     * catalog-linked). requires_cold_chain stays -- same reasoning as storage_conditions.
-     *
      * @var array<int, string>
      */
-    private const CATALOG_OWNED_BOOL_FIELDS = ['requires_cold_chain'];
+    private const CATALOG_OWNED_BOOL_FIELDS = [];
 
     public function __construct(
         private readonly CatalogPlacementAuditor $placementAuditor,

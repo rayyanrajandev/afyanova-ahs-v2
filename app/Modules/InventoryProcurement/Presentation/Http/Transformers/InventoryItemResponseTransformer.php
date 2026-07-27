@@ -2,7 +2,6 @@
 
 namespace App\Modules\InventoryProcurement\Presentation\Http\Transformers;
 
-use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
 
 class InventoryItemResponseTransformer
@@ -16,13 +15,6 @@ class InventoryItemResponseTransformer
         $catalogCodes = is_array($catalog['codes'] ?? null) ? $catalog['codes'] : [];
         $hasCatalogLink = ($item['clinical_catalog_item_id'] ?? null) !== null && $catalog !== null;
 
-        // Inventory_MasterData_Alignment_Plan.md Phase 2. Gated behind a feature flag
-        // so the cutover to catalog-owned compliance/storage fields can be switched
-        // off instantly without a deploy if something regresses. When the flag is off,
-        // behavior is byte-for-byte identical to before Phase 2 shipped.
-        $catalogFirstReadsEnabled = $hasCatalogLink
-            && app(FeatureFlagResolverInterface::class)->isEnabled('inventory.catalog_first_reads');
-
         return [
             'id' => $item['id'] ?? null,
             'itemCode' => $item['item_code'] ?? null,
@@ -33,11 +25,6 @@ class InventoryItemResponseTransformer
             'standardsWarnings' => app(StandardsCodeSupport::class)->warningsForInventoryItem($item),
             'clinicalCatalogItemId' => $item['clinical_catalog_item_id'] ?? null,
             'itemName' => $hasCatalogLink ? trim((string) ($catalog['name'] ?? '')) : ($item['item_name'] ?? null),
-            // generic_name/dosage_form/strength dropped from inventory_items in Phase 3:
-            // Pharmaceutical-only and always catalog-linked, so there's no item-column
-            // fallback left -- catalog or nothing, unconditionally (not flag-gated: once
-            // the column is gone there's no "old behavior" left to preserve by keeping
-            // this off).
             'genericName' => $hasCatalogLink
                 ? ($catalog['generic_name'] ?? $catalogMeta['genericName'] ?? $catalogMeta['generic_name'] ?? null)
                 : null,
@@ -64,17 +51,8 @@ class InventoryItemResponseTransformer
                 : ($item['conversion_factor'] ?? null),
             'binLocation' => $item['bin_location'] ?? null,
             'manufacturer' => $item['manufacturer'] ?? null,
-            // Storage/compliance fields are the new part of Phase 2: these never read
-            // from the catalog before. Catalog value wins only when populated (Phase 1's
-            // backfill left genuine conflicts null on purpose); otherwise fall back to the
-            // inventory row so a linked item with a not-yet-backfilled catalog entry
-            // doesn't silently lose data it already had.
-            'storageConditions' => $catalogFirstReadsEnabled && $catalog['storage_conditions'] !== null
-                ? $catalog['storage_conditions']
-                : ($item['storage_conditions'] ?? null),
-            'requiresColdChain' => $catalogFirstReadsEnabled && $catalog['requires_cold_chain'] !== null
-                ? (bool) $catalog['requires_cold_chain']
-                : (bool) ($item['requires_cold_chain'] ?? false),
+            'storageConditions' => $item['storage_conditions'] ?? null,
+            'requiresColdChain' => (bool) ($item['requires_cold_chain'] ?? false),
             // is_controlled_substance/controlled_substance_schedule dropped from
             // inventory_items in Phase 3 -- same reasoning as generic_name above.
             'isControlledSubstance' => $hasCatalogLink && (bool) ($catalog['is_controlled_substance'] ?? false),
