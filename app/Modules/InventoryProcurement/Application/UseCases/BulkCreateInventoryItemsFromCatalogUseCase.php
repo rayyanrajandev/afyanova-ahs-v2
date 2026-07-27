@@ -150,7 +150,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                         'dispensing_unit' => $dispensingUnit ? (is_string($dispensingUnit) ? $dispensingUnit : null) : null,
                         'conversion_factor' => $conversionFactor ? (is_numeric($conversionFactor) ? (float) $conversionFactor : null) : null,
                         'storage_conditions' => $catalogItem->storage_conditions,
-                        'requires_cold_chain' => $catalogItem->requires_cold_chain,
+                        'requires_cold_chain' => (bool) $catalogItem->requires_cold_chain,
                     ];
 
                     $before = $this->extractTrackedFields($inventoryItem->toArray());
@@ -197,7 +197,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                         'dispensing_unit' => $dispensingUnit ? (is_string($dispensingUnit) ? $dispensingUnit : null) : null,
                         'conversion_factor' => $conversionFactor ? (is_numeric($conversionFactor) ? (float) $conversionFactor : null) : null,
                         'storage_conditions' => $catalogItem->storage_conditions,
-                        'requires_cold_chain' => $catalogItem->requires_cold_chain,
+                        'requires_cold_chain' => (bool) $catalogItem->requires_cold_chain,
                         'current_stock' => 0,
                         'reorder_level' => 0,
                         'default_warehouse_id' => $defaultWarehouseId,
