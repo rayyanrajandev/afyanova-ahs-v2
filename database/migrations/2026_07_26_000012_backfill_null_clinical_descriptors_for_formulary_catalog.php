@@ -316,7 +316,8 @@ return new class extends Migration
     private function defaultStockUnit(string $dosageForm, string $name): string
     {
         return match ($dosageForm) {
-            'tablet', 'capsule' => 'tablet',
+            'tablet' => 'tablet',
+            'capsule' => 'capsule',
             'cream', 'ointment', 'gel' => 'tube',
             'lotion', 'syrup', 'suspension', 'solution', 'elixir', 'mixture', 'eye drops', 'ear drops', 'nasal drops' => 'bottle',
             'injection' => 'ampoule',
@@ -331,13 +332,11 @@ return new class extends Migration
     private function defaultPurchaseUnit(string $dosageForm, string $name): string
     {
         return match ($dosageForm) {
-            'tablet', 'capsule', 'injection', 'suppository', 'pessary' => 'box',
-            'cream', 'ointment', 'gel', 'lotion' => 'box',
-            'syrup', 'suspension', 'solution', 'elixir', 'mixture' => 'box',
-            'eye drops', 'ear drops', 'nasal drops' => 'box',
-            'powder' => 'box',
-            'inhaler', 'spray' => 'box',
-            'patch' => 'box',
+            'tablet', 'capsule', 'injection', 'suppository', 'pessary',
+            'cream', 'ointment', 'gel', 'lotion',
+            'syrup', 'suspension', 'solution', 'elixir', 'mixture',
+            'eye drops', 'ear drops', 'nasal drops',
+            'powder', 'inhaler', 'spray', 'patch' => 'box',
             default => 'each',
         };
     }
