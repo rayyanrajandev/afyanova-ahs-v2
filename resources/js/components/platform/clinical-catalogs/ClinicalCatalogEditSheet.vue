@@ -769,7 +769,7 @@ async function saveItem(): Promise<void> {
                     {{ editSheetTitle }}
                 </SheetTitle>
                 <SheetDescription v-if="item">
-                    Update clinical details here. Change hospital prices in Billing Service Catalog.
+                    Update clinical details here. Change hospital prices in Chargeable Items.
                 </SheetDescription>
             </SheetHeader>
             <ScrollArea class="min-h-0 flex-1">
@@ -866,7 +866,7 @@ async function saveItem(): Promise<void> {
                         <details class="md:col-span-3 rounded-lg border bg-muted/10 p-3">
                             <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Billing service code (optional)</summary>
                             <p class="mt-2 text-xs text-muted-foreground">
-                                Use this when the billing/tariff code should differ from the clinical definition code. Billing Service Catalog will use it when creating prices from this definition.
+                                Use this when the billing/tariff code should differ from the clinical definition code. Chargeable Items will use it when creating prices from this definition.
                             </p>
                             <div class="mt-3 grid gap-1.5">
                                 <Label>Billing service code</Label>

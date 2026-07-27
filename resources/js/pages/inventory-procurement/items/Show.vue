@@ -480,7 +480,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         </div>
                                     </div>
                                 </div>
-                                <p class="text-xs text-muted-foreground">Prices per unit are configured in <span class="font-medium">Billing Service Catalog</span>.</p>
+                                <p class="text-xs text-muted-foreground">Prices per unit are configured in <span class="font-medium">Chargeable Items</span>.</p>
                             </TabsContent>
 
                             <TabsContent v-if="canViewAudit" value="audit" class="m-0 min-w-0 space-y-4 overflow-hidden rounded-lg border bg-card p-4">

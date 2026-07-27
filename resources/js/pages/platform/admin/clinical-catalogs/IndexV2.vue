@@ -725,7 +725,7 @@ function billingLinkDetail(item: Item | null): string {
         return `Billing code ${link?.serviceCode || item?.billingServiceCode || 'not set'} exists, but the tariff is inactive, expired, or not yet live.`;
     }
 
-    return 'No hospital price is linked yet. Add one in Billing Service Catalog by selecting this clinical item when you create a service price.';
+    return 'No hospital price is linked yet. Add one in Chargeable Items by selecting this clinical item when you create a service price.';
 }
 
 function clinicalCatalogExportQuery(): Record<string, string | null> {
@@ -2543,7 +2543,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 {{
                                     filterCount > 0
                                         ? 'Adjust or clear filters to widen the catalog.'
-                                        : `Create the first ${catalog.singular.toLowerCase()} before linking prices in the Billing Service Catalog.`
+                                        : `Create the first ${catalog.singular.toLowerCase()} before linking prices in Chargeable Items.`
                                 }}
                             </p>
                         </div>
@@ -2654,7 +2654,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             {{ createButtonLabel }}
                         </SheetTitle>
                         <SheetDescription>
-                            Register what care teams order. Hospital prices are added separately in Billing Service Catalog.
+                            Register what care teams order. Hospital prices are added separately in Chargeable Items.
                         </SheetDescription>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
