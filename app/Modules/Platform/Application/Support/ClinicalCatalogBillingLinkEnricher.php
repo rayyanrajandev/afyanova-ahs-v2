@@ -2,7 +2,7 @@
 
 namespace App\Modules\Platform\Application\Support;
 
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use Carbon\CarbonImmutable;
 
 class ClinicalCatalogBillingLinkEnricher
@@ -11,10 +11,6 @@ class ClinicalCatalogBillingLinkEnricher
      * @var array<string, array<int, array<string, mixed>>>
      */
     private array $serviceFamilyCache = [];
-
-    public function __construct(
-        private readonly BillingServiceCatalogItemRepositoryInterface $billingServiceCatalogRepository,
-    ) {}
 
     /**
      * @param  array<string, mixed>  $item
@@ -31,11 +27,7 @@ class ClinicalCatalogBillingLinkEnricher
 
         if ($clinicalCatalogItemId !== null) {
             $billingItem = $this->pickPreferredBillingVersion(
-                $this->billingServiceCatalogRepository->listVersionsByClinicalCatalogItemId(
-                    $clinicalCatalogItemId,
-                    $tenantId,
-                    $facilityId,
-                ),
+                $this->loadChargeableItemVersions($clinicalCatalogItemId, $tenantId, $facilityId),
             );
         }
 
@@ -92,7 +84,7 @@ class ClinicalCatalogBillingLinkEnricher
 
         $billingMap = [];
         if ($clinicalCatalogItemIds !== []) {
-            $billingMap = $this->billingServiceCatalogRepository->listLatestByClinicalCatalogItemIds(
+            $billingMap = $this->loadLatestChargeableItemsByCatalogIds(
                 $clinicalCatalogItemIds,
                 $tenantId,
                 $facilityId,
@@ -196,6 +188,63 @@ class ClinicalCatalogBillingLinkEnricher
     /**
      * @return array<int, array<string, mixed>>
      */
+    private function loadChargeableItemVersions(
+        string $clinicalCatalogItemId,
+        ?string $tenantId,
+        ?string $facilityId,
+    ): array {
+        $query = ChargeableItemModel::query()
+            ->with('priceBookEntries')
+            ->where('clinical_catalog_item_id', $clinicalCatalogItemId)
+            ->orderByDesc('created_at');
+
+        if ($tenantId !== null) {
+            $query->where('tenant_id', $tenantId);
+        }
+
+        if ($facilityId !== null) {
+            $query->where('facility_id', $facilityId);
+        }
+
+        return $this->toBillingItemsArray($query->get()->all());
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function loadLatestChargeableItemsByCatalogIds(
+        array $clinicalCatalogItemIds,
+        ?string $tenantId,
+        ?string $facilityId,
+    ): array {
+        $query = ChargeableItemModel::query()
+            ->with('priceBookEntries')
+            ->whereIn('clinical_catalog_item_id', $clinicalCatalogItemIds);
+
+        if ($tenantId !== null) {
+            $query->where('tenant_id', $tenantId);
+        }
+
+        if ($facilityId !== null) {
+            $query->where('facility_id', $facilityId);
+        }
+
+        $rows = $this->toBillingItemsArray($query->get()->all());
+
+        $map = [];
+        foreach ($rows as $row) {
+            $cciId = $row['clinical_catalog_item_id'] ?? null;
+            if ($cciId !== null && ! isset($map[$cciId])) {
+                $map[$cciId] = $row;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function loadServiceFamilyVersions(
         string $serviceCode,
         ?string $tenantId,
@@ -208,14 +257,50 @@ class ClinicalCatalogBillingLinkEnricher
         ]);
 
         if (! array_key_exists($cacheKey, $this->serviceFamilyCache)) {
-            $this->serviceFamilyCache[$cacheKey] = $this->billingServiceCatalogRepository->listVersionsByServiceCodeFamily(
-                serviceCode: $serviceCode,
-                tenantId: $tenantId,
-                facilityId: $facilityId,
+            $query = ChargeableItemModel::query()
+                ->with('priceBookEntries')
+                ->where('code', $serviceCode);
+
+            if ($tenantId !== null) {
+                $query->where('tenant_id', $tenantId);
+            }
+
+            if ($facilityId !== null) {
+                $query->where('facility_id', $facilityId);
+            }
+
+            $this->serviceFamilyCache[$cacheKey] = $this->toBillingItemsArray(
+                $query->orderByDesc('created_at')->get()->all(),
             );
         }
 
         return $this->serviceFamilyCache[$cacheKey];
+    }
+
+    /**
+     * @param  array<int, ChargeableItemModel>  $chargeableItems
+     * @return array<int, array<string, mixed>>
+     */
+    private function toBillingItemsArray(array $chargeableItems): array
+    {
+        return array_map(function (ChargeableItemModel $item): array {
+            $latestPrice = $item->priceBookEntries
+                ->sortByDesc(fn ($entry) => $entry->created_at ?? $entry->effective_from ?? $entry->updated_at)
+                ->first();
+
+            return [
+                'id' => $item->id,
+                'clinical_catalog_item_id' => $item->clinical_catalog_item_id,
+                'service_code' => $item->code,
+                'service_name' => $item->name,
+                'status' => $item->status,
+                'tariff_version' => null,
+                'base_price' => $latestPrice?->unit_price,
+                'currency_code' => $latestPrice?->currency_code,
+                'effective_from' => $latestPrice?->effective_from,
+                'effective_to' => $latestPrice?->effective_to,
+            ];
+        }, $chargeableItems);
     }
 
     /**
@@ -248,7 +333,7 @@ class ClinicalCatalogBillingLinkEnricher
             'serviceCode' => $billingItem['service_code'] ?? null,
             'serviceName' => $billingItem['service_name'] ?? null,
             'status' => $billingItem['status'] ?? null,
-            'versionNumber' => $billingItem['tariff_version'] ?? null,
+            'versionNumber' => 1,
             'basePrice' => $billingItem['base_price'] ?? null,
             'currencyCode' => $billingItem['currency_code'] ?? null,
             'effectiveFrom' => $billingItem['effective_from'] ?? null,
