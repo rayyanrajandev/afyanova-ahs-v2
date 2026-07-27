@@ -733,6 +733,7 @@ function clinicalCatalogExportQuery(): Record<string, string | null> {
         q: filters.q.trim() || null,
         status: filters.status || null,
         category: filters.category.trim() || null,
+        dosageForm: filters.dosageForm || null,
     };
 }
 
