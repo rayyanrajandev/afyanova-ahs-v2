@@ -75,7 +75,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
 
         // 1. Fetch eligible active formulary items from the clinical catalog
         $catalogQuery = ClinicalCatalogItemModel::query()
-            ->select(['id', 'catalog_type', 'code', 'name', 'category', 'unit', 'description', 'metadata', 'codes', 'status'])
+            ->select(['id', 'catalog_type', 'code', 'name', 'category', 'unit', 'description', 'metadata', 'codes', 'status', 'storage_conditions', 'requires_cold_chain'])
             ->whereIn('catalog_type', $catalogTypeFilter)
             ->where('status', ClinicalCatalogItemStatus::ACTIVE->value)
             ->orderBy('name');
