@@ -253,7 +253,7 @@ async function loadReferenceData() {
         if (Array.isArray(response.categoryOptions) && response.categoryOptions.length > 0) {
             itemCategoryOptions.value = response.categoryOptions;
         } else if (response.categories) {
-            itemCategoryOptions.value = Object.entries(response.categories).map(([value, label]) => fallbackCategoryOption(value, label as string));
+            itemCategoryOptions.value = Object.entries(response.categories).map(([value, label]) => ({ value, label: label as string, template: 'general_supply', description: 'General stock item.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false }));
         }
         if (response.subcategoryOptions && typeof response.subcategoryOptions === 'object') {
             apiSubcategoryOptions.value = response.subcategoryOptions;
@@ -277,7 +277,7 @@ async function loadReferenceData() {
         const clinicalItems = Array.isArray(response.clinicalCatalogItems) ? response.clinicalCatalogItems : response.formularyCatalogItems;
         clinicalCatalogItems.value = Array.isArray(clinicalItems) ? clinicalItems.filter((item: any) => typeof item?.id === 'string' && item.id.trim().length > 0) : [];
     } catch {
-        itemCategoryOptions.value = [...DEFAULT_ITEM_CATEGORIES];
+        itemCategoryOptions.value = [];
         venClassificationOptions.value = [...VEN_CLASSIFICATIONS];
         abcClassificationOptions.value = [...ABC_CLASSIFICATIONS];
         storageConditionOptions.value = [...STORAGE_CONDITIONS];
@@ -551,22 +551,6 @@ const stockLedgerSourceOptions = [{ value: '', label: 'All sources' }, { value: 
 const correctionReasonOptions: Array<{ value: string; label: string }> = [{ value: 'opening_balance', label: 'Opening Balance Correction' }, { value: 'physical_count_adjustment', label: 'Physical Count Adjustment' }, { value: 'audit_correction', label: 'Audit Correction' }, { value: 'other', label: 'Other' }];
 const stockMovementReasonOptions: Array<{ value: string; label: string }> = [{ value: 'opening_balance', label: 'Opening Balance' }, { value: 'physical_count_adjustment', label: 'Physical Count Adjustment' }, { value: 'expiry_write_off', label: 'Expiry Write-off' }, { value: 'damaged_stock', label: 'Damaged Stock' }, { value: 'donation', label: 'Donation' }, { value: 'emergency_replenishment', label: 'Emergency Replenishment' }, { value: 'audit_correction', label: 'Audit Correction' }, { value: 'return_to_supplier', label: 'Return to Supplier' }, { value: 'other', label: 'Other' }];
 
-const DEFAULT_ITEM_CATEGORIES: InventoryCategoryOption[] = [
-    { value: 'pharmaceutical', label: 'Pharmaceutical', template: 'pharmaceutical', description: 'Medicine stock master with dispensing, clinical classification, and reimbursement mapping fields.', requiresExpiryTracking: true, requiresColdChain: false, controlledSubstanceEligible: true, supportsMedicineDetails: true, supportsStorageFields: true, supportsClinicalClassification: true },
-    { value: 'medical_consumable', label: 'Medical Consumable', template: 'general_supply', description: 'General stock item with supplier, warehouse, barcode, and stock-threshold defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: true },
-    { value: 'laboratory', label: 'Laboratory Reagent & Supply', template: 'expiry_sensitive', description: 'Expiry-sensitive reagent and laboratory supply inventory with storage-handling requirements.', requiresExpiryTracking: true, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: true, supportsClinicalClassification: true },
-    { value: 'surgical_instrument', label: 'Surgical Instrument', template: 'specialist_equipment', description: 'Specialist stock master for procurement and replenishment defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false },
-    { value: 'medical_equipment', label: 'Medical Equipment', template: 'specialist_equipment', description: 'Specialist stock master for procurement and replenishment defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false },
-    { value: 'linen_textile', label: 'Linen & Textile', template: 'general_supply', description: 'General stock item with supplier, warehouse, barcode, and stock-threshold defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false },
-    { value: 'food_nutrition', label: 'Food & Nutrition', template: 'expiry_sensitive', description: 'Expiry-sensitive nutrition inventory with storage defaults and replenishment controls.', requiresExpiryTracking: true, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: true, supportsClinicalClassification: false },
-    { value: 'office_admin', label: 'Office & Admin Supply', template: 'general_supply', description: 'General stock item with supplier, warehouse, barcode, and stock-threshold defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false },
-    { value: 'cleaning_sanitation', label: 'Cleaning & Sanitation', template: 'general_supply', description: 'General stock item with supplier, warehouse, barcode, and stock-threshold defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false },
-    { value: 'blood_product', label: 'Blood Product', template: 'expiry_sensitive', description: 'Expiry-sensitive and cold-chain inventory.', requiresExpiryTracking: true, requiresColdChain: true, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: true, supportsClinicalClassification: true },
-    { value: 'ppe', label: 'Personal Protective Equipment', template: 'general_supply', description: 'General stock item with supplier, warehouse, barcode, and stock-threshold defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false },
-    { value: 'dental', label: 'Dental', template: 'specialist_equipment', description: 'Specialist stock master for procurement and replenishment defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: true },
-    { value: 'radiology', label: 'Radiology', template: 'specialist_equipment', description: 'Specialist stock master for procurement and replenishment defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: true },
-    { value: 'other', label: 'Other', template: 'general_supply', description: 'General stock item with supplier, warehouse, barcode, and stock-threshold defaults.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false },
-];
 const VEN_CLASSIFICATIONS = [{ value: 'vital', label: 'Vital' }, { value: 'essential', label: 'Essential' }, { value: 'non_essential', label: 'Non-Essential' }] as const;
 const ABC_CLASSIFICATIONS = [{ value: 'A', label: 'A - High Value' }, { value: 'B', label: 'B - Medium Value' }, { value: 'C', label: 'C - Low Value' }] as const;
 const STORAGE_CONDITIONS = [{ value: 'room_temperature', label: 'Room Temperature' }, { value: 'cool_dry_place', label: 'Cool & Dry Place' }, { value: 'refrigerated_2_8c', label: 'Refrigerated (2-8C)' }, { value: 'frozen_minus_20c', label: 'Frozen (-20C)' }, { value: 'frozen_minus_70c', label: 'Frozen (-70C)' }, { value: 'protect_from_light', label: 'Protect from Light' }] as const;
@@ -593,7 +577,7 @@ const ITEM_SUBCATEGORY_OPTIONS: Record<string, SearchableSelectOption[]> = {
     ],
 };
 
-const itemCategoryOptions = ref<InventoryCategoryOption[]>([...DEFAULT_ITEM_CATEGORIES]);
+const itemCategoryOptions = ref<InventoryCategoryOption[]>([]);
 const venClassificationOptions = ref<SelectOption[]>([...VEN_CLASSIFICATIONS]);
 const abcClassificationOptions = ref<SelectOption[]>([...ABC_CLASSIFICATIONS]);
 const storageConditionOptions = ref<SelectOption[]>([...STORAGE_CONDITIONS]);
@@ -635,10 +619,6 @@ function subcategoryOptionsForCategory(categoryValue: string | null | undefined)
 function resolveCategoryOption(categoryValue: string): InventoryCategoryOption | null {
     if (!categoryValue) return null;
     return itemCategoryOptions.value.find((option) => option.value === categoryValue) ?? null;
-}
-
-function fallbackCategoryOption(value: string, label: string): InventoryCategoryOption {
-    return DEFAULT_ITEM_CATEGORIES.find((option) => option.value === value) ?? { value, label, template: 'general_supply', description: 'General stock item.', requiresExpiryTracking: false, requiresColdChain: false, controlledSubstanceEligible: false, supportsMedicineDetails: false, supportsStorageFields: false, supportsClinicalClassification: false };
 }
 
 const selectedCreateCategory = computed(() => resolveCategoryOption(itemCreateForm.category));
