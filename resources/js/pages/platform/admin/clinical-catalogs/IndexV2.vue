@@ -1009,7 +1009,8 @@ function pn(count: string | number, unit: string): string {
     return n > 1 && !unit.endsWith('s') ? unit + 's' : unit;
 }
 
-function metadataBooleanSelectValue(metadata: Record<string, unknown>, key: string): '' | 'yes' | 'no' {
+function metadataBooleanSelectValue(metadata: Record<string, unknown> | null | undefined, key: string): '' | 'yes' | 'no' {
+    if (!metadata || typeof metadata !== 'object') return '';
     const value = metadata[key];
 
     if (value === true) return 'yes';
