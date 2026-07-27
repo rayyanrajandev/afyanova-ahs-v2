@@ -867,7 +867,7 @@ function defaultStorageConditionsForCategory(category: InventoryCategoryOption):
 
 function clinicalCatalogTypeForCategory(category: InventoryCategoryOption | null): string[] {
     if (!category) return [];
-    if (category.template === 'expiry_sensitive') return ['formulary_item'];
+    if (category.supportsMedicineDetails) return ['formulary_item'];
     return [];
 }
 
