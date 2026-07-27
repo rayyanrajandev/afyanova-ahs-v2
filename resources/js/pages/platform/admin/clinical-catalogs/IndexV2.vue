@@ -3179,7 +3179,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                     @click="openRecipeSheet"
                                                 >
                                                     <AppIcon name="package" class="size-3.5" />
-                                                    Set consumables
+                                                    {{ consumptionRecipeItems.length > 0 ? 'Edit consumables' : 'Set consumables' }}
                                                 </Button>
                                             </div>
                                         </div>

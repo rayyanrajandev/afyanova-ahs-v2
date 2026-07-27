@@ -133,10 +133,79 @@ this migration.
 
 ---
 
+## 4. `DskClinicalCatalogConsumptionRecipeSeeder`
+
+**File:** `database/seeders/DskClinicalCatalogConsumptionRecipeSeeder.php`
+
+Creates consumption-recipe lines (links between clinical catalog items and
+inventory items) in the `clinical_catalog_consumption_recipe_items` table for
+laboratory tests, radiology procedures, and clinical procedures.
+
+### What it seeds
+
+~170 recipe lines across 43 catalog items:
+
+| Catalog type | Items | Lines (avg) |
+|---|---|---|
+| Lab tests (16) | LAB-MRDT-001 .. LAB-URA-001 | 3–6 per test |
+| Radiology (2) | RAD-US-ABD/PEL-001 | 3 per procedure |
+| Clinical procedures (25) | CLN-WOUND-CLEAN-001 .. CLN-ASTHMA-NEB-001 | 1–9 per procedure |
+
+### Recipe fields
+
+| Column | Source |
+|---|---|
+| `clinical_catalog_item_id` | Resolved from `facility_id` + catalog `code` |
+| `inventory_item_id` | Resolved from `facility_id` + inventory `item_code` |
+| `quantity_per_order` | Hardcoded per recipe line |
+| `unit` | Matches the inventory item's dispensing unit |
+| `waste_factor_percent` | Defaults to 0 |
+| `consumption_stage` | `sample_collection`, `processing`, or `procedure_completion` |
+
+### Idempotency
+
+Uses `firstOrCreate` keyed on the unique index
+`(clinical_catalog_item_id, inventory_item_id)` — safe to re-run.
+
+### Dependencies
+
+Requires all four clinical-catalog seeders + inventory seeder to have run
+first so that both catalog and inventory items exist:
+
+```bash
+php artisan db:seed --class=DskLabClinicalCatalogSeeder --force
+php artisan db:seed --class=DskRadiologyClinicalCatalogSeeder --force
+php artisan db:seed --class=DskClinicalClinicalCatalogSeeder --force
+php artisan db:seed --class=DskInventoryItemsSeeder --force
+php artisan db:seed --class=DskClinicalCatalogConsumptionRecipeSeeder --force
+```
+
+---
+
+## 5. `DskInventoryItemsSeeder` — Extra consumables
+
+**File:** `database/seeders/DskInventoryItemsSeeder.php`
+
+In addition to the original 222 items, the seeder now creates ~40 extra
+items in three groups:
+
+| Group | Count | Examples |
+|---|---|---|
+| Laboratory supplies | 14 | Lancets, EDTA capillary tubes, vacutainer needles, urine dipsticks, KOH, normal saline, spatulas, surgical spirit, cotton swabs, povidone iodine |
+| Medical consumables | 24 | Sterile gauze, bandages, adhesive tape, scalpel blades, lidocaine injection, suture material, MVA kit, implant rods, nebulisation masks, IV accessories, separate hypodermic needles (21G/23G/26G), 1 ml syringes |
+| Radiology supplies | 2 | Ultrasound gel, probe covers |
+
+These items are referenced by `DskClinicalCatalogConsumptionRecipeSeeder` and
+were added to fill the gap between what procedures consume and what was in
+stock.
+
+---
+
 ## Running the Full Sequence (Cloud / Fresh Install)
 
 ```bash
 php artisan migrate --force
 php artisan db:seed --class=DskFormularyClinicalCatalogSeeder --force
 php artisan db:seed --class=DskFormularyPackagingTemplateSeeder --force
+php artisan db:seed --class=DskClinicalCatalogConsumptionRecipeSeeder --force
 ```

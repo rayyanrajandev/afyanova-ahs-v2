@@ -245,6 +245,52 @@ class DskInventoryItemsSeeder extends Seeder
             ['code' => 'MED-ZECUF-100SYR', 'name' => 'Zecuf herbal cough syrup 100 ml', 'category' => 'pharmaceutical', 'subcategory' => 'respiratory', 'unit' => 'bottle', 'reorder_level' => 20, 'current_stock' => 100],
             ['code' => 'MED-ZNSUL-20TAB', 'name' => 'Zinc sulphate 20 mg dispersible tablet', 'category' => 'pharmaceutical', 'subcategory' => 'nutritional', 'unit' => 'tablet', 'reorder_level' => 300, 'current_stock' => 1000],
             ['code' => 'MED-ZNSUL-100SYR', 'name' => 'Zinc sulphate 20 mg/5 ml syrup 100 ml', 'category' => 'pharmaceutical', 'subcategory' => 'nutritional', 'unit' => 'bottle', 'reorder_level' => 20, 'current_stock' => 100],
+
+            // ===== ADDITIONAL LABORATORY SUPPLIES =====
+            ['code' => 'INV-LAB-LANCET-001', 'name' => 'Lancet (sterile)', 'category' => 'laboratory', 'subcategory' => 'consumables', 'unit' => 'piece', 'reorder_level' => 500, 'current_stock' => 2000],
+            ['code' => 'INV-LAB-EDTA-CAP-001', 'name' => 'EDTA capillary tube', 'category' => 'laboratory', 'subcategory' => 'consumables', 'unit' => 'piece', 'reorder_level' => 200, 'current_stock' => 1000],
+            ['code' => 'INV-LAB-VAC-NEEDLE-001', 'name' => 'Vacutainer needle', 'category' => 'laboratory', 'subcategory' => 'consumables', 'unit' => 'piece', 'reorder_level' => 300, 'current_stock' => 1500],
+            ['code' => 'INV-LAB-URINE-DIPSTICK-001', 'name' => 'Urine dipstick', 'category' => 'laboratory', 'subcategory' => 'reagents_kits', 'unit' => 'strip', 'reorder_level' => 200, 'current_stock' => 1000],
+            ['code' => 'INV-LAB-STOOL-APPLICATOR-001', 'name' => 'Wooden spatula / applicator', 'category' => 'laboratory', 'subcategory' => 'consumables', 'unit' => 'piece', 'reorder_level' => 100, 'current_stock' => 500],
+            ['code' => 'INV-LAB-NS-100-001', 'name' => 'Normal saline 100 ml (for wet mount)', 'category' => 'laboratory', 'subcategory' => 'reagents_kits', 'unit' => 'bottle', 'reorder_level' => 10, 'current_stock' => 50],
+            ['code' => 'INV-LAB-KOH-001', 'name' => 'KOH 10% solution', 'category' => 'laboratory', 'subcategory' => 'reagents_kits', 'unit' => 'bottle', 'reorder_level' => 5, 'current_stock' => 20],
+            ['code' => 'INV-LAB-LIPID-REAGENT-001', 'name' => 'Lipid panel reagent', 'category' => 'laboratory', 'subcategory' => 'reagents_kits', 'unit' => 'test', 'reorder_level' => 50, 'current_stock' => 200],
+            ['code' => 'INV-LAB-CREAT-REAGENT-001', 'name' => 'Creatinine reagent', 'category' => 'laboratory', 'subcategory' => 'reagents_kits', 'unit' => 'test', 'reorder_level' => 50, 'current_stock' => 200],
+            ['code' => 'INV-LAB-WIDAL-ANTIGEN-001', 'name' => 'Widal antigen suspension', 'category' => 'laboratory', 'subcategory' => 'reagents_kits', 'unit' => 'set', 'reorder_level' => 5, 'current_stock' => 20],
+            ['code' => 'INV-LAB-HVS-SWAB-001', 'name' => 'Sterile vaginal swab', 'category' => 'laboratory', 'subcategory' => 'consumables', 'unit' => 'piece', 'reorder_level' => 100, 'current_stock' => 500],
+            ['code' => 'INV-LAB-SPIRIT-001', 'name' => 'Surgical spirit / alcohol prep', 'category' => 'laboratory', 'subcategory' => 'consumables', 'unit' => 'bottle', 'reorder_level' => 10, 'current_stock' => 50],
+            ['code' => 'INV-LAB-COTTON-001', 'name' => 'Cotton wool swab', 'category' => 'laboratory', 'subcategory' => 'consumables', 'unit' => 'piece', 'reorder_level' => 500, 'current_stock' => 2000],
+            ['code' => 'INV-LAB-POVIDONE-IODINE-001', 'name' => 'Povidone iodine 10% solution', 'category' => 'laboratory', 'subcategory' => 'consumables', 'unit' => 'bottle', 'reorder_level' => 10, 'current_stock' => 50],
+
+            // ===== ADDITIONAL MEDICAL CONSUMABLES =====
+            ['code' => 'INV-MEDCO-GAUZE-001', 'name' => 'Sterile gauze (4x4)', 'category' => 'medical_consumable', 'subcategory' => 'wound_care', 'unit' => 'piece', 'reorder_level' => 500, 'current_stock' => 2000],
+            ['code' => 'INV-MEDCO-COTTON-001', 'name' => 'Cotton wool roll', 'category' => 'medical_consumable', 'subcategory' => 'wound_care', 'unit' => 'roll', 'reorder_level' => 50, 'current_stock' => 200],
+            ['code' => 'INV-MEDCO-TAPE-001', 'name' => 'Adhesive tape / plaster', 'category' => 'medical_consumable', 'subcategory' => 'wound_care', 'unit' => 'roll', 'reorder_level' => 30, 'current_stock' => 100],
+            ['code' => 'INV-MEDCO-BANDAGE-001', 'name' => 'Sterile bandage', 'category' => 'medical_consumable', 'subcategory' => 'wound_care', 'unit' => 'piece', 'reorder_level' => 100, 'current_stock' => 500],
+            ['code' => 'INV-MEDCO-SCALPEL-11-001', 'name' => 'Scalpel blade #11', 'category' => 'medical_consumable', 'subcategory' => 'surgical', 'unit' => 'piece', 'reorder_level' => 50, 'current_stock' => 200],
+            ['code' => 'INV-MEDCO-SCALPEL-15-001', 'name' => 'Scalpel blade #15', 'category' => 'medical_consumable', 'subcategory' => 'surgical', 'unit' => 'piece', 'reorder_level' => 50, 'current_stock' => 200],
+            ['code' => 'INV-MEDCO-LIDOCAINE-001', 'name' => 'Lidocaine 1% injection 2 ml', 'category' => 'medical_consumable', 'subcategory' => 'anaesthetics', 'unit' => 'ampoule', 'reorder_level' => 100, 'current_stock' => 500],
+            ['code' => 'INV-MEDCO-SUTURE-SILK-001', 'name' => 'Suture silk 3-0', 'category' => 'medical_consumable', 'subcategory' => 'surgical', 'unit' => 'piece', 'reorder_level' => 50, 'current_stock' => 200],
+            ['code' => 'INV-MEDCO-SUTURE-REMOVAL-001', 'name' => 'Suture removal kit', 'category' => 'medical_consumable', 'subcategory' => 'surgical', 'unit' => 'set', 'reorder_level' => 20, 'current_stock' => 100],
+            ['code' => 'INV-MEDCO-DRAIN-001', 'name' => 'Drain tube / wick', 'category' => 'medical_consumable', 'subcategory' => 'surgical', 'unit' => 'piece', 'reorder_level' => 20, 'current_stock' => 100],
+            ['code' => 'INV-MEDCO-NS-FLUSH-001', 'name' => 'Normal saline 10 ml flush syringe', 'category' => 'medical_consumable', 'subcategory' => 'iv_therapy', 'unit' => 'piece', 'reorder_level' => 100, 'current_stock' => 500],
+            ['code' => 'INV-MEDCO-TOURNIQUET-001', 'name' => 'Tourniquet', 'category' => 'medical_consumable', 'subcategory' => 'iv_therapy', 'unit' => 'piece', 'reorder_level' => 20, 'current_stock' => 100],
+            ['code' => 'INV-MEDCO-TRANSPARENT-DRESS-001', 'name' => 'Transparent dressing (for IV cannula)', 'category' => 'medical_consumable', 'subcategory' => 'wound_care', 'unit' => 'piece', 'reorder_level' => 100, 'current_stock' => 500],
+            ['code' => 'INV-MEDCO-BLOOD-GIVING-001', 'name' => 'Blood giving set', 'category' => 'medical_consumable', 'subcategory' => 'iv_therapy', 'unit' => 'piece', 'reorder_level' => 20, 'current_stock' => 100],
+            ['code' => 'INV-MEDCO-OXYGEN-MASK-001', 'name' => 'Oxygen mask', 'category' => 'medical_consumable', 'subcategory' => 'respiratory', 'unit' => 'piece', 'reorder_level' => 10, 'current_stock' => 50],
+            ['code' => 'INV-MEDCO-MVA-SYRINGE-001', 'name' => 'MVA syringe (handheld vacuum)', 'category' => 'medical_consumable', 'subcategory' => 'surgical', 'unit' => 'piece', 'reorder_level' => 5, 'current_stock' => 20],
+            ['code' => 'INV-MEDCO-MVA-CANNULA-001', 'name' => 'MVA cannula (suitable size)', 'category' => 'medical_consumable', 'subcategory' => 'surgical', 'unit' => 'piece', 'reorder_level' => 10, 'current_stock' => 50],
+            ['code' => 'INV-MEDCO-SPECULUM-001', 'name' => 'Disposable vaginal speculum', 'category' => 'medical_consumable', 'subcategory' => 'surgical', 'unit' => 'piece', 'reorder_level' => 50, 'current_stock' => 200],
+            ['code' => 'INV-MEDCO-IMPLANT-ROD-001', 'name' => 'Contraceptive implant rod (Implanon)', 'category' => 'medical_consumable', 'subcategory' => 'contraceptives', 'unit' => 'piece', 'reorder_level' => 20, 'current_stock' => 100],
+            ['code' => 'INV-MEDCO-NEB-MASK-001', 'name' => 'Nebulisation mask kit', 'category' => 'medical_consumable', 'subcategory' => 'respiratory', 'unit' => 'piece', 'reorder_level' => 20, 'current_stock' => 100],
+            ['code' => 'INV-MEDCO-NEEDLE-21G-001', 'name' => 'Hypodermic needle 21G', 'category' => 'medical_consumable', 'subcategory' => 'syringes_needles', 'unit' => 'piece', 'reorder_level' => 500, 'current_stock' => 2000],
+            ['code' => 'INV-MEDCO-NEEDLE-23G-001', 'name' => 'Hypodermic needle 23G', 'category' => 'medical_consumable', 'subcategory' => 'syringes_needles', 'unit' => 'piece', 'reorder_level' => 500, 'current_stock' => 2000],
+            ['code' => 'INV-MEDCO-NEEDLE-26G-001', 'name' => 'Hypodermic needle 26G', 'category' => 'medical_consumable', 'subcategory' => 'syringes_needles', 'unit' => 'piece', 'reorder_level' => 200, 'current_stock' => 1000],
+            ['code' => 'INV-MEDCO-SYRINGE-1ML-001', 'name' => 'Syringe 1 ml (tuberculin / insulin)', 'category' => 'medical_consumable', 'subcategory' => 'syringes_needles', 'unit' => 'piece', 'reorder_level' => 200, 'current_stock' => 1000],
+
+            // ===== RADIOLOGY SUPPLIES =====
+            ['code' => 'INV-RAD-US-GEL-001', 'name' => 'Ultrasound gel', 'category' => 'radiology', 'subcategory' => 'consumables', 'unit' => 'bottle', 'reorder_level' => 10, 'current_stock' => 50],
+            ['code' => 'INV-RAD-PROBE-COVER-001', 'name' => 'Ultrasound probe cover', 'category' => 'radiology', 'subcategory' => 'consumables', 'unit' => 'piece', 'reorder_level' => 100, 'current_stock' => 500],
         ];
 
         $count = 0;

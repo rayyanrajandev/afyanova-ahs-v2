@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             DskWarehouseSeeder::class,
             DskSuppliersSeeder::class,
             DskInventoryItemsSeeder::class,
+            DskClinicalCatalogConsumptionRecipeSeeder::class,
         ]);
     }
 }
