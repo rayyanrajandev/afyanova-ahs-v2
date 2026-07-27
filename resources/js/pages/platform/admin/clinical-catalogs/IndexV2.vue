@@ -983,7 +983,8 @@ function metadataObject(value: Record<string, unknown> | null | undefined): Reco
     return value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {};
 }
 
-function metadataStringValue(metadata: Record<string, unknown>, key: string): string {
+function metadataStringValue(metadata: Record<string, unknown> | null | undefined, key: string): string {
+    if (!metadata || typeof metadata !== 'object') return '';
     const value = metadata[key];
 
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -1881,28 +1882,6 @@ function nextPage(): void {
 }
 
 function hydrateEdit(item: Item): void {
-    const key = itemCatalogKey(item);
-    const baseMetadata = scrubMetadataForDomain(key, item.metadata ?? {});
-
-    Object.assign(editForm, createClinicalDefinitionForm(), {
-        code: item.code ?? '',
-        name: item.name ?? '',
-        departmentId: item.departmentId ?? '',
-        category: item.category ?? '',
-        unit: item.unit ?? '',
-        billingServiceCode: item.billingServiceCode ?? '',
-        description: item.description ?? '',
-        facilityTier: item.facilityTier ?? '',
-        metadataText: jsonPreview(baseMetadata),
-        genericName: item.genericName ?? '',
-        storageConditions: item.storageConditions ?? '',
-        requiresColdChain: Boolean(item.requiresColdChain),
-        isControlledSubstance: Boolean(item.isControlledSubstance),
-        controlledSubstanceSchedule: item.controlledSubstanceSchedule ?? '',
-        genericGroupCode: item.genericGroupCode ?? '',
-    });
-    applyStandardsCodesToForm(editForm, item.codes);
-    applyDomainMetadataToForm(editForm, key, item.metadata ?? {});
     statusForm.status = (item.status ?? 'active') as CatalogStatus;
     statusForm.reason = item.statusReason ?? '';
 }
@@ -2363,7 +2342,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <p class="text-xs text-muted-foreground">{{ workspaceIntroText }}</p>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
-                        <Badge v-if="canRead" variant="secondary">{{ pagination?.total ?? items.length }} {{ catalog.label.toLowerCase() }}</Badge>
+                        <Badge v-if="canRead" variant="secondary">{{ pager?.total ?? items.length }} {{ catalog.label.toLowerCase() }}</Badge>
                         <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                             <AppIcon name="plus" class="size-3.5" />
                             {{ createButtonLabel }}
