@@ -648,7 +648,14 @@ class InventoryExtendedController extends Controller
     ): JsonResponse
     {
         $userDepartmentId = $departmentScopeResolver->contextForUser($request->user())['lockedDepartment']['id'] ?? null;
-        $allowedCategoryValues = $departmentScopeResolver->allowedCategoriesForDepartmentId($userDepartmentId);
+
+        // Super admin / warehouse managers see all categories in reference data
+        // regardless of which department their staff profile is in. Department-
+        // scoped users get only the categories relevant to their role.
+        $canSelectAnyDepartment = $departmentScopeResolver->canSelectAnyDepartment($request->user());
+        $allowedCategoryValues = $canSelectAnyDepartment
+            ? null
+            : $departmentScopeResolver->allowedCategoriesForDepartmentId($userDepartmentId);
 
         // Inventory_MasterData_Alignment_Plan.md Phase 5: categoryOptions now reads
         // from inventory_categories (configurable master data) instead of the
