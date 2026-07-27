@@ -9,6 +9,7 @@ import type { ChargeableItem } from './useChargeableItems';
 export type UpdateChargeableItemPayload = {
     chargeableItemId: string;
     name?: string;
+    catalogType?: string;
     category?: string | null;
     defaultUnit?: string | null;
     status?: 'active' | 'inactive';

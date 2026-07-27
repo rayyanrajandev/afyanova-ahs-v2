@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { ChargeableItem } from '@/composables/chargeableItems/useChargeableItems';
 import { useUpdateChargeableItem } from '@/composables/chargeableItems/useUpdateChargeableItem';
@@ -39,8 +40,14 @@ const submitError = ref<string | null>(null);
 const fieldErrors = ref<Record<string, string[]>>({});
 const isCatalogLinked = computed(() => Boolean(props.item?.clinicalCatalogItemId));
 
+const CATALOG_TYPE_OPTIONS = [
+    { value: 'consultation', label: 'Consultation' },
+    { value: 'bed_day', label: 'Bed-day' },
+] as const;
+
 const form = reactive({
     name: '',
+    catalogType: 'consultation' as string,
     category: '',
     defaultUnit: '',
 });
@@ -48,6 +55,7 @@ const form = reactive({
 watch(open, (isOpen) => {
     if (!isOpen || !props.item) return;
     form.name = props.item.name;
+    form.catalogType = props.item.catalogType;
     form.category = props.item.category ?? '';
     form.defaultUnit = props.item.defaultUnit ?? '';
     submitError.value = null;
@@ -70,6 +78,7 @@ async function submit(): Promise<void> {
         const updated = await update.mutateAsync({
             chargeableItemId: props.item.id,
             ...(isCatalogLinked.value ? {} : { name: form.name.trim() }),
+            catalogType: form.catalogType,
             category: form.category.trim() || null,
             defaultUnit: form.defaultUnit.trim() || null,
         });
@@ -104,9 +113,9 @@ async function submit(): Promise<void> {
                     </Alert>
 
                     <Alert v-if="isCatalogLinked">
-                        <AlertTitle>Name comes from the clinical catalog</AlertTitle>
+                        <AlertTitle>Managed by the clinical catalog</AlertTitle>
                         <AlertDescription>
-                            This item is linked to a clinical catalog entry, so its name is always shown from there. Edit it on the Clinical Catalogs page instead.
+                            This item is linked to a clinical catalog entry, so its name and catalog type are always shown from there. Edit them on the Clinical Catalogs page instead.
                         </AlertDescription>
                     </Alert>
 
@@ -116,6 +125,20 @@ async function submit(): Promise<void> {
                             <Label for="chargeable-item-edit-name">Name</Label>
                             <Input id="chargeable-item-edit-name" v-model="form.name" :disabled="isCatalogLinked" />
                             <p v-if="fieldError('name')" class="text-xs text-destructive">{{ fieldError('name') }}</p>
+                        </div>
+                        <div class="grid gap-1.5">
+                            <Label for="chargeable-item-edit-catalog-type">Catalog type</Label>
+                            <Select v-model="form.catalogType" :disabled="isCatalogLinked">
+                                <SelectTrigger id="chargeable-item-edit-catalog-type" class="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem v-for="option in CATALOG_TYPE_OPTIONS" :key="option.value" :value="option.value">
+                                        {{ option.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p v-if="fieldError('catalogType')" class="text-xs text-destructive">{{ fieldError('catalogType') }}</p>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div class="grid gap-1.5">

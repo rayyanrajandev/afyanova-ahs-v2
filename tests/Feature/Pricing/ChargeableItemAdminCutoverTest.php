@@ -322,3 +322,149 @@ it('round-trips chargeable_item_id through consultation-mapping create and updat
         ->assertOk()
         ->assertJsonPath('data.chargeable_item_id', $secondChargeableItemId);
 });
+
+it('updates catalog type on a standalone item with no downstream references', function (): void {
+    $actor = makeChargeableItemActor(['billing.chargeable-items.manage', 'billing.chargeable-items.read']);
+
+    $itemId = $this->actingAs($actor)
+        ->postJson('/api/v1/chargeable-items', [
+            'catalogType' => 'consultation',
+            'chargeModel' => 'flat',
+            'code' => 'CONSULT-UPD',
+            'name' => 'Consultation to be Updated',
+            'currencyCode' => 'TZS',
+            'unitPrice' => 10000,
+        ])
+        ->assertCreated()
+        ->json('data.id');
+
+    $this->actingAs($actor)
+        ->patchJson("/api/v1/chargeable-items/{$itemId}", [
+            'catalogType' => 'bed_day',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.catalogType', 'bed_day');
+
+    expect(ChargeableItemModel::query()->find($itemId)->catalog_type)->toBe('bed_day');
+});
+
+it('blocks catalog type change on a catalog-linked item', function (): void {
+    $actor = makeChargeableItemActor(['billing.chargeable-items.manage']);
+    $catalogItem = makeChargeableItemLabCatalogItem();
+
+    $itemId = $this->actingAs($actor)
+        ->postJson('/api/v1/chargeable-items', [
+            'catalogType' => 'lab_test',
+            'chargeModel' => 'flat',
+            'clinicalCatalogItemId' => $catalogItem->id,
+            'currencyCode' => 'TZS',
+            'unitPrice' => 8000,
+        ])
+        ->assertCreated()
+        ->json('data.id');
+
+    $this->actingAs($actor)
+        ->patchJson("/api/v1/chargeable-items/{$itemId}", [
+            'catalogType' => 'bed_day',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.catalogType.0', 'Catalog type follows the linked clinical catalog item and cannot be changed here.');
+});
+
+it('blocks catalog type change when the item is referenced by a facility resource', function (): void {
+    $actor = makeChargeableItemActor([
+        'billing.chargeable-items.manage',
+        'platform.resources.manage-ward-beds',
+    ]);
+
+    $itemId = $this->actingAs($actor)
+        ->postJson('/api/v1/chargeable-items', [
+            'catalogType' => 'bed_day',
+            'chargeModel' => 'per_day',
+            'code' => 'BED-REF',
+            'name' => 'Referenced Bed-Day',
+            'currencyCode' => 'TZS',
+            'unitPrice' => 25000,
+        ])
+        ->assertCreated()
+        ->json('data.id');
+
+    $this->actingAs($actor)
+        ->postJson('/api/v1/platform/admin/ward-beds', [
+            'code' => 'BED-REF-001',
+            'name' => 'Ward B Bed 1',
+            'wardName' => 'WARD-B',
+            'bedNumber' => 'B-01',
+            'chargeableItemId' => $itemId,
+        ])
+        ->assertCreated();
+
+    $this->actingAs($actor)
+        ->patchJson("/api/v1/chargeable-items/{$itemId}", [
+            'catalogType' => 'consultation',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.catalogType.0', 'Catalog type cannot be changed once this item is priced onto a bed/room, order, or contract override.');
+});
+
+it('persists defaultUnit and statusReason updates (snake_case mapping fix)', function (): void {
+    $actor = makeChargeableItemActor(['billing.chargeable-items.manage', 'billing.chargeable-items.read']);
+
+    $itemId = $this->actingAs($actor)
+        ->postJson('/api/v1/chargeable-items', [
+            'catalogType' => 'consultation',
+            'chargeModel' => 'flat',
+            'code' => 'CONSULT-UNIT',
+            'name' => 'Unit Test Consultation',
+            'currencyCode' => 'TZS',
+            'unitPrice' => 5000,
+        ])
+        ->assertCreated()
+        ->json('data.id');
+
+    $this->actingAs($actor)
+        ->patchJson("/api/v1/chargeable-items/{$itemId}", [
+            'defaultUnit' => 'session',
+            'statusReason' => 'Corrected from visit to session',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.defaultUnit', 'session')
+        ->assertJsonPath('data.statusReason', 'Corrected from visit to session');
+
+    $item = ChargeableItemModel::query()->find($itemId);
+    expect($item->default_unit)->toBe('session');
+    expect($item->status_reason)->toBe('Corrected from visit to session');
+});
+
+it('updates a standalone item name and category while leaving other fields unchanged', function (): void {
+    $actor = makeChargeableItemActor(['billing.chargeable-items.manage', 'billing.chargeable-items.read']);
+
+    $itemId = $this->actingAs($actor)
+        ->postJson('/api/v1/chargeable-items', [
+            'catalogType' => 'bed_day',
+            'chargeModel' => 'per_day',
+            'code' => 'BED-UPD',
+            'name' => 'Original Name',
+            'category' => 'General',
+            'defaultUnit' => 'day',
+            'currencyCode' => 'TZS',
+            'unitPrice' => 20000,
+        ])
+        ->assertCreated()
+        ->json('data.id');
+
+    $this->actingAs($actor)
+        ->patchJson("/api/v1/chargeable-items/{$itemId}", [
+            'name' => 'Updated Name',
+            'category' => 'ICU',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.name', 'Updated Name')
+        ->assertJsonPath('data.category', 'ICU');
+
+    $item = ChargeableItemModel::query()->find($itemId);
+    expect($item->name)->toBe('Updated Name');
+    expect($item->category)->toBe('ICU');
+    expect($item->catalog_type)->toBe('bed_day');
+    expect($item->default_unit)->toBe('day');
+});

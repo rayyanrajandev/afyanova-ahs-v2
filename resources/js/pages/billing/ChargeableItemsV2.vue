@@ -256,6 +256,12 @@ function catalogTypeToKey(catalogType: string): string | null {
 }
 
 async function openEditSheet(item: ChargeableItem): Promise<void> {
+    // Close the Details sheet first — both edit sheets render at the same
+    // z-index, so leaving Details open made the standalone edit sheet paint
+    // underneath it (only the clinical-catalog sheet happened to render on
+    // top, purely because it's declared later in the template).
+    detailsSheetOpen.value = false;
+
     if (item.clinicalCatalogItemId) {
         const key = catalogTypeToKey(item.catalogType);
         if (!key) return;

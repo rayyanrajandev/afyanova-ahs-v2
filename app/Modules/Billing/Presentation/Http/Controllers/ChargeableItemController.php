@@ -13,6 +13,7 @@ use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ChargeableItemController
 {
@@ -104,7 +105,53 @@ class ChargeableItemController
             return $this->notFoundResponse('Chargeable item not found');
         }
 
-        $item->update($request->validated());
+        $validated = $request->validated();
+
+        if (array_key_exists('catalogType', $validated) && $validated['catalogType'] !== $item->catalog_type) {
+            if ($item->clinical_catalog_item_id !== null) {
+                return $this->unprocessableResponse(
+                    'Catalog type follows the linked clinical catalog item and cannot be changed here.',
+                    errors: ['catalogType' => ['Catalog type follows the linked clinical catalog item and cannot be changed here.']],
+                );
+            }
+
+            if ($this->isReferencedElsewhere($chargeableItemId)) {
+                return $this->unprocessableResponse(
+                    'Catalog type cannot be changed once this item is priced onto a bed/room, order, or contract override.',
+                    errors: ['catalogType' => ['Catalog type cannot be changed once this item is priced onto a bed/room, order, or contract override.']],
+                );
+            }
+        }
+
+        // $request->validated() uses the camelCase field names from
+        // UpdateChargeableItemRequest — passing it straight to
+        // Eloquent::update() silently dropped defaultUnit/statusReason
+        // (model's $fillable is snake_case: default_unit/status_reason),
+        // so those two "saves" were previously a no-op. Explicit mapping
+        // here matches how store()/findOrCreateChargeableItem() already
+        // does it, only including keys actually present (this request's
+        // fields are all "sometimes" — a partial update).
+        $updateData = [];
+        if (array_key_exists('name', $validated)) {
+            $updateData['name'] = $validated['name'];
+        }
+        if (array_key_exists('catalogType', $validated)) {
+            $updateData['catalog_type'] = $validated['catalogType'];
+        }
+        if (array_key_exists('category', $validated)) {
+            $updateData['category'] = $validated['category'];
+        }
+        if (array_key_exists('defaultUnit', $validated)) {
+            $updateData['default_unit'] = $validated['defaultUnit'];
+        }
+        if (array_key_exists('status', $validated)) {
+            $updateData['status'] = $validated['status'];
+        }
+        if (array_key_exists('statusReason', $validated)) {
+            $updateData['status_reason'] = $validated['statusReason'];
+        }
+
+        $item->update($updateData);
         $item->load(['priceBookEntries', 'clinicalCatalogItem']);
 
         return $this->successResponse($this->transform($item));
@@ -199,6 +246,36 @@ class ChargeableItemController
     /**
      * @param  array<string, mixed>  $validated
      */
+    /**
+     * Catalog type is safe to correct on a standalone item only while
+     * nothing downstream has actually priced against it yet — otherwise
+     * changing it would silently reinterpret pricing already tied to
+     * facility resources, clinical orders, consultation routing, or a
+     * negotiated payer contract override.
+     */
+    private function isReferencedElsewhere(string $chargeableItemId): bool
+    {
+        $directReferences = [
+            'facility_resources' => 'chargeable_item_id',
+            'laboratory_orders' => 'chargeable_item_id',
+            'radiology_orders' => 'chargeable_item_id',
+            'theatre_procedures' => 'chargeable_item_id',
+            'clinical_procedure_orders' => 'chargeable_item_id',
+            'pharmacy_orders' => 'chargeable_item_id',
+            'consultation_mappings' => 'chargeable_item_id',
+            'billing_payer_contract_price_overrides' => 'chargeable_item_id',
+            'appointments' => 'consultation_chargeable_item_id',
+        ];
+
+        foreach ($directReferences as $table => $column) {
+            if (DB::table($table)->where($column, $chargeableItemId)->exists()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function findOrCreateChargeableItem(
         array $validated,
         ?ClinicalCatalogItemModel $clinicalCatalogItem,
