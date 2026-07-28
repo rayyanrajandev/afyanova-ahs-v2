@@ -2,6 +2,7 @@
 
 namespace App\Modules\ServiceRequest\Application\UseCases;
 
+use App\Modules\ClinicalProcedure\Application\Jobs\FulfillClinicalProcedureServiceRequestItemJob;
 use App\Modules\Laboratory\Application\Jobs\FulfillLaboratoryServiceRequestItemJob;
 use App\Modules\Pharmacy\Application\Jobs\FulfillPharmacyServiceRequestItemJob;
 use App\Modules\Radiology\Application\Jobs\FulfillRadiologyServiceRequestItemJob;
@@ -15,6 +16,7 @@ class FulfillServiceRequestItemsUseCase
         'laboratory' => FulfillLaboratoryServiceRequestItemJob::class,
         'pharmacy' => FulfillPharmacyServiceRequestItemJob::class,
         'radiology' => FulfillRadiologyServiceRequestItemJob::class,
+        'clinical_procedure' => FulfillClinicalProcedureServiceRequestItemJob::class,
     ];
 
     public function __construct(

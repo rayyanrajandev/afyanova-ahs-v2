@@ -16,6 +16,7 @@ class ClinicalProcedureOrderModel extends Model
     public $incrementing = false;
 
     protected $fillable = [
+        'service_request_item_id',
         'order_number',
         'tenant_id',
         'facility_id',

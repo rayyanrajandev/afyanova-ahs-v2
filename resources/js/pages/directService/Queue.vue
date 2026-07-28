@@ -176,7 +176,7 @@ const statusDialogAction = ref<DirectServiceStatusTarget | null>(null);
 function needsManualCreate(item: DirectServiceRequest): boolean {
     const items = item.items;
     if (!items || items.length === 0) return true;
-    const hasFulfillment = item.serviceType && ['laboratory', 'pharmacy', 'radiology'].includes(item.serviceType);
+    const hasFulfillment = item.serviceType && ['laboratory', 'pharmacy', 'radiology', 'clinical_procedure'].includes(item.serviceType);
     const needsManual = items.some((i) => i.status === 'failed' || i.status === 'pending') || !hasFulfillment;
     return needsManual;
 }
