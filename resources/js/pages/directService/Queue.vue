@@ -135,6 +135,7 @@ const serviceWorkspaceRoutes: Record<string, string> = {
     pharmacy: '/pharmacy-orders',
     radiology: '/radiology-orders',
     theatre_procedure: '/theatre-procedures',
+    clinical_procedure: '/clinical-procedure-orders',
 };
 
 /** Matches ServiceRequestStatus::allowedForwardTransitions() exactly. */
@@ -176,7 +177,8 @@ function needsManualCreate(item: DirectServiceRequest): boolean {
     const items = item.items;
     if (!items || items.length === 0) return true;
     const hasFulfillment = item.serviceType && ['laboratory', 'pharmacy', 'radiology'].includes(item.serviceType);
-    return items.some((i) => i.status === 'failed' || i.status === 'pending') || !hasFulfillment;
+    const needsManual = items.some((i) => i.status === 'failed' || i.status === 'pending') || !hasFulfillment;
+    return needsManual;
 }
 
 function serviceWorkspaceHref(item: DirectServiceRequest): string | null {

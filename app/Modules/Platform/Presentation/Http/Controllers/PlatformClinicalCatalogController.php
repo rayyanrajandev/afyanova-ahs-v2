@@ -74,6 +74,7 @@ class PlatformClinicalCatalogController extends Controller
                     'pharmacy' => 'formulary_item',
                     'radiology' => 'radiology_procedure',
                     'theatre_procedure' => 'theatre_procedure',
+                    'clinical_procedure' => 'clinical_procedure',
                     default => null,
                 };
                 if ($catalogType) {

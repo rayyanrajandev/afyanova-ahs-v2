@@ -60,10 +60,11 @@ onMounted(async () => {
 
 function deriveServiceType(label: string): DirectServiceType {
     const h = label.toLowerCase();
+    if (/clinical.?procedur|treatment.?room|dressing|minor.?procedur|clinic/.test(h)) return 'clinical_procedure';
     if (/lab|laboratory|pathology|sample/.test(h)) return 'laboratory';
     if (/pharmacy|dispensary|dispensing|medicine/.test(h)) return 'pharmacy';
     if (/radiology|imaging|x-?ray|ultrasound|scan/.test(h)) return 'radiology';
-    if (/theatre|procedure|surgery|surgical|operating/.test(h)) return 'theatre_procedure';
+    if (/theatre|surgery|surgical|operating/i.test(h)) return 'theatre_procedure';
     return 'laboratory';
 }
 

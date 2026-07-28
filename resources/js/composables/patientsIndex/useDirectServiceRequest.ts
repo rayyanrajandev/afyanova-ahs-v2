@@ -2,7 +2,7 @@ import { useMutation, useQueryClient, type UseMutationReturnType } from '@tansta
 import { apiPost } from '@/lib/apiClient';
 import type { ServiceRequestItemInput } from '@/types/serviceRequestItem';
 
-export type DirectServiceType = 'laboratory' | 'pharmacy' | 'radiology' | 'theatre_procedure';
+export type DirectServiceType = 'laboratory' | 'pharmacy' | 'radiology' | 'theatre_procedure' | 'clinical_procedure';
 
 export type DirectServiceRequestVariables = {
     patientId: string;
