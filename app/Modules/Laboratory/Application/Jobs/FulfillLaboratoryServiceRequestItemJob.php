@@ -21,6 +21,7 @@ class FulfillLaboratoryServiceRequestItemJob implements ShouldQueue
         private readonly int $actorId,
         private readonly string $serviceRequestId,
         private readonly string $patientId,
+        private readonly string $priority = 'routine',
     ) {}
 
     public function handle(
@@ -52,6 +53,7 @@ class FulfillLaboratoryServiceRequestItemJob implements ShouldQueue
                     'test_name' => $itemName,
                     'test_code' => $itemCode,
                     'quantity' => $this->quantity,
+                    'priority' => $this->priority,
                     'clinical_notes' => $item['clinical_indication'] ?? null,
                 ],
                 actorId: $this->actorId,

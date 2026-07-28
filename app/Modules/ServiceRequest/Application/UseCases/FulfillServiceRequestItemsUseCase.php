@@ -32,6 +32,8 @@ class FulfillServiceRequestItemsUseCase
             return;
         }
 
+        $priority = (string) ($sr['priority'] ?? 'routine');
+
         foreach ($items as $item) {
             if (($item['status'] ?? '') !== ServiceRequestItemStatus::PENDING->value) {
                 continue;
@@ -70,6 +72,7 @@ class FulfillServiceRequestItemsUseCase
                 actorId: $actorId,
                 serviceRequestId: $serviceRequestId,
                 patientId: $patientId,
+                priority: $priority,
             ));
         }
     }

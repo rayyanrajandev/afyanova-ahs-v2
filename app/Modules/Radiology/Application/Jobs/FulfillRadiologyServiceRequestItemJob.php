@@ -21,6 +21,7 @@ class FulfillRadiologyServiceRequestItemJob implements ShouldQueue
         private readonly int $actorId,
         private readonly string $serviceRequestId,
         private readonly string $patientId,
+        private readonly string $priority = 'routine',
     ) {}
 
     public function handle(
