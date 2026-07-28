@@ -142,10 +142,7 @@ type Transition = { target: DirectServiceStatusTarget; label: string; destructiv
 function availableTransitions(status: string | null): Transition[] {
     switch (status) {
         case 'pending':
-            return [
-                { target: 'in_progress', label: 'Accept', destructive: false },
-                { target: 'cancelled', label: 'Cancel', destructive: true },
-            ];
+            return [];
         case 'in_progress':
             return [
                 { target: 'completed', label: 'Close', destructive: false },
@@ -168,6 +165,19 @@ async function invalidateQueueAndCounts(): Promise<void> {
 const statusDialogOpen = ref(false);
 const statusDialogTarget = ref<DirectServiceStatusTargetRequest | null>(null);
 const statusDialogAction = ref<DirectServiceStatusTarget | null>(null);
+
+/**
+ * Items that auto-fulfilled successfully need no manual Create-order action.
+ * Show the link only when a manual order is still needed:
+ *   1. an item failed (retry), or
+ *   2. the service type has no fulfillment mapping (theatre, clinical procedure).
+ */
+function needsManualCreate(item: DirectServiceRequest): boolean {
+    const items = item.items;
+    if (!items || items.length === 0) return true;
+    const hasFulfillment = item.serviceType && ['laboratory', 'pharmacy', 'radiology'].includes(item.serviceType);
+    return items.some((i) => i.status === 'failed' || i.status === 'pending') || !hasFulfillment;
+}
 
 function serviceWorkspaceHref(item: DirectServiceRequest): string | null {
     const base = serviceWorkspaceRoutes[item.serviceType ?? ''];
@@ -330,11 +340,11 @@ const { scrollContainerHeight } = useStickyScrollContainer();
 
                             <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
                                 <a
-                                    v-if="item.status === 'in_progress' && serviceWorkspaceHref(item)"
+                                    v-if="item.status === 'in_progress' && serviceWorkspaceHref(item) && needsManualCreate(item)"
                                     :href="serviceWorkspaceHref(item)"
                                     class="inline-flex h-7 items-center rounded-md border px-2 text-xs font-medium text-primary hover:bg-muted"
                                 >
-                                    Create order
+                                    {{ item.items?.some((i) => i.status === 'failed') ? 'Retry' : 'Create order' }}
                                     <AppIcon name="chevron-right" class="ml-0.5 size-3.5" />
                                 </a>
                                 <template v-if="canUpdateStatus">
