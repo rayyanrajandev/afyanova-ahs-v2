@@ -1,4 +1,4 @@
-import { useMutation, type UseMutationReturnType } from '@tanstack/vue-query';
+import { useMutation, useQueryClient, type UseMutationReturnType } from '@tanstack/vue-query';
 import { apiPost } from '@/lib/apiClient';
 
 /**
@@ -34,6 +34,8 @@ export function useDirectServiceRequest(): UseMutationReturnType<
     DirectServiceRequestVariables,
     unknown
 > {
+    const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: async (variables: DirectServiceRequestVariables): Promise<DirectServiceRequestResult> => {
             const response = await apiPost<DirectServiceRequestResponse>('/service-requests', {
@@ -46,6 +48,10 @@ export function useDirectServiceRequest(): UseMutationReturnType<
                 },
             });
             return response.data;
+        },
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['direct-service-requests'] });
+            void queryClient.invalidateQueries({ queryKey: ['direct-service-status-counts'] });
         },
     });
 }
