@@ -61,9 +61,26 @@ class PlatformClinicalCatalogController extends Controller
     public function byDepartment(string $departmentId, Request $request): JsonResponse
     {
         $query = ClinicalCatalogItemModel::query()
-            ->where('department_id', $departmentId)
             ->where('status', 'active')
             ->orderBy('name');
+
+        $query->where(function ($q) use ($departmentId, $request) {
+            $q->where('department_id', $departmentId);
+
+            $serviceType = $request->query('serviceType');
+            if ($serviceType) {
+                $catalogType = match ($serviceType) {
+                    'laboratory' => 'lab_test',
+                    'pharmacy' => 'formulary_item',
+                    'radiology' => 'radiology_procedure',
+                    'theatre_procedure' => 'theatre_procedure',
+                    default => null,
+                };
+                if ($catalogType) {
+                    $q->orWhere('catalog_type', $catalogType);
+                }
+            }
+        });
 
         $items = $query->get(['id', 'code', 'name', 'catalog_type', 'category', 'unit', 'status']);
 

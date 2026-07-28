@@ -8,7 +8,7 @@ type DepartmentOptionsResponse = { data: SearchableSelectOption[] };
 /**
  * GET /service-requests/department-options (ListWalkInDepartmentOptionsUseCase)
  * — already SearchableSelectOption-shaped server-side, same endpoint
- * PatientDirectServiceDialog.vue's intake picker uses (B4). Shared here
+ * PatientDirectServiceSheet.vue's intake picker uses (B4). Shared here
  * rather than duplicated so the queue page's department filter and
  * Reception's intake picker never drift from the same department list.
  * `serviceType` accepts a plain string (static, e.g. the queue page's
@@ -18,7 +18,7 @@ type DepartmentOptionsResponse = { data: SearchableSelectOption[] };
 export function useDirectServiceDepartmentOptions(
     serviceType?: string | Ref<string>,
 ): UseQueryReturnType<SearchableSelectOption[], Error> {
-    const resolvedServiceType = computed(() => (typeof serviceType === 'string' ? serviceType : serviceType?.value) || null);
+    const resolvedServiceType = computed(() => (typeof serviceType === 'string' ? serviceType : serviceType?.value) || 'all');
 
     return useQuery({
         queryKey: ['direct-service-department-options', resolvedServiceType],

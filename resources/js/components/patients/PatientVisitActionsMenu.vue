@@ -16,7 +16,7 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePatientSummary } from '@/composables/patientSummary/usePatientSummary';
 import { type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { notifyError, notifySuccess } from '@/lib/notify';
-import PatientDirectServiceDialog from './PatientDirectServiceDialog.vue';
+import PatientDirectServiceSheet from './PatientDirectServiceSheet.vue';
 
 /**
  * Phase 5 of reports/patients-index-modernization-plan.md — "Visit
@@ -29,7 +29,7 @@ import PatientDirectServiceDialog from './PatientDirectServiceDialog.vue';
  * appointment to the next queue stage in the same atomic write as
  * check-in itself; there is no "complete a form, then the queue updates"
  * step anywhere in the backend this should imitate). Direct-service
- * creation gets its own small dialog (PatientDirectServiceDialog.vue) —
+ * creation gets its own small sheet (PatientDirectServiceSheet.vue) —
  * it's a genuinely different, non-queue action that needs real fields.
  * Billing is a plain navigation link, same as ShowV2.vue's Billing tab
  * uses (patientChartModuleHref). "Chart" is deliberately not repeated
@@ -141,7 +141,7 @@ async function startVisit(arrivalMode: WalkInArrivalMode): Promise<void> {
         </DropdownMenuContent>
     </DropdownMenu>
 
-    <PatientDirectServiceDialog
+    <PatientDirectServiceSheet
         v-model:open="directServiceDialogOpen"
         :patient="patient"
         @created="(requestNumber) => notifySuccess(`Direct service request ${requestNumber ?? ''} created.`)"

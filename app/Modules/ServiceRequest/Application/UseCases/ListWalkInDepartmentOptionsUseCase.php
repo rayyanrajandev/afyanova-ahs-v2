@@ -63,7 +63,7 @@ class ListWalkInDepartmentOptionsUseCase
     private function matchesServiceDesk(array $department, ?string $serviceType): bool
     {
         $serviceType = trim((string) $serviceType);
-        if ($serviceType === '') {
+        if ($serviceType === '' || $serviceType === 'all') {
             return true;
         }
 

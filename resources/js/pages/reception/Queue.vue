@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReceptionQueueList from '@/components/reception/ReceptionQueueList.vue';
 import ScheduledArrivalsList from '@/components/reception/ScheduledArrivalsList.vue';
 import AppointmentCreateSheet from '@/components/appointments/AppointmentCreateSheet.vue';
-import PatientDirectServiceDialog from '@/components/patients/PatientDirectServiceDialog.vue';
+import PatientDirectServiceSheet from '@/components/patients/PatientDirectServiceSheet.vue';
 import PatientQuickSearchField from '@/components/patients/PatientQuickSearchField.vue';
 import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
 import { type AppointmentListItem } from '@/composables/appointmentsIndex/useAppointmentList';
@@ -91,7 +91,7 @@ import { type BreadcrumbItem } from '@/types';
  * Not a third arrival-mode option — Direct Service isn't an arrival mode
  * at all (it creates a ServiceRequest, not an appointment, and never
  * touches triage), so it's its own action, reusing the same
- * PatientDirectServiceDialog.vue/useDirectServiceRequest.ts
+ * PatientDirectServiceSheet.vue/useDirectServiceRequest.ts
  * PatientVisitActionsMenu.vue already established.
  *
  * Deliberately stays front-desk-scoped: check-in, walk-in registration,
@@ -134,7 +134,7 @@ import { type BreadcrumbItem } from '@/types';
  * needs: Walk-in/Emergency show a reason field and check in immediately
  * (useWalkInCheckIn, unchanged); Direct service/Schedule appointment skip
  * straight to a "Continue" button into their existing dedicated
- * dialog/sheet (PatientDirectServiceDialog.vue, AppointmentCreateSheet.vue)
+ * dialog/sheet (PatientDirectServiceSheet.vue, AppointmentCreateSheet.vue)
  * rather than duplicating their fields/validation inline —
  * AppointmentCreateSheet.vue's `initialPatientId` prop carries the
  * already-selected patient through so that step never forces a second
@@ -654,7 +654,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
             </Tabs>
         </div>
 
-        <PatientDirectServiceDialog
+        <PatientDirectServiceSheet
             v-model:open="directServiceDialogOpen"
             :patient="selectedPatient"
             @created="onDirectServiceCreated"

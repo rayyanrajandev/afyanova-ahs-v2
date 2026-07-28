@@ -18,16 +18,18 @@ type DepartmentCatalogResponse = {
 
 export function useServiceRequestItemCatalog(
     departmentId: Ref<string | null>,
+    serviceType?: Ref<string>,
 ): UseQueryReturnType<DepartmentCatalogItem[], Error> {
     const resolvedId = computed(() => departmentId.value);
+    const resolvedType = computed(() => serviceType?.value ?? null);
 
     return useQuery({
-        queryKey: ['department-catalog-items', resolvedId],
+        queryKey: ['department-catalog-items', resolvedId, resolvedType],
         queryFn: async () => {
             if (!resolvedId.value) return [];
             const response = await apiGet<DepartmentCatalogResponse>(
                 `/platform/catalog/by-department/${resolvedId.value}`,
-                { status: 'active' },
+                { serviceType: resolvedType.value },
             );
             return response.data;
         },

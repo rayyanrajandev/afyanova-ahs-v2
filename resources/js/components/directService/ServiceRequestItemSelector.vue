@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+import { computed, ref } from 'vue';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useServiceRequestItemCatalog, type DepartmentCatalogItem } from '@/composables/directService/useServiceRequestItemCatalog';
 
@@ -18,6 +17,7 @@ export type SelectedCatalogItem = {
 
 const props = defineProps<{
     departmentId: string | null;
+    serviceType: string;
     modelValue: SelectedCatalogItem[];
 }>();
 
@@ -26,59 +26,60 @@ const emit = defineEmits<{
 }>();
 
 const departmentIdRef = computed(() => props.departmentId);
-const { data: catalogItems, isPending } = useServiceRequestItemCatalog(departmentIdRef);
+const serviceTypeRef = computed(() => props.serviceType);
+const { data: catalogItems, isPending } = useServiceRequestItemCatalog(departmentIdRef, serviceTypeRef);
 
-const selectedIds = computed(() => new Set(props.modelValue.map((i) => i.catalogItemId)));
+const searchQuery = ref('');
+const addedIds = computed(() => new Set(props.modelValue.map((i) => i.catalogItemId)));
 
-const searchQuery = defineModel<string>('search', { default: '' });
-
-const filteredItems = computed(() => {
+const searchResults = computed(() => {
     const items = catalogItems.value ?? [];
-    if (!searchQuery.value) return items;
+    if (!searchQuery.value) return [];
     const q = searchQuery.value.toLowerCase();
     return items.filter(
         (item) =>
             (item.name ?? '').toLowerCase().includes(q) ||
             (item.code ?? '').toLowerCase().includes(q),
-    );
+    ).slice(0, 20);
 });
 
-function toggleItem(item: DepartmentCatalogItem): void {
+function addItem(item: DepartmentCatalogItem): void {
+    if (addedIds.value.has(item.id)) return;
     const current = [...props.modelValue];
-    const idx = current.findIndex((i) => i.catalogItemId === item.id);
-
-    if (idx >= 0) {
-        current.splice(idx, 1);
-    } else {
-        current.push({
-            catalogItemId: item.id,
-            itemName: item.name ?? '',
-            itemCode: item.code,
-            serviceType: mapCatalogTypeToServiceType(item.catalogType),
-            quantity: 1,
-        });
-    }
-
+    current.push({
+        catalogItemId: item.id,
+        itemName: item.name ?? '',
+        itemCode: item.code,
+        serviceType: mapCatalogTypeToServiceType(item.catalogType),
+        quantity: 1,
+    });
     emit('update:modelValue', current);
+    searchQuery.value = '';
+}
+
+function removeItem(catalogItemId: string): void {
+    emit('update:modelValue', props.modelValue.filter((i) => i.catalogItemId !== catalogItemId));
 }
 
 function updateQuantity(catalogItemId: string, quantity: number): void {
-    const current = [...props.modelValue];
-    const idx = current.findIndex((i) => i.catalogItemId === catalogItemId);
-    if (idx >= 0) {
-        current[idx] = { ...current[idx], quantity: Math.max(1, Math.min(999, quantity)) };
-        emit('update:modelValue', current);
-    }
+    const current = props.modelValue.map((item) =>
+        item.catalogItemId === catalogItemId
+            ? { ...item, quantity: Math.max(1, Math.min(999, quantity || 1)) }
+            : item,
+    );
+    emit('update:modelValue', current);
 }
 
 function mapCatalogTypeToServiceType(catalogType: string | null): string {
     switch (catalogType) {
         case 'lab_test':
             return 'laboratory';
-        case 'medicine':
+        case 'formulary_item':
             return 'pharmacy';
         case 'radiology_procedure':
             return 'radiology';
+        case 'theatre_procedure':
+            return 'theatre_procedure';
         default:
             return catalogType ?? '';
     }
@@ -86,59 +87,92 @@ function mapCatalogTypeToServiceType(catalogType: string | null): string {
 </script>
 
 <template>
-    <div class="space-y-2">
+    <div class="space-y-3">
         <Label>Items</Label>
 
-        <Input
-            v-model="searchQuery"
-            type="search"
-            placeholder="Search items..."
-            class="h-8 text-xs"
-        />
+        <div class="relative">
+            <Input
+                v-model="searchQuery"
+                type="search"
+                placeholder="Search items by name or code..."
+                class="h-9"
+            />
 
-        <div v-if="isPending" class="space-y-1.5">
-            <Skeleton v-for="n in 3" :key="n" class="h-7 w-full" />
-        </div>
-
-        <div v-else-if="filteredItems.length === 0" class="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-            {{ catalogItems?.length ? 'No items match your search.' : 'Select a department to see available items.' }}
-        </div>
-
-        <div v-else class="max-h-48 space-y-1 overflow-y-auto rounded-md border p-1.5">
             <div
-                v-for="item in filteredItems"
-                :key="item.id"
-                class="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-muted/50"
+                v-if="searchQuery && !isPending"
+                class="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
             >
-                <Checkbox
-                    :id="`item-${item.id}`"
-                    :checked="selectedIds.has(item.id)"
-                    @update:checked="toggleItem(item)"
-                />
-                <Label :for="`item-${item.id}`" class="flex flex-1 items-center gap-2 text-xs font-normal">
-                    <span class="font-medium">{{ item.name }}</span>
-                    <span v-if="item.code" class="font-mono text-[10px] text-muted-foreground">{{ item.code }}</span>
-                </Label>
-                <div v-if="selectedIds.has(item.id)" class="flex items-center gap-1">
-                    <Input
-                        type="number"
-                        :value="modelValue.find((i) => i.catalogItemId === item.id)?.quantity ?? 1"
-                        min="1"
-                        max="999"
-                        class="h-6 w-14 text-xs"
-                        @update:model-value="(v: string) => updateQuantity(item.id, parseInt(v) || 1)"
-                    />
+                <div v-if="searchResults.length === 0" class="px-2 py-3 text-center text-xs text-muted-foreground">
+                    No items match your search.
                 </div>
+                <button
+                    v-for="item in searchResults"
+                    :key="item.id"
+                    type="button"
+                    :disabled="addedIds.has(item.id)"
+                    class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    @click="addItem(item)"
+                >
+                    <span class="flex-1 truncate font-medium">{{ item.name }}</span>
+                    <span v-if="item.code" class="font-mono text-[10px] text-muted-foreground">{{ item.code }}</span>
+                    <span class="shrink-0 text-primary">
+                        {{ addedIds.has(item.id) ? 'Added' : '+ Add' }}
+                    </span>
+                </button>
             </div>
         </div>
 
-        <div v-if="modelValue.length > 0" class="rounded-md bg-muted/30 p-2">
-            <p class="text-[10px] font-medium text-muted-foreground">{{ modelValue.length }} item(s) selected</p>
-            <ul class="mt-1 space-y-0.5">
-                <li v-for="sel in modelValue" :key="sel.catalogItemId" class="flex items-center justify-between text-xs">
-                    <span>{{ sel.itemName }} <span class="text-muted-foreground">(x{{ sel.quantity }})</span></span>
-                </li>
-            </ul>
+        <div v-if="isPending" class="space-y-1.5">
+            <Skeleton v-for="n in 2" :key="n" class="h-8 w-full" />
+        </div>
+
+        <div
+            v-else-if="!searchQuery && (!catalogItems || catalogItems.length === 0)"
+            class="rounded-md border border-dashed p-3 text-xs text-muted-foreground"
+        >
+            Select a department to see available items.
+        </div>
+
+        <div v-if="modelValue.length > 0" class="overflow-hidden rounded-md border">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="border-b bg-muted/50">
+                        <th class="px-2 py-1.5 text-left font-medium text-muted-foreground">Item</th>
+                        <th class="px-2 py-1.5 text-left font-medium text-muted-foreground">Code</th>
+                        <th class="w-20 px-2 py-1.5 text-left font-medium text-muted-foreground">Qty</th>
+                        <th class="w-10 px-2 py-1.5" />
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="sel in modelValue" :key="sel.catalogItemId" class="border-b last:border-b-0">
+                        <td class="px-2 py-1.5 font-medium">{{ sel.itemName }}</td>
+                        <td class="px-2 py-1.5 font-mono text-muted-foreground">{{ sel.itemCode || '—' }}</td>
+                        <td class="px-2 py-1.5">
+                            <Input
+                                type="number"
+                                :value="sel.quantity"
+                                min="1"
+                                max="999"
+                                class="h-7 w-16 text-xs"
+                                @update:model-value="(v: string) => updateQuantity(sel.catalogItemId, parseInt(v) || 1)"
+                            />
+                        </td>
+                        <td class="px-2 py-1.5">
+                            <button
+                                type="button"
+                                class="text-destructive hover:underline"
+                                @click="removeItem(sel.catalogItemId)"
+                            >
+                                Remove
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div v-else-if="catalogItems && catalogItems.length > 0 && !searchQuery" class="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
+            No items added yet. Search above to find and add items.
         </div>
     </div>
 </template>
