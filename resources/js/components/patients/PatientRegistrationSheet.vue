@@ -649,25 +649,22 @@ function resetForm(): void {
                                         </a>
                                     </li>
                                 </ul>
-                                <label
+                                <div
                                     v-if="requiresWarningAcknowledgment"
-                                    for="reg-duplicate-acknowledge"
-                                    class="mt-3 flex items-start gap-2 rounded-md border border-dashed px-2.5 py-2 text-xs"
+                                    class="mt-3 flex cursor-pointer items-start gap-2 rounded-md border border-dashed px-2.5 py-2 text-xs"
+                                    @click="warningAcknowledged = !warningAcknowledged"
                                 >
                                     <Checkbox
-                                        id="reg-duplicate-acknowledge"
                                         :checked="warningAcknowledged"
-                                        @update:checked="
-                                            warningAcknowledged =
-                                                $event === true
-                                        "
+                                        @update:checked="warningAcknowledged = $event"
+                                        @click.stop
                                     />
                                     <span
                                         >I've reviewed the match(es) above and
                                         confirm this is a different
                                         patient.</span
                                     >
-                                </label>
+                                </div>
                             </AlertDescription>
                         </Alert>
                     </div>
