@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import AppIcon from '@/components/AppIcon.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import PosFilterBar from '@/components/pos/PosFilterBar.vue';
@@ -442,7 +443,7 @@ function statusVariant(status: string | null | undefined): 'default' | 'secondar
                                     </CardTitle>
                                     <CardDescription>
                                         Select orders to charge for patient
-                                        <span class="font-medium">{{ selectedPatient.firstName }} {{ selectedPatient.lastName }}</span>
+                                        <span class="font-medium">{{ formatPatientName(selectedPatient) }}</span>
                                         <span v-if="selectedPatient.patientNumber" class="text-muted-foreground"> ({{ selectedPatient.patientNumber }})</span>.
                                     </CardDescription>
                                 </div>
@@ -554,7 +555,7 @@ function statusVariant(status: string | null | undefined): 'default' | 'secondar
                                     class="rounded-lg border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm dark:border-sky-900 dark:bg-sky-950/40"
                                 >
                                     <p class="font-medium text-sky-950 dark:text-sky-100">
-                                        Patient: {{ basketPatient.firstName }} {{ basketPatient.lastName }}
+                                        Patient: {{ formatPatientName(basketPatient) }}
                                     </p>
                                     <p v-if="basketPatient.patientNumber" class="text-xs text-sky-800 dark:text-sky-200">{{ basketPatient.patientNumber }}</p>
                                 </div>

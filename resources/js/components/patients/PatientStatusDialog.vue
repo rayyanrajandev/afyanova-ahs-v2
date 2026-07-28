@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -51,7 +52,7 @@ async function submit(): Promise<void> {
         <DialogContent size="md">
             <DialogHeader>
                 <DialogTitle>Change patient status</DialogTitle>
-                <DialogDescription>{{ patient ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() : '' }}</DialogDescription>
+                <DialogDescription>{{ patient ? formatPatientName(patient) : '' }}</DialogDescription>
             </DialogHeader>
 
             <div class="grid gap-4 py-2">

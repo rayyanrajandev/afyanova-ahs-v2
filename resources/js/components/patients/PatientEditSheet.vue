@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { refDebounced } from '@vueuse/core';
 import { computed, ref, watch } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -192,7 +193,7 @@ async function submitOffline(): Promise<void> {
     if (!props.patient) return;
     try {
         await saveOfflineUpdate(
-            { id: form.id, patientNumber: props.patient.patientNumber, patientName: `${form.firstName} ${form.lastName}`.trim() },
+            { id: form.id, patientNumber: props.patient.patientNumber, patientName: formatPatientName(form) },
             {
                 firstName: form.firstName.trim(),
                 middleName: form.middleName.trim() || null,
@@ -247,7 +248,7 @@ async function submit(): Promise<void> {
                 <SheetDescription>
                     {{
                         isOnline
-                            ? `${patient ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() : ''} — duplicate checks run against the server as you type.`
+                            ? `${patient ? formatPatientName(patient) : ''} — duplicate checks run against the server as you type.`
                             : "You're offline — changes will be saved locally and uploaded once you're back online."
                     }}
                 </SheetDescription>
@@ -387,7 +388,7 @@ async function submit(): Promise<void> {
                             <ul class="mt-1 space-y-1">
                                 <li v-for="match in duplicateCheck.data.value.duplicates" :key="match.id" class="flex items-center gap-1.5 text-xs">
                                     <span>
-                                        {{ [match.firstName, match.lastName].filter(Boolean).join(' ') || 'Unnamed patient' }}
+                                        {{ formatPatientName(match) || 'Unnamed patient' }}
                                         — {{ match.patientNumber ?? 'No MRN' }}
                                         <span v-if="match.matchedFields?.length"> (matched: {{ match.matchedFields.join(', ') }})</span>
                                     </span>

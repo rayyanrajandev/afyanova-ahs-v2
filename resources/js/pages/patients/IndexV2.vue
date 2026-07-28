@@ -26,6 +26,7 @@ import { usePatientList, usePatientStatusCounts, type PatientListItem } from '@/
 import { usePatientListFilters } from '@/composables/patientsIndex/usePatientListFilters';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
+import { formatPatientName, patientInitials as getPatientInitials } from '@/lib/patientName';
 
 /**
  * Phase 0 (foundation) + Phase 1 (list/filters/status counts) of
@@ -277,13 +278,11 @@ function setStatus(value: string | number): void {
 }
 
 function patientName(patient: PatientListItem): string {
-    return [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(' ') || 'Unnamed patient';
+    return formatPatientName(patient);
 }
 
 function patientInitials(patient: PatientListItem): string {
-    const first = patient.firstName?.trim()?.[0] ?? '';
-    const last = patient.lastName?.trim()?.[0] ?? '';
-    return (first + last).toUpperCase() || '?';
+    return getPatientInitials(patient);
 }
 
 function statusVariant(status: string | null): 'default' | 'secondary' | 'outline' | 'destructive' {

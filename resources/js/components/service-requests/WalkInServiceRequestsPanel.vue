@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Button } from '@/components/ui/button';
 import { apiGet, apiPatch } from '@/lib/apiClient';
+import { formatPatientName } from '@/lib/patientName';
 import { notifyError, notifySuccess } from '@/lib/notify';
 
 export type WalkInServiceRequestRow = {
@@ -53,8 +54,8 @@ const patientNames = ref<Record<string, string>>({});
 const pendingPatientLookups = new Set<string>();
 
 function displayNameFromPatient(row: PatientLookupResponse['data']): string {
-    const name = [row.firstName, row.middleName, row.lastName].filter(Boolean).join(' ').trim();
-    if (name !== '') {
+    const name = formatPatientName(row);
+    if (name) {
         return name;
     }
 

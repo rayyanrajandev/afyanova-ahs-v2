@@ -43,6 +43,7 @@ import { useMedicalRecordListFilters } from '@/composables/medicalRecordsIndex/u
 import { usePatientDirectory } from '@/composables/medicalRecordsIndex/usePatientDirectory';
 import { useMedicalRecordStatusAction } from '@/composables/medicalRecordsIndex/useMedicalRecordStatusAction';
 import { MEDICAL_RECORD_NOTE_TYPE_OPTIONS, medicalRecordNoteTypeLabel } from '@/pages/medical-records/noteTypes';
+import { formatPatientName } from '@/lib/patientName';
 import { type BreadcrumbItem } from '@/types';
 
 /**
@@ -84,8 +85,8 @@ function patientLabel(patientId: string | null): string {
     const summary = patientDirectory.directory.value[patientId];
     if (!summary) return 'Loading…';
 
-    const name = [summary.firstName, summary.middleName, summary.lastName].filter(Boolean).join(' ').trim();
-    return name || summary.patientNumber || patientId;
+    const name = formatPatientName(summary);
+    return name || (summary.patientNumber || patientId);
 }
 
 const statusOptions = [

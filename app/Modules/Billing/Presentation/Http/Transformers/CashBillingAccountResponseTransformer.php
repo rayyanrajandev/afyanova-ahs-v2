@@ -6,11 +6,11 @@ class CashBillingAccountResponseTransformer
 {
     public static function transform(array $account): array
     {
-        $displayName = collect([
+        $displayName = mb_strtoupper(collect([
             $account['first_name'] ?? null,
             $account['middle_name'] ?? null,
             $account['last_name'] ?? null,
-        ])->filter()->implode(' ');
+        ])->filter()->implode(' '));
 
         return [
             'id' => $account['id'] ?? null,

@@ -3,6 +3,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { watchDebounced } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import AppIcon from '@/components/AppIcon.vue';
 import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import ClinicianPicker from '@/components/domain/clinical/ClinicianPicker.vue';
@@ -2319,10 +2320,7 @@ function patientDisplayName(patientId: string | null | undefined): string {
         if (normalizedId === initialPatientId && initialPatientNumber) return initialPatientNumber;
         return `Patient ${normalizedId.slice(0, 8)}...`;
     }
-    const fullName = [patient.firstName, patient.middleName, patient.lastName]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
+    const fullName = formatPatientName(patient);
     return fullName || patient.patientNumber || `Patient ${normalizedId.slice(0, 8)}...`;
 }
 

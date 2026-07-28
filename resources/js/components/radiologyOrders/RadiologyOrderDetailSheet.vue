@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatPatientName } from '@/lib/patientName';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -107,11 +108,7 @@ function formatDateTime(value: string | null): string {
                             <div>
                                 <dt class="text-xs text-muted-foreground">Patient</dt>
                                 <dd>
-                                    {{
-                                        [order.patient?.firstName, order.patient?.lastName].filter(Boolean).join(' ')
-                                            || order.patient?.patientNumber
-                                            || '—'
-                                    }}
+                                    {{ formatPatientName(order.patient) || order.patient?.patientNumber || '—' }}
                                 </dd>
                             </div>
                             <div>

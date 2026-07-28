@@ -38,6 +38,7 @@ import { useAppointmentPatientDirectory } from '@/composables/appointmentsIndex/
 import { useClinicianDirectory } from '@/composables/triage/useClinicianDirectory';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
+import { formatPatientName } from '@/lib/patientName';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
@@ -327,7 +328,7 @@ function onPatientRegistered(patient: PatientListItem): void {
     // toast on the online-registration path itself (only its own offline-
     // save fallback does), matching patients/IndexV2.vue's own
     // onPatientRegistered, which is the only reason a toast shows up there.
-    const name = [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(' ') || 'Unnamed patient';
+    const name = formatPatientName(patient);
     notifySuccess(`${name} registered (${patient.patientNumber ?? 'MRN pending'}).`);
 }
 

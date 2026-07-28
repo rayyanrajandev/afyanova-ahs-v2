@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -82,7 +83,7 @@ async function submit(): Promise<void> {
             <DialogHeader>
                 <DialogTitle>Direct service request</DialogTitle>
                 <DialogDescription>
-                    {{ patient ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() : '' }} — for a patient who needs only a
+                    {{ patient ? formatPatientName(patient) : '' }} — for a patient who needs only a
                     lab/pharmacy/radiology/theatre service, not a doctor visit.
                 </DialogDescription>
             </DialogHeader>

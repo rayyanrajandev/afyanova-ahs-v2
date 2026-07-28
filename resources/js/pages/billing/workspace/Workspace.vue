@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,7 +46,7 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
 
 const patientName = computed(() => {
     if (!patient.value) return '';
-    return [patient.value.firstName, patient.value.lastName].filter(Boolean).join(' ');
+    return formatPatientName(patient.value);
 });
 
 /** Matches the "gender | DOB (age y)" convention used in encounters/WorkspaceV2.vue and PatientLookupField.vue. */

@@ -49,6 +49,7 @@ import BillingRecordPaymentForm from '@/pages/billing/components/BillingRecordPa
 import { billingDefaultPayerTypeFromInvoice } from './constants';
 import { billingRecordPaymentFormIsValid, validateBillingRecordPaymentForm } from './helpers';
 import { formatEnumLabel } from '@/lib/labels';
+import { formatPatientName } from '@/lib/patientName';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
 
@@ -258,7 +259,7 @@ async function loadPatientByIdDirect(targetPatientId: string): Promise<void> {
 
     const patientResponse = await actions.fetchPatientSummary(targetPatientId);
     const patient = patientResponse?.data ?? null;
-    const patientName = patient ? [patient.firstName, patient.lastName].filter(Boolean).join(' ').trim() : '';
+    const patientName = patient ? formatPatientName(patient) : '';
     directPatientIdentity.value = {
         patientNumber: patient?.patientNumber ?? '',
         patientName: patientName || 'Patient',

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { type PatientSummaryDetails } from '@/composables/patientSummary/usePatientSummary';
 import { deriveAgeFromDateOfBirth, formatAgeLabel } from '@/lib/patientAge';
+import { formatPatientName, patientInitials } from '@/lib/patientName';
 
 /**
  * Pure presentation — reports/patient-summary-module-plan.md §4. No
@@ -35,18 +36,9 @@ defineSlots<{
     actions?: () => unknown;
 }>();
 
-const patientName = computed(() => {
-    const patient = props.summary?.patient;
-    if (!patient) return '';
-    return [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(' ') || 'Unnamed patient';
-});
+const patientName = computed(() => formatPatientName(props.summary?.patient));
 
-const patientInitials = computed(() => {
-    const patient = props.summary?.patient;
-    const first = patient?.firstName?.trim()?.[0] ?? '';
-    const last = patient?.lastName?.trim()?.[0] ?? '';
-    return (first + last).toUpperCase() || '?';
-});
+const computedInitials = computed(() => patientInitials(props.summary?.patient));
 
 const ageLabel = computed(() => {
     const dob = props.summary?.patient.dateOfBirth;
@@ -119,7 +111,7 @@ const activeOrdersTotal = computed(() => {
             <div class="flex items-start justify-between gap-2">
                 <div class="flex min-w-0 items-center gap-2.5">
                     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                        {{ patientInitials }}
+                        {{ computedInitials }}
                     </div>
                     <div class="min-w-0">
                         <p class="truncate text-sm font-semibold text-foreground">{{ patientName }}</p>

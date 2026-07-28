@@ -3,6 +3,7 @@
 namespace App\Modules\Patient\Infrastructure\Models;
 
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
+use App\Modules\Patient\Domain\ValueObjects\PatientName;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -11,6 +12,55 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class PatientModel extends Model
 {
     use HasUuids;
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::creating(function (PatientModel $patient): void {
+            self::normalizeAllNameFields($patient);
+        });
+
+        static::updating(function (PatientModel $patient): void {
+            self::normalizeDirtyNameFields($patient);
+        });
+    }
+
+    private static function normalizeAllNameFields(PatientModel $patient): void
+    {
+        if ($patient->first_name !== null) {
+            $patient->first_name = PatientName::normalize($patient->first_name);
+        }
+        if ($patient->middle_name !== null) {
+            $patient->middle_name = PatientName::normalize($patient->middle_name);
+        }
+        if ($patient->last_name !== null) {
+            $patient->last_name = PatientName::normalize($patient->last_name);
+        }
+        if ($patient->next_of_kin_name !== null) {
+            $patient->next_of_kin_name = PatientName::normalize($patient->next_of_kin_name);
+        }
+    }
+
+    private static function normalizeDirtyNameFields(PatientModel $patient): void
+    {
+        if ($patient->isDirty('first_name') && $patient->first_name !== null) {
+            $patient->first_name = PatientName::normalize($patient->first_name);
+        }
+        if ($patient->isDirty('middle_name')) {
+            $patient->middle_name = $patient->middle_name !== null
+                ? PatientName::normalize($patient->middle_name)
+                : null;
+        }
+        if ($patient->isDirty('last_name') && $patient->last_name !== null) {
+            $patient->last_name = PatientName::normalize($patient->last_name);
+        }
+        if ($patient->isDirty('next_of_kin_name')) {
+            $patient->next_of_kin_name = $patient->next_of_kin_name !== null
+                ? PatientName::normalize($patient->next_of_kin_name)
+                : null;
+        }
+    }
 
     protected $table = 'patients';
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { formatPatientName } from '@/lib/patientName';
 import {
     computed,
     nextTick,
@@ -2261,10 +2262,7 @@ function recordAccentClass(status: string | null): string {
 
 function patientName(summary: PatientSummary): string {
     return (
-        [summary.firstName, summary.middleName, summary.lastName]
-            .filter(Boolean)
-            .join(' ')
-            .trim() ||
+        formatPatientName(summary) ||
         summary.patientNumber ||
         shortId(summary.id)
     );

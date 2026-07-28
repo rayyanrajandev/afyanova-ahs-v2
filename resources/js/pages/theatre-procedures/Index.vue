@@ -53,6 +53,7 @@ import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
 import { mergeSearchableOptions, type SearchableSelectOption } from '@/lib/patientLocations';
+import { formatPatientName, patientInitials as getPatientInitials } from '@/lib/patientName';
 import { type BreadcrumbItem } from '@/types';
 import {
     clinicalStockPrecheckTitle,
@@ -751,34 +752,20 @@ const createPatientContextLabel = computed(() => {
     if (!patient) return `Patient ${patientId}`;
 
     return (
-        [patient.firstName, patient.middleName, patient.lastName]
-            .filter(Boolean)
-            .join(' ')
-            .trim() ||
+        formatPatientName(patient) ||
         patient.patientNumber ||
         `Patient ${patient.id}`
     );
 });
 
 function patientName(summary: PatientSummary): string {
-    return (
-        [summary.firstName, summary.middleName, summary.lastName]
-            .filter(Boolean)
-            .join(' ')
-            .trim() ||
-        summary.patientNumber ||
-        `Patient ${summary.id}`
-    );
+    const name = formatPatientName(summary);
+    return name || (summary.patientNumber || `Patient ${summary.id}`);
 }
 
 function patientInitials(summary: PatientSummary): string {
-    const first = summary.firstName?.trim()?.[0] ?? '';
-    const last = summary.lastName?.trim()?.[0] ?? '';
-    const initials = `${first}${last}`.trim();
-
-    if (initials) {
-        return initials.toUpperCase();
-    }
+    const initials = getPatientInitials(summary);
+    if (initials !== '?') return initials;
 
     const patientNumber = summary.patientNumber?.trim();
     if (patientNumber) {

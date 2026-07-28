@@ -2,6 +2,7 @@
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { watchDebounced } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import AppIcon from '@/components/AppIcon.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -209,10 +210,7 @@ function directServiceEmbeddedPatientSummary(item: Record<string, unknown>): Das
 function directServicePatientLabel(item: Record<string, unknown>): string {
     const embedded = directServiceEmbeddedPatientSummary(item);
     if (embedded) {
-        const fullName = [embedded.firstName, embedded.middleName, embedded.lastName]
-            .filter(Boolean)
-            .join(' ')
-            .trim();
+        const fullName = formatPatientName(embedded);
         if (fullName) {
             return fullName;
         }
@@ -273,10 +271,7 @@ function dashboardPatientLabel(patientId: string | null | undefined): string {
         return '';
     }
 
-    const fullName = [patient.firstName, patient.middleName, patient.lastName]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
+    const fullName = formatPatientName(patient);
 
     return fullName || String(patient.patientNumber ?? '').trim();
 }

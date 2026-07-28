@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { refDebounced } from '@vueuse/core';
 import { computed, ref, watch } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -617,13 +618,7 @@ function resetForm(): void {
                                     >
                                         <span>
                                             {{
-                                                [
-                                                    match.firstName,
-                                                    match.lastName,
-                                                ]
-                                                    .filter(Boolean)
-                                                    .join(' ') ||
-                                                'Unnamed patient'
+                                                formatPatientName(match) || 'Unnamed patient'
                                             }}
                                             —
                                             {{

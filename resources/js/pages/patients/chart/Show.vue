@@ -49,6 +49,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
+import { formatPatientName, patientInitials as getPatientInitials } from '@/lib/patientName';
 import { type BreadcrumbItem } from '@/types';
 
 type Patient = {
@@ -2761,22 +2762,13 @@ async function quickReconcileMedicationProfile(
 }
 function patientName(target: Patient | null): string {
     if (!target) return '';
-    return [target.firstName, target.middleName, target.lastName].filter(Boolean).join(' ').trim() || target.patientNumber || target.id;
+    const name = formatPatientName(target);
+    return name || (target.patientNumber || target.id);
 }
 
 function patientInitials(target: Patient | null): string {
-    const parts = [
-        target?.firstName,
-        target?.lastName,
-    ]
-        .map((part) => (part ?? '').trim())
-        .filter(Boolean);
-
-    if (parts.length > 0) {
-        return parts.map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-    }
-
-    return (target?.patientNumber ?? target?.id ?? 'PC').slice(0, 2).toUpperCase();
+    const initials = getPatientInitials(target);
+    return initials !== '?' ? initials : ((target?.patientNumber ?? target?.id ?? 'PC').slice(0, 2).toUpperCase());
 }
 
 function directServiceLabel(serviceType: string | null | undefined): string {

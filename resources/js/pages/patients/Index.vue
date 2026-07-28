@@ -89,6 +89,7 @@ import {
     type OfflinePatientUpdateRecord,
 } from '@/lib/offlinePatientRegistration';
 import { patientChartHref } from '@/lib/patientChart';
+import { formatPatientName, patientInitials as getPatientInitials } from '@/lib/patientName';
 import {
     districtPresetOptionsForRegion,
     freeTextLocationOption,
@@ -2179,20 +2180,12 @@ async function apiRequest<T>(
 }
 
 function patientName(patient: Patient): string {
-    return (
-        [patient.firstName, patient.middleName, patient.lastName]
-            .filter(Boolean)
-            .join(' ')
-            .trim() ||
-        patient.patientNumber ||
-        'Unnamed patient'
-    );
+    const name = formatPatientName(patient);
+    return name || (patient.patientNumber || 'Unnamed patient');
 }
 
 function patientInitials(patient: Patient): string {
-    const first = (patient.firstName ?? '').charAt(0).toUpperCase();
-    const last = (patient.lastName ?? '').charAt(0).toUpperCase();
-    return first + last || '?';
+    return getPatientInitials(patient);
 }
 
 function patientStatusActionLabel(patient: Patient): string {
@@ -2404,7 +2397,7 @@ async function createDirectServiceRequest(
             },
         };
         notifySuccess(
-            `Done - ${labelMap[serviceType]} direct service ticket ${requestNumber} created for ${patient.firstName} ${patient.lastName}. This patient is listed on that department's queue.`,
+            `Done - ${labelMap[serviceType]} direct service ticket ${requestNumber} created for ${formatPatientName(patient)}. This patient is listed on that department's queue.`,
         );
     } catch (error: unknown) {
         if (isFacilityPlan403Error(error)) {
@@ -4831,7 +4824,7 @@ async function findPreSubmitDuplicateMatches(
     const queryTerms = [
         payload.nationalId,
         payload.phone,
-        [payload.firstName, payload.lastName].filter(Boolean).join(' '),
+        formatPatientName(payload),
         payload.lastName,
     ]
         .filter((part): part is string => Boolean(part && part.trim() !== ''))

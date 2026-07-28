@@ -1,4 +1,5 @@
 import { formatEnumLabel } from '@/lib/labels';
+import { formatPatientName } from '@/lib/patientName';
 
 export type DirectServiceModuleKey = 'radiology' | 'laboratory' | 'pharmacy' | 'clinical_procedure';
 
@@ -84,10 +85,7 @@ export function embeddedPatientSummary(order: DirectServiceOrderLike): EmbeddedP
 export function patientLabelFromOrder(order: DirectServiceOrderLike, fallbackPatientId?: string): string {
     const embedded = embeddedPatientSummary(order);
     if (embedded) {
-        const fullName = [embedded.firstName, embedded.middleName, embedded.lastName]
-            .filter(Boolean)
-            .join(' ')
-            .trim();
+        const fullName = formatPatientName(embedded);
         if (fullName) {
             return fullName;
         }

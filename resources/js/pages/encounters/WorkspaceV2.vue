@@ -2,6 +2,7 @@
 import { Link, router } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, useTemplateRef, watch } from 'vue';
+import { formatPatientName } from '@/lib/patientName';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -161,12 +162,7 @@ const patientName = computed(() => {
     const patient = patientSummary.value;
     if (!patient) return null;
 
-    return (
-        [patient.firstName, patient.middleName, patient.lastName]
-            .filter(Boolean)
-            .join(' ')
-            .trim() || null
-    );
+    return formatPatientName(patient) || null;
 });
 
 /** Matches the "gender | DOB (age y)" convention already used in PatientLookupField.vue. */

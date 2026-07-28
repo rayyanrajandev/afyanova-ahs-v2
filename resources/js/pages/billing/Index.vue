@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatEnumLabel } from '@/lib/labels';
+import { formatPatientName } from '@/lib/patientName';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import type { BreadcrumbItem } from '@/types';
@@ -349,7 +350,7 @@ async function loadPatientByIdDirect(targetPatientId: string): Promise<void> {
         const unpaidInvoices = invoicesResponse.data.filter((inv) => inv.status !== 'cancelled' && inv.status !== 'voided' && inv.balanceAmount > 0);
         const paidInvoices = invoicesResponse.data.filter((inv) => inv.status !== 'cancelled' && inv.status !== 'voided' && inv.balanceAmount <= 0);
         const patient = patientResponse?.data ?? null;
-        const patientName = patient ? [patient.firstName, patient.lastName].filter(Boolean).join(' ').trim() : '';
+        const patientName = patient ? formatPatientName(patient) : '';
 
         selectedPatient.value = {
             patientId: targetPatientId,

@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { usePatientSummary } from '@/composables/patientSummary/usePatientSummary';
 import { type AppIconName } from '@/lib/icons';
 import { deriveAgeFromDateOfBirth, formatAgeLabel } from '@/lib/patientAge';
+import { formatPatientName, patientInitials } from '@/lib/patientName';
 
 /**
  * The second, deliberate-click tier of the reusable Patient Summary module
@@ -40,18 +41,9 @@ defineSlots<{
 const patientId = computed(() => props.patientId);
 const summary = usePatientSummary(patientId, { enabled: open });
 
-const patientName = computed(() => {
-    const patient = summary.data.value?.patient;
-    if (!patient) return '';
-    return [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(' ') || 'Unnamed patient';
-});
+const patientName = computed(() => formatPatientName(summary.data.value?.patient));
 
-const patientInitials = computed(() => {
-    const patient = summary.data.value?.patient;
-    const first = patient?.firstName?.trim()?.[0] ?? '';
-    const last = patient?.lastName?.trim()?.[0] ?? '';
-    return (first + last).toUpperCase() || '?';
-});
+const computedInitials = computed(() => patientInitials(summary.data.value?.patient));
 
 const ageLabel = computed(() => {
     const dob = summary.data.value?.patient.dateOfBirth;
@@ -148,7 +140,7 @@ function formatDateTime(value: string | null): string {
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex min-w-0 items-center gap-3">
                             <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                                {{ patientInitials }}
+                                {{ computedInitials }}
                             </div>
                             <div class="min-w-0">
                                 <p class="truncate text-base font-semibold text-foreground">{{ patientName }}</p>

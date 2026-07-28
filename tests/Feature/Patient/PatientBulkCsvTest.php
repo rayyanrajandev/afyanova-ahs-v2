@@ -183,7 +183,7 @@ it('upserts an existing patient by id instead of creating a duplicate', function
     $response->assertJsonPath('data.results.0.outcome', 'updated');
 
     expect(PatientModel::where('id', $patientId)->count())->toBe(1);
-    expect(PatientModel::find($patientId)->first_name)->toBe('AminaUpdated');
+    expect(PatientModel::find($patientId)->first_name)->toBe('Aminaupdated');
 });
 
 it('reports validation errors for malformed rows without failing the whole batch', function (): void {

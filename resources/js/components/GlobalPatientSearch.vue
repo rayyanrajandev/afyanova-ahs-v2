@@ -19,6 +19,7 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { apiGet } from '@/lib/apiClient';
 import { patientChartHref } from '@/lib/patientChart';
 import { hasRouteAccess } from '@/lib/routeAccess';
+import { formatPatientName, patientInitials as getPatientInitials } from '@/lib/patientName';
 
 type PatientSummary = {
     id: string;
@@ -137,20 +138,12 @@ function sanitizePatient(patient: PatientSummary): PatientSummary {
 }
 
 function patientDisplayName(patient: PatientSummary): string {
-    return (
-        [patient.firstName, patient.middleName, patient.lastName]
-            .map((part) => normalizePatientText(part))
-            .filter(Boolean)
-            .join(' ') ||
-        patient.patientNumber ||
-        'Unnamed patient'
-    );
+    const name = formatPatientName(patient);
+    return name || (patient.patientNumber || 'Unnamed patient');
 }
 
 function patientInitials(patient: PatientSummary): string {
-    const first = normalizePatientText(patient.firstName).charAt(0).toUpperCase();
-    const last = normalizePatientText(patient.lastName).charAt(0).toUpperCase();
-    return first + last || '?';
+    return getPatientInitials(patient);
 }
 
 function patientAge(patient: PatientSummary): number | null {

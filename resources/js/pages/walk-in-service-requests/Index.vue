@@ -48,6 +48,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet, apiGetBlob, apiPatch, apiPost, isApiClientError } from '@/lib/apiClient';
 import type { AuditActorSummary } from '@/lib/audit';
 import type { AppIconName } from '@/lib/icons';
+import { formatPatientName } from '@/lib/patientName';
 import { formatEnumLabel } from '@/lib/labels';
 import { walkInServiceRequestStripeClass } from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
@@ -270,8 +271,8 @@ const patientNames = ref<Record<string, string>>({});
 const pendingLookups = new Set<string>();
 
 function displayNameFromPatient(p: PatientSummary): string {
-    const name = [p.firstName, p.middleName, p.lastName].filter(Boolean).join(' ').trim();
-    return name !== '' ? name : (p.patientNumber?.trim() || p.id);
+    const name = formatPatientName(p);
+    return name || (p.patientNumber?.trim() || p.id);
 }
 
 async function hydratePatientName(patientId: string): Promise<void> {

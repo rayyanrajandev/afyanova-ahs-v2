@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { apiGet } from '@/lib/apiClient';
+import { formatPatientName } from '@/lib/patientName';
 
 /**
  * Deliberately minimal — just the fields a compact result row needs, not
@@ -52,7 +53,7 @@ export function usePatientQuickSearch(options?: { perPage?: number; minQueryLeng
     }
 
     function displayName(patient: PatientQuickSearchResult): string {
-        return [patient.firstName, patient.lastName].filter(Boolean).join(' ') || 'Unnamed patient';
+        return formatPatientName(patient);
     }
 
     return { results, isPending, search, clear, displayName };

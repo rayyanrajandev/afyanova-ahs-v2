@@ -1,5 +1,6 @@
 import { ref, watch, type Ref } from 'vue';
 import { apiGet } from '@/lib/apiClient';
+import { formatPatientName } from '@/lib/patientName';
 
 export type AppointmentPatientSummary = {
     id: string;
@@ -56,8 +57,8 @@ export function useAppointmentPatientDirectory(patientIds: Ref<string[]>) {
         if (!id) return 'Patient pending';
         const patient = directory.value[id];
         if (!patient) return 'Loading…';
-        const fullName = [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(' ').trim();
-        return fullName || patient.patientNumber || `Patient ${id.slice(0, 8)}…`;
+        const fullName = formatPatientName(patient);
+        return fullName || (patient.patientNumber || `Patient ${id.slice(0, 8)}…`);
     }
 
     function patientNumber(patientId: string | null | undefined): string {

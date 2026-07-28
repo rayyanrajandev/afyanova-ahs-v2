@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { clearSensitiveLocalStorageKey } from '@/lib/browserStoragePolicy';
+import { formatPatientName, patientInitials as getPatientInitials } from '@/lib/patientName';
 
 type PatientSummary = {
     id: string;
@@ -123,28 +124,13 @@ function clearDebounce() {
 }
 
 function patientDisplayName(patient: PatientSummary): string {
-    const fullName = [patient.firstName, patient.middleName, patient.lastName]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
-
-    return fullName || patient.patientNumber || patient.id;
+    const name = formatPatientName(patient);
+    return name || (patient.patientNumber || patient.id);
 }
 
 function patientInitials(patient: PatientSummary): string {
-    const parts = patientDisplayName(patient)
-        .split(/\s+/)
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .slice(0, 2);
-
-    if (parts.length === 0) {
-        return 'PT';
-    }
-
-    return parts
-        .map((part) => part.charAt(0).toUpperCase())
-        .join('');
+    const initials = getPatientInitials(patient);
+    return initials !== '?' ? initials : 'PT';
 }
 
 function patientContactSummary(patient: PatientSummary): string | null {
@@ -304,10 +290,7 @@ function rememberPatient(patient: PatientSummary) {
 }
 
 function patientFullName(patient: PatientSummary): string {
-    return [patient.firstName, patient.middleName, patient.lastName]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
+    return formatPatientName(patient);
 }
 
 function patientMatchTags(patient: PatientSummary): string[] {

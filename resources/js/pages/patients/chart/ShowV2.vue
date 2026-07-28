@@ -97,6 +97,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet } from '@/lib/apiClient';
 import { formatEnumLabel } from '@/lib/labels';
 import { vitalsDisplayRows, vitalsSummaryLine } from '@/lib/vitalsDisplay';
+import { formatPatientName } from '@/lib/patientName';
 import { type BreadcrumbItem } from '@/types';
 
 /**
@@ -419,11 +420,8 @@ const ordersWorkspaceTab = ref<'laboratory' | 'imaging' | 'pharmacy' | 'procedur
 
 function patientName(target: Patient | null): string {
     if (!target) return '';
-    return (
-        [target.firstName, target.middleName, target.lastName].filter(Boolean).join(' ').trim() ||
-        target.patientNumber ||
-        target.id
-    );
+    const name = formatPatientName(target);
+    return name || (target.patientNumber || target.id);
 }
 
 function ageLabel(value: string | null | undefined): string {
