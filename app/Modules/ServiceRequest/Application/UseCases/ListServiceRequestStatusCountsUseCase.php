@@ -34,9 +34,9 @@ class ListServiceRequestStatusCountsUseCase
         $toDateTime = isset($filters['to']) ? trim((string) $filters['to']) : null;
         $toDateTime = $toDateTime !== '' ? $toDateTime : null;
 
-        $departmentId = $scope->canViewAllDepartments
-            ? (isset($filters['departmentId']) && Str::isUuid((string) $filters['departmentId']) ? (string) $filters['departmentId'] : null)
-            : $scope->departmentId;
+        $departmentId = isset($filters['departmentId']) && Str::isUuid((string) $filters['departmentId'])
+            ? (string) $filters['departmentId']
+            : null;
 
         return $this->serviceRequestRepository->statusCounts(
             serviceType: $serviceType,

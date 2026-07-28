@@ -92,7 +92,7 @@ function userWithViewAllDepartments(): User
     return $user;
 }
 
-it('only lists service requests in the actors own department', function (): void {
+it('lists all service requests regardless of the actors department', function (): void {
     $deptA = scopeTestDepartment('SCA');
     $deptB = scopeTestDepartment('SCB');
     $creator = userWithViewAllDepartments();
@@ -103,11 +103,11 @@ it('only lists service requests in the actors own department', function (): void
         'departmentId' => $deptA->id,
     ])->assertCreated()->json('data');
 
-    $this->actingAs($creator)->postJson('/api/v1/service-requests', [
+    $ticketB = $this->actingAs($creator)->postJson('/api/v1/service-requests', [
         'patientId' => scopeTestPatient('B')->id,
         'serviceType' => 'laboratory',
         'departmentId' => $deptB->id,
-    ])->assertCreated();
+    ])->assertCreated()->json('data');
 
     $scopedUser = userScopedToDepartment($deptA->id);
 
@@ -118,7 +118,7 @@ it('only lists service requests in the actors own department', function (): void
 
     $ids = collect($listed)->pluck('id')->all();
     expect($ids)->toContain($ticketA['id']);
-    expect(collect($listed)->pluck('departmentId')->unique()->all())->toBe([$deptA->id]);
+    expect($ids)->toContain($ticketB['id']);
 });
 
 it('returns an empty list with departmentScopeMissing when the actor has no department assigned', function (): void {

@@ -13,12 +13,9 @@ class ListServiceRequestsUseCase
     public function __construct(private readonly ServiceRequestRepositoryInterface $serviceRequestRepository) {}
 
     /**
-     * $scope enforces Direct Service Queue V2's hard department scoping
-     * (see ServiceRequestDepartmentScopeResolver's docblock): a
-     * department-scoped actor's own department always wins over any
-     * client-supplied departmentId filter, and an actor with no assigned
-     * department gets an empty result set rather than falling back to
-     * showing everything.
+     * $scope guards only the "no assigned department" case — users without
+     * a staff profile get an empty result set. All other authenticated
+     * users see all service requests; departmentId is an optional filter.
      */
     public function execute(array $filters, ServiceRequestDepartmentScope $scope): array
     {
@@ -59,9 +56,9 @@ class ListServiceRequestsUseCase
         $sortDirection = strtolower((string) ($filters['sortDir'] ?? 'asc'));
         $sortDirection = $sortDirection === 'desc' ? 'desc' : 'asc';
 
-        $departmentId = $scope->canViewAllDepartments
-            ? (isset($filters['departmentId']) && Str::isUuid((string) $filters['departmentId']) ? (string) $filters['departmentId'] : null)
-            : $scope->departmentId;
+        $departmentId = isset($filters['departmentId']) && Str::isUuid((string) $filters['departmentId'])
+            ? (string) $filters['departmentId']
+            : null;
 
         return $this->serviceRequestRepository->search(
             patientId: $patientId,
