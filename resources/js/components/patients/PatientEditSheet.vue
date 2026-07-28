@@ -145,10 +145,16 @@ watch(
 );
 
 const severityLabel: Record<string, string> = {
-    hard_block: 'Blocks save',
-    strong_warning: 'Strong possible match',
-    possible_warning: 'Possible match',
+    hard_block: 'Exact match found — save blocked',
+    strong_warning: 'Possible match — similar demographics',
+    possible_warning: 'Phone number match',
 };
+
+function severityAlertVariant(severity: string): 'destructive' | 'warning' | 'info' {
+    if (severity === 'hard_block') return 'destructive';
+    if (severity === 'possible_warning') return 'warning';
+    return 'info';
+}
 
 const warningAcknowledged = ref(false);
 const duplicateWarningSignature = computed(() => {
@@ -379,7 +385,7 @@ async function submit(): Promise<void> {
                 </div>
 
                 <div v-if="isOnline && duplicateCheck.data.value && duplicateCheck.data.value.severity !== 'none'" class="space-y-2">
-                    <Alert :variant="duplicateCheck.data.value.severity === 'hard_block' ? 'destructive' : 'default'">
+                    <Alert :variant="severityAlertVariant(duplicateCheck.data.value.severity)">
                         <AlertTitle class="flex items-center gap-2">
                             {{ severityLabel[duplicateCheck.data.value.severity] }}
                             <Badge variant="outline">{{ duplicateCheck.data.value.duplicates.length }} match(es)</Badge>

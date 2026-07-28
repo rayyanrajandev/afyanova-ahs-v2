@@ -195,10 +195,16 @@ function setDobMode(mode: string | number): void {
 }
 
 const severityLabel: Record<string, string> = {
-    hard_block: 'Blocks registration',
-    strong_warning: 'Strong possible match',
-    possible_warning: 'Possible match',
+    hard_block: 'Exact match found — registration blocked',
+    strong_warning: 'Possible match — similar demographics',
+    possible_warning: 'Phone number match',
 };
+
+function severityAlertVariant(severity: string): 'destructive' | 'warning' | 'info' {
+    if (severity === 'hard_block') return 'destructive';
+    if (severity === 'possible_warning') return 'warning';
+    return 'info';
+}
 
 /**
  * A live warning nobody has to engage with is just noise — the legacy
@@ -587,12 +593,7 @@ function resetForm(): void {
                         class="space-y-2"
                     >
                         <Alert
-                            :variant="
-                                duplicateCheck.data.value.severity ===
-                                'hard_block'
-                                    ? 'destructive'
-                                    : 'default'
-                            "
+                            :variant="severityAlertVariant(duplicateCheck.data.value.severity)"
                         >
                             <AlertTitle class="flex items-center gap-2">
                                 {{
