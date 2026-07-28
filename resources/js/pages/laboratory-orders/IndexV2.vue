@@ -91,6 +91,7 @@ if (initialStatus) {
     filters.status = initialStatus;
 }
 const focusOrderId = initialSearchParams.get('focusOrderId') ?? '';
+const initialServiceRequestId = initialSearchParams.get('serviceRequestId') ?? '';
 const focusPatientId = computed(() => filters.patientId);
 
 const list = useLaboratoryOrders(filters);
@@ -628,6 +629,7 @@ function openAuditSheet(order: LaboratoryOrder): void {
         <LaboratoryOrderCreateSheet
             v-model:open="createSheetOpen"
             :initial-patient-id="linkagePatientId"
+            :service-request-id="initialServiceRequestId"
             :linkage="linkage"
             @created="onOrderCreated"
         />

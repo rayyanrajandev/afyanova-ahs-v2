@@ -48,6 +48,7 @@ import { messageFromUnknown, notifyError } from '@/lib/notify';
  */
 const props = defineProps<{
     initialPatientId?: string | null;
+    serviceRequestId?: string | null;
     linkage?: EncounterInlineOrderLinkageContext | null;
 }>();
 
@@ -230,7 +231,7 @@ async function submit(): Promise<void> {
                 patientId: context.patientId,
                 appointmentId: null,
                 admissionId: null,
-                serviceRequestId: null,
+                serviceRequestId: props.serviceRequestId?.trim() || null,
                 entryMode: 'draft',
                 replacesOrderId: props.linkage?.mode === 'reorder' ? props.linkage.sourceOrderId : null,
                 addOnToOrderId: props.linkage?.mode === 'add_on' ? props.linkage.sourceOrderId : null,

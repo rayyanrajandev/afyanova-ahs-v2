@@ -88,6 +88,7 @@ if (initialStatus) {
     filters.status = initialStatus;
 }
 const focusOrderId = initialSearchParams.get('focusOrderId') ?? '';
+const initialServiceRequestId = initialSearchParams.get('serviceRequestId') ?? '';
 const focusPatientId = computed(() => filters.patientId);
 
 const list = useRadiologyOrders(filters);
@@ -568,6 +569,7 @@ function openAuditSheet(order: RadiologyOrder): void {
         <RadiologyOrderCreateSheet
             v-model:open="createSheetOpen"
             :initial-patient-id="linkagePatientId"
+            :service-request-id="initialServiceRequestId"
             :linkage="linkage"
             @created="onOrderCreated"
         />

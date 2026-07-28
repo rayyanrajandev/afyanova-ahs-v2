@@ -288,12 +288,14 @@ export type PharmacyInlineOrderCreateOptions = {
     safetyDecision?: MedicationSafetyContinuationDecision | null;
     replacesOrderId?: string | null;
     addOnToOrderId?: string | null;
+    serviceRequestId?: string | null;
 };
 
 export type InlineOrderCreateOptions = {
     orderSessionId?: string;
     replacesOrderId?: string | null;
     addOnToOrderId?: string | null;
+    serviceRequestId?: string | null;
 };
 
 export type RadiologyInlineOrderInput = {
@@ -466,6 +468,7 @@ export async function createPharmacyInlineOrder(
             safetyAcknowledged: safetyDecision?.acknowledged === true,
             safetyOverrideCode: safetyDecision?.overrideCode ?? null,
             safetyOverrideReason: safetyDecision?.overrideReason ?? null,
+            serviceRequestId: options?.serviceRequestId?.trim() || null,
         },
     });
 }
@@ -495,6 +498,7 @@ export async function createRadiologyInlineOrder(
             studyDescription: item.studyDescription.trim() || null,
             clinicalIndication: item.clinicalIndication.trim() || null,
             scheduledFor: null,
+            serviceRequestId: options?.serviceRequestId?.trim() || null,
         },
     });
 }

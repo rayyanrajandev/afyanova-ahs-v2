@@ -49,6 +49,7 @@ import { messageFromUnknown, notifyError } from '@/lib/notify';
  */
 const props = defineProps<{
     initialPatientId?: string | null;
+    serviceRequestId?: string | null;
     linkage?: EncounterInlineOrderLinkageContext | null;
 }>();
 
@@ -209,6 +210,7 @@ async function submit(): Promise<void> {
         }
 
         const response = await createRadiologyInlineOrder(context, payload, {
+            serviceRequestId: props.serviceRequestId?.trim() || null,
             replacesOrderId: props.linkage?.mode === 'reorder' ? props.linkage.sourceOrderId : null,
             addOnToOrderId: props.linkage?.mode === 'add_on' ? props.linkage.sourceOrderId : null,
         });
