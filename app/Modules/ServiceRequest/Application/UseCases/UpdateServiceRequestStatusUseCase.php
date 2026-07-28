@@ -18,6 +18,7 @@ class UpdateServiceRequestStatusUseCase
         private readonly ServiceRequestRepositoryInterface $serviceRequestRepository,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly AppendServiceRequestAuditEventUseCase $appendServiceRequestAuditEvent,
+        private readonly FulfillServiceRequestItemsUseCase $fulfillItemsUseCase,
     ) {}
 
     public function execute(
@@ -52,13 +53,6 @@ class UpdateServiceRequestStatusUseCase
         $normalizedStatusReason = is_string($statusReason) ? trim($statusReason) : null;
         $normalizedStatusReason = $normalizedStatusReason === '' ? null : $normalizedStatusReason;
 
-        // Derived from the ticket's own service_type, never trusted from the
-        // caller — CreateLaboratoryOrderUseCase/CreatePharmacyOrderUseCase/
-        // CreateRadiologyOrderUseCase/CreateTheatreProcedureUseCase all
-        // derive the same value from ServiceRequestServiceType when they
-        // auto-complete a ticket by creating its destination order, so a
-        // manual completion here must match exactly (theatre doesn't follow
-        // the "{serviceType}_order" pattern the other three do).
         $normalizedLinkedOrderType = ServiceRequestServiceType::tryFrom((string) ($existing['service_type'] ?? ''))?->linkedOrderType();
         $normalizedLinkedOrderNumber = is_string($linkedOrderNumber) ? trim($linkedOrderNumber) : null;
         $normalizedLinkedOrderNumber = $normalizedLinkedOrderNumber === '' ? null : $normalizedLinkedOrderNumber;
@@ -137,12 +131,16 @@ class UpdateServiceRequestStatusUseCase
             });
         }
 
+        if ($updated !== null && $newStatus === ServiceRequestStatus::IN_PROGRESS->value) {
+            $items = $updated['items'] ?? [];
+            if (! empty($items)) {
+                $this->fulfillItemsUseCase->execute($id, $items, (int) $actorId);
+            }
+        }
+
         return $updated;
     }
 
-    /**
-     * @param array<string, mixed> $existing
-     */
     private function assertWithinDepartmentScope(array $existing, ServiceRequestDepartmentScope $scope): void
     {
         if ($scope->canViewAllDepartments) {

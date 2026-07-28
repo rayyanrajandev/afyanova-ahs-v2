@@ -192,6 +192,7 @@ class ServiceRequestController extends Controller
             'serviceType' => 'service_type',
             'priority' => 'priority',
             'notes' => 'notes',
+            'items' => 'items',
         ];
 
         $payload = [];

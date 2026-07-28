@@ -1,14 +1,7 @@
 import { useMutation, useQueryClient, type UseMutationReturnType } from '@tanstack/vue-query';
 import { apiPost } from '@/lib/apiClient';
+import type { ServiceRequestItemInput } from '@/types/serviceRequestItem';
 
-/**
- * Phase 5 of reports/patients-index-modernization-plan.md — the
- * "direct-services" mode of the Visit Handoff sheet: a walk-in patient who
- * needs only a lab/pharmacy/radiology/theatre service, not a doctor visit,
- * per patient-flow's own waiting_direct_service/in_direct_service steps
- * (GetActiveVisitJourneyUseCase — the resulting ServiceRequest is already
- * visible there once created, no separate visibility work needed).
- */
 export type DirectServiceType = 'laboratory' | 'pharmacy' | 'radiology' | 'theatre_procedure';
 
 export type DirectServiceRequestVariables = {
@@ -17,6 +10,7 @@ export type DirectServiceRequestVariables = {
     departmentId?: string | null;
     priority?: 'routine' | 'urgent';
     notes?: string | null;
+    items?: ServiceRequestItemInput[];
 };
 
 export type DirectServiceRequestResult = {
@@ -45,6 +39,14 @@ export function useDirectServiceRequest(): UseMutationReturnType<
                     departmentId: variables.departmentId || null,
                     priority: variables.priority ?? 'routine',
                     notes: variables.notes?.trim() || null,
+                    items: variables.items?.length ? variables.items.map((item) => ({
+                        catalogItemId: item.catalogItemId,
+                        itemName: item.itemName,
+                        itemCode: item.itemCode,
+                        quantity: item.quantity,
+                        clinicalIndication: item.clinicalIndication || null,
+                        instructions: item.instructions || null,
+                    })) : undefined,
                 },
             });
             return response.data;

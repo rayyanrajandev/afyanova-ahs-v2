@@ -566,6 +566,10 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.sync-candidates');
 
+    Route::get('platform/catalog/by-department/{departmentId}', [PlatformClinicalCatalogController::class, 'byDepartment'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.clinical-catalogs.by-department');
+
     Route::get('platform/admin/facilities', [FacilityConfigurationController::class, 'index'])
         ->middleware('can:platform.facilities.read')
         ->name('platform.admin.facilities.index');

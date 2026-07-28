@@ -14,6 +14,7 @@ import DirectServiceStatusDialog, {
     type DirectServiceStatusTargetRequest,
 } from '@/components/directService/DirectServiceStatusDialog.vue';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
+import ServiceRequestItemList from '@/components/directService/ServiceRequestItemList.vue';
 import { useDirectServiceDepartmentOptions } from '@/composables/directService/useDirectServiceDepartmentOptions';
 import { useDirectServiceFilters } from '@/composables/directService/useDirectServiceFilters';
 import { useDirectServicePatientDirectory } from '@/composables/directService/useDirectServicePatientDirectory';
@@ -323,6 +324,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     </p>
                                 </div>
                                 <p class="text-xs text-muted-foreground">{{ item.notes || 'No notes recorded' }}</p>
+                                <ServiceRequestItemList v-if="item.items && item.items.length > 0" :items="item.items as any" />
                                 <p class="text-[11px] text-muted-foreground">Requested {{ formatDateTime(item.requestedAt) }}</p>
                             </div>
 

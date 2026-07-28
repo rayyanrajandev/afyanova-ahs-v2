@@ -16,6 +16,7 @@ use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemTypeCountsU
 use App\Modules\Platform\Application\UseCases\UpdateClinicalCatalogItemStatusUseCase;
 use App\Modules\Platform\Application\UseCases\UpdateClinicalCatalogItemUseCase;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
+use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Presentation\Http\Requests\StoreClinicalCatalogItemRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateClinicalCatalogItemRequest;
 use App\Modules\Platform\Presentation\Http\Controllers\Concerns\HandlesClinicalCatalogBulkOperations;
@@ -54,6 +55,20 @@ class PlatformClinicalCatalogController extends Controller
 
         return response()->json([
             'data' => array_map([ClinicalCatalogItemResponseTransformer::class, 'transform'], $items),
+        ]);
+    }
+
+    public function byDepartment(string $departmentId, Request $request): JsonResponse
+    {
+        $query = ClinicalCatalogItemModel::query()
+            ->where('department_id', $departmentId)
+            ->where('status', 'active')
+            ->orderBy('name');
+
+        $items = $query->get(['id', 'code', 'name', 'catalog_type', 'category', 'unit', 'status']);
+
+        return response()->json([
+            'data' => $items->toArray(),
         ]);
     }
 

@@ -23,6 +23,7 @@ class ServiceRequestAuditEventModel extends Model
      */
     protected $fillable = [
         'service_request_id',
+        'service_request_item_id',
         'actor_user_id',
         'action',
         'from_status',

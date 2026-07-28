@@ -16,6 +16,7 @@ class AppendServiceRequestAuditEventUseCase
         ?string $fromStatus,
         ?string $toStatus,
         ?array $metadata = null,
+        ?string $serviceRequestItemId = null,
     ): void {
         $serviceRequestId = trim($serviceRequestId);
         $action = trim($action);
@@ -26,6 +27,7 @@ class AppendServiceRequestAuditEventUseCase
 
         ServiceRequestAuditEventModel::query()->create([
             'service_request_id' => $serviceRequestId,
+            'service_request_item_id' => $serviceRequestItemId,
             'actor_user_id' => $actorUserId,
             'action' => $action,
             'from_status' => $fromStatus,

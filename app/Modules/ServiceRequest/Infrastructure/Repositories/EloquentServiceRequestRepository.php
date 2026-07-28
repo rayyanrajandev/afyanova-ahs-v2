@@ -22,6 +22,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         $model->fill($attributes);
         $model->save();
         $model->load($this->departmentRelation());
+        $model->load('items');
 
         return $model->toArray();
     }
@@ -33,6 +34,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
 
         return $query
             ->with($this->departmentRelation())
+            ->with(['items'])
             ->find($id)
             ?->toArray();
     }
@@ -49,6 +51,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         $model->fill($attributes);
         $model->save();
         $model->load($this->departmentRelation());
+        $model->load(['items']);
 
         return $model->toArray();
     }
@@ -67,6 +70,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
 
         return $queryBuilder
             ->with($this->departmentRelation())
+            ->with(['items'])
             ->where('patient_id', $patientId)
             ->where('service_type', $serviceType)
             ->whereIn('status', ['pending', 'in_progress'])
@@ -93,6 +97,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
 
         $queryBuilder
             ->with($this->departmentRelation())
+            ->with(['items'])
             ->when($patientId, fn (Builder $b, string $v) => $b->where('patient_id', $v))
             ->when($serviceType, fn (Builder $b, string $v) => $b->where('service_type', $v))
             ->when($status, fn (Builder $b, string $v) => $b->where('status', $v))
@@ -172,6 +177,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
 
         $models = $queryBuilder
             ->with($this->departmentRelation())
+            ->with(['items'])
             ->whereIn('patient_id', $patientIds)
             ->whereIn('status', ['pending', 'in_progress'])
             ->orderByRaw("CASE WHEN priority = 'urgent' THEN 0 ELSE 1 END")

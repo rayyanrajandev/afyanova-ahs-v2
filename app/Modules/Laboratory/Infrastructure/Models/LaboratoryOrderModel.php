@@ -19,6 +19,7 @@ class LaboratoryOrderModel extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'service_request_item_id',
         'order_number',
         'tenant_id',
         'facility_id',

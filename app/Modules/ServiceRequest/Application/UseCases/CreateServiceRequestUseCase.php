@@ -6,9 +6,11 @@ use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\ServiceRequest\Application\Exceptions\ActiveServiceRequestAlreadyExistsException;
 use App\Modules\ServiceRequest\Application\Exceptions\PatientNotEligibleForServiceRequestException;
+use App\Modules\ServiceRequest\Domain\Repositories\ServiceRequestItemRepositoryInterface;
 use App\Modules\ServiceRequest\Domain\Repositories\ServiceRequestRepositoryInterface;
 use App\Modules\ServiceRequest\Domain\Services\PatientLookupServiceInterface;
 use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestStatus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -16,6 +18,7 @@ class CreateServiceRequestUseCase
 {
     public function __construct(
         private readonly ServiceRequestRepositoryInterface $serviceRequestRepository,
+        private readonly ServiceRequestItemRepositoryInterface $itemRepository,
         private readonly PatientLookupServiceInterface $patientLookupService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
@@ -55,10 +58,14 @@ class CreateServiceRequestUseCase
             $payload['priority'] = 'routine';
         }
 
-        $created = $this->serviceRequestRepository->create($payload);
-        $id = is_string($created['id'] ?? null) ? (string) $created['id'] : '';
+        $created = DB::transaction(function () use ($payload, $actorId): array {
+            $created = $this->serviceRequestRepository->create($payload);
+            $id = (string) $created['id'];
 
-        if ($id !== '') {
+            if (isset($payload['items']) && is_array($payload['items'])) {
+                $this->itemRepository->createMany($id, $payload['items']);
+            }
+
             $this->appendServiceRequestAuditEvent->execute(
                 $id,
                 'service_request.created',
@@ -66,14 +73,16 @@ class CreateServiceRequestUseCase
                 null,
                 ServiceRequestStatus::PENDING->value,
                 [
-                    'patientId' => $patientId,
-                    'appointmentId' => $created['appointment_id'] ?? null,
+                    'patientId' => $created['patient_id'] ?? null,
+                    'serviceType' => $created['service_type'] ?? null,
                     'departmentId' => $created['department_id'] ?? null,
                     'requestNumber' => $created['request_number'] ?? null,
-                    'serviceType' => $created['service_type'] ?? null,
+                    'itemCount' => isset($payload['items']) ? count($payload['items']) : 0,
                 ],
             );
-        }
+
+            return $created;
+        });
 
         return $created;
     }

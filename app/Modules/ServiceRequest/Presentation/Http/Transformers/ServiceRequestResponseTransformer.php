@@ -14,6 +14,49 @@ class ServiceRequestResponseTransformer
             is_array($serviceRequest['department'] ?? null) ? $serviceRequest['department'] : null,
         );
 
+        $items = [];
+        if (isset($serviceRequest['items']) && is_array($serviceRequest['items'])) {
+            $items = array_map(static function (array $item): array {
+                return [
+                    'id' => $item['id'] ?? null,
+                    'catalogItemId' => $item['catalog_item_id'] ?? null,
+                    'itemName' => $item['item_name'] ?? null,
+                    'itemCode' => $item['item_code'] ?? null,
+                    'quantity' => $item['quantity'] ?? 1,
+                    'status' => $item['status'] ?? 'pending',
+                    'clinicalIndication' => $item['clinical_indication'] ?? null,
+                    'instructions' => $item['instructions'] ?? null,
+                    'requestedByUserId' => $item['requested_by_user_id'] ?? null,
+                    'requestedAt' => isset($item['requested_at'])
+                        ? (is_string($item['requested_at'])
+                            ? $item['requested_at']
+                            : optional($item['requested_at'])->toISOString())
+                        : null,
+                    'orderedAt' => isset($item['ordered_at'])
+                        ? (is_string($item['ordered_at'])
+                            ? $item['ordered_at']
+                            : optional($item['ordered_at'])->toISOString())
+                        : null,
+                    'completedAt' => isset($item['completed_at'])
+                        ? (is_string($item['completed_at'])
+                            ? $item['completed_at']
+                            : optional($item['completed_at'])->toISOString())
+                        : null,
+                    'failedAt' => isset($item['failed_at'])
+                        ? (is_string($item['failed_at'])
+                            ? $item['failed_at']
+                            : optional($item['failed_at'])->toISOString())
+                        : null,
+                    'cancelledAt' => isset($item['cancelled_at'])
+                        ? (is_string($item['cancelled_at'])
+                            ? $item['cancelled_at']
+                            : optional($item['cancelled_at'])->toISOString())
+                        : null,
+                    'failureReason' => $item['failure_reason'] ?? null,
+                ];
+            }, $serviceRequest['items']);
+        }
+
         return [
             'id' => $serviceRequest['id'] ?? null,
             'requestNumber' => $serviceRequest['request_number'] ?? null,
@@ -27,6 +70,7 @@ class ServiceRequestResponseTransformer
             'priority' => $serviceRequest['priority'] ?? null,
             'status' => $serviceRequest['status'] ?? null,
             'notes' => $serviceRequest['notes'] ?? null,
+            'items' => $items,
             'requestedAt' => isset($serviceRequest['requested_at'])
                 ? (is_string($serviceRequest['requested_at'])
                     ? $serviceRequest['requested_at']

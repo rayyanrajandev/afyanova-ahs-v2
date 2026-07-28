@@ -2,11 +2,8 @@ import { useQuery, type UseQueryReturnType } from '@tanstack/vue-query';
 import { computed } from 'vue';
 import { apiGet } from '@/lib/apiClient';
 import type { DirectServiceFilters } from './useDirectServiceFilters';
+import type { ServiceRequestItem, ServiceRequestItemStatus } from '@/types/serviceRequestItem';
 
-/**
- * Matches ServiceRequestResponseTransformer::transform() exactly
- * (app/Modules/ServiceRequest/Presentation/Http/Transformers/ServiceRequestResponseTransformer.php).
- */
 export type DirectServiceDepartmentSummary = {
     id: string | null;
     name: string | null;
@@ -28,6 +25,23 @@ export type DirectServiceRequest = {
     priority: 'routine' | 'urgent' | null;
     status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | null;
     notes: string | null;
+    items: Array<{
+        id: string | null;
+        catalogItemId: string | null;
+        itemName: string | null;
+        itemCode: string | null;
+        quantity: number;
+        status: ServiceRequestItemStatus;
+        clinicalIndication: string | null;
+        instructions: string | null;
+        requestedByUserId: number | null;
+        requestedAt: string | null;
+        orderedAt: string | null;
+        completedAt: string | null;
+        failedAt: string | null;
+        cancelledAt: string | null;
+        failureReason: string | null;
+    }>;
     requestedAt: string | null;
     acknowledgedAt: string | null;
     acknowledgedByUserId: number | null;
@@ -55,13 +69,6 @@ function filterQuery(filters: DirectServiceFilters) {
     };
 }
 
-/**
- * GET /service-requests. departmentId scoping is enforced server-side
- * (ServiceRequestDepartmentScopeResolver) — a department-scoped actor
- * always sees only their own department regardless of what's sent here;
- * meta.departmentScopeMissing signals an actor with no department assigned
- * at all (empty data, not an error).
- */
 export function useDirectServiceRequests(
     filters: DirectServiceFilters,
 ): UseQueryReturnType<DirectServiceRequestListResponse, Error> {

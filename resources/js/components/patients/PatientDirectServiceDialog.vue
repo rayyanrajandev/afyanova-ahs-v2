@@ -8,32 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
+import ServiceRequestItemSelector, { type SelectedCatalogItem } from '@/components/directService/ServiceRequestItemSelector.vue';
 import { useDirectServiceDepartmentOptions } from '@/composables/directService/useDirectServiceDepartmentOptions';
 import { useDirectServiceRequest, type DirectServiceType } from '@/composables/patientsIndex/useDirectServiceRequest';
 
-/**
- * Phase 5 of reports/patients-index-modernization-plan.md — the
- * "direct-services" mode, the one Visit Handoff action that genuinely
- * needs a form (per reports/reception-checkin-architecture-audit.md's
- * constraint: only the modes that actually require administrative input
- * get a dialog — outpatient/emergency check-in do not, and are one-click
- * actions in PatientVisitActionsMenu.vue instead). A small Dialog, not a
- * Sheet: four fields is a "lightweight dialog," not a workspace.
- *
- * `patient` is deliberately the minimal shape this component actually
- * uses (id + name, for the description text), not the full
- * PatientListItem — that keeps this usable from any caller that has
- * already resolved a patient, including reception/Queue.vue's own
- * PatientSearchResult (a narrower local type), not just IndexV2.vue.
- *
- * Department field added for the patient flow redesign's Direct Service
- * workflow B4: department_id existed on service_requests but was never set
- * here, making Direct Service Queue V2's per-department scoping impossible
- * to populate from intake. Optional (an actor with
- * service.requests.view-all-departments can leave it unset and pick it up
- * from the queue's own department filter later) but expected in normal use
- * so the ticket lands in the right department's queue immediately.
- */
 export type DirectServiceDialogPatient = {
     id: string;
     firstName: string | null;
@@ -54,6 +32,7 @@ const serviceType = ref<DirectServiceType>('laboratory');
 const departmentId = ref('');
 const priority = ref<'routine' | 'urgent'>('routine');
 const notes = ref('');
+const selectedItems = ref<SelectedCatalogItem[]>([]);
 const request = useDirectServiceRequest();
 const departmentOptions = useDirectServiceDepartmentOptions(serviceType);
 
@@ -67,6 +46,14 @@ async function submit(): Promise<void> {
         departmentId: departmentId.value || null,
         priority: priority.value,
         notes: notes.value,
+        items: selectedItems.value.length > 0 ? selectedItems.value.map((item) => ({
+            catalogItemId: item.catalogItemId,
+            itemName: item.itemName,
+            itemCode: item.itemCode,
+            quantity: item.quantity,
+            clinicalIndication: item.clinicalIndication,
+            instructions: item.instructions,
+        })) : undefined,
     });
     emit('created', result.requestNumber);
     open.value = false;
@@ -74,6 +61,7 @@ async function submit(): Promise<void> {
     departmentId.value = '';
     priority.value = 'routine';
     notes.value = '';
+    selectedItems.value = [];
 }
 </script>
 
@@ -110,6 +98,11 @@ async function submit(): Promise<void> {
                     :options="departmentOptions.data.value ?? []"
                     placeholder="Select a department"
                     empty-text="No matching department found."
+                />
+                <ServiceRequestItemSelector
+                    v-if="departmentId"
+                    :department-id="departmentId"
+                    v-model="selectedItems"
                 />
                 <div class="grid gap-2">
                     <Label for="direct-service-priority">Priority</Label>
