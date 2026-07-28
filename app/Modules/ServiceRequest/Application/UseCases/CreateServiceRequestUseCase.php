@@ -23,6 +23,7 @@ class CreateServiceRequestUseCase
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly AppendServiceRequestAuditEventUseCase $appendServiceRequestAuditEvent,
+        private readonly FulfillServiceRequestItemsUseCase $fulfillItemsUseCase,
     ) {}
 
     public function execute(array $payload, ?int $actorId = null): array
@@ -47,18 +48,35 @@ class CreateServiceRequestUseCase
             throw new ActiveServiceRequestAlreadyExistsException($activeRequest);
         }
 
-        $payload['status'] = ServiceRequestStatus::PENDING->value;
-        $payload['request_number'] = $this->generateRequestNumber();
-        $payload['tenant_id'] = $this->platformScopeContext->tenantId();
-        $payload['facility_id'] = $this->platformScopeContext->facilityId();
-        $payload['requested_by_user_id'] = $actorId;
-        $payload['requested_at'] = now();
-
-        if (empty($payload['priority'])) {
-            $payload['priority'] = 'routine';
+        if (isset($payload['items']) && is_array($payload['items'])) {
+            $payload['items'] = array_map(
+                static fn (array $item): array => [
+                    'service_type' => $serviceType,
+                    'catalog_item_id' => $item['catalog_item_id'] ?? $item['catalogItemId'] ?? null,
+                    'item_name' => $item['item_name'] ?? $item['itemName'] ?? '',
+                    'item_code' => $item['item_code'] ?? $item['itemCode'] ?? null,
+                    'quantity' => $item['quantity'] ?? 1,
+                    'clinical_indication' => $item['clinical_indication'] ?? $item['clinicalIndication'] ?? null,
+                    'instructions' => $item['instructions'] ?? null,
+                ],
+                $payload['items'],
+            );
         }
 
-        $created = DB::transaction(function () use ($payload, $actorId): array {
+        $created = DB::transaction(function () use ($payload, $actorId, $serviceType): array {
+            $payload['status'] = ServiceRequestStatus::IN_PROGRESS->value;
+            $payload['request_number'] = $this->generateRequestNumber();
+            $payload['tenant_id'] = $this->platformScopeContext->tenantId();
+            $payload['facility_id'] = $this->platformScopeContext->facilityId();
+            $payload['requested_by_user_id'] = $actorId;
+            $payload['requested_at'] = now();
+            $payload['acknowledged_at'] = now();
+            $payload['acknowledged_by_user_id'] = $actorId;
+
+            if (empty($payload['priority'])) {
+                $payload['priority'] = 'routine';
+            }
+
             $created = $this->serviceRequestRepository->create($payload);
             $id = (string) $created['id'];
 
@@ -71,7 +89,7 @@ class CreateServiceRequestUseCase
                 'service_request.created',
                 $actorId,
                 null,
-                ServiceRequestStatus::PENDING->value,
+                ServiceRequestStatus::IN_PROGRESS->value,
                 [
                     'patientId' => $created['patient_id'] ?? null,
                     'serviceType' => $created['service_type'] ?? null,
@@ -83,6 +101,13 @@ class CreateServiceRequestUseCase
 
             return $created;
         });
+
+        $actorIdInt = is_int($actorId) ? $actorId : 0;
+        $this->fulfillItemsUseCase->execute(
+            serviceRequestId: (string) $created['id'],
+            items: $this->itemRepository->findByServiceRequestId((string) $created['id']),
+            actorId: $actorIdInt,
+        );
 
         return $created;
     }

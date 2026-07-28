@@ -63,14 +63,14 @@ class FulfillServiceRequestItemsUseCase
                 $itemId,
             );
 
-            $jobClass::dispatch(
+            dispatch_sync(new $jobClass(
                 serviceRequestItemId: $itemId,
                 catalogItemId: (string) $item['catalog_item_id'],
                 quantity: (int) ($item['quantity'] ?? 1),
                 actorId: $actorId,
                 serviceRequestId: $serviceRequestId,
                 patientId: $patientId,
-            );
+            ));
         }
     }
 }
