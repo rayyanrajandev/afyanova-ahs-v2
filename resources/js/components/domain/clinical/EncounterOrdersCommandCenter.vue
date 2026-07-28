@@ -27,6 +27,7 @@ const props = defineProps<{
     canOpenPharmacyWorkflow: boolean;
     canOpenRadiologyWorkflow: boolean;
     canOpenTheatreWorkflow: boolean;
+    canOpenClinicalProcedureWorkflow: boolean;
     canOpenBillingWorkflow: boolean;
     contextCreateHref: (
         path: string,
@@ -480,6 +481,44 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
                     >
                         {{ careSummaryCountLabel('theatre-procedures') }}
                     </Badge>
+                </Link>
+            </Button>
+
+            <Button
+                v-if="canOpenClinicalProcedureWorkflow"
+                variant="outline"
+                :class="[
+                    'h-auto justify-start text-left',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
+                ]"
+                as-child
+            >
+                <Link
+                    :href="
+                        contextCreateHref('/clinical-procedure-orders', {
+                            includeTabNew: true,
+                        })
+                    "
+                >
+                    <span
+                        :class="[
+                            'flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary',
+                            compact ? 'size-7' : 'size-8',
+                        ]"
+                    >
+                        <AppIcon name="scissors" class="size-4" />
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-sm font-medium">Procedure</span>
+                        <span
+                            v-if="!compact"
+                            class="block text-[11px] font-normal text-muted-foreground"
+                        >
+                            Bedside and nursing procedures
+                        </span>
+                    </span>
                 </Link>
             </Button>
 

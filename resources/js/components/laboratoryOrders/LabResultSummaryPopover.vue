@@ -32,11 +32,15 @@ const props = withDefaults(
          * wire a detail sheet (patient chart, encounter workspace) pass
          * this; list/summary surfaces without a sheet leave it off. */
         showViewFull?: boolean;
+        /** Custom label for the "View full result" link. Defaults to
+         * "View full result" when omitted. */
+        viewFullLabel?: string;
     }>(),
     {
         triggerLabel: 'Result summary',
         triggerClass: '',
         showViewFull: false,
+        viewFullLabel: 'View full result',
     },
 );
 
@@ -115,7 +119,7 @@ function valueBadgeClass(value: string): string {
                     class="flex w-full items-center justify-between gap-2 rounded-sm px-1 py-1 text-xs font-medium text-primary hover:bg-muted"
                     @click="viewFullResult"
                 >
-                    View full result
+                    {{ viewFullLabel }}
                     <AppIcon name="arrow-right" class="size-3.5" />
                 </button>
             </div>

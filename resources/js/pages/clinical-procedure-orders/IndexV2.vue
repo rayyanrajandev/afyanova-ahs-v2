@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -61,6 +61,7 @@ const initialPatientId = initialSearchParams.get('patientId') ?? '';
 if (initialPatientId) {
     filters.patientId = initialPatientId;
 }
+const encounterId = initialSearchParams.get('encounterId') ?? '';
 const initialStatus = initialSearchParams.get('status') ?? '';
 if (initialStatus) {
     filters.status = initialStatus;
@@ -368,6 +369,18 @@ function openAuditSheet(order: ClinicalProcedureOrder): void {
                             <p class="text-xs text-muted-foreground">Schedule, perform, and report clinical procedures.</p>
                         </div>
                         <div class="flex shrink-0 items-center gap-2">
+                            <Button
+                                v-if="encounterId"
+                                variant="default"
+                                size="sm"
+                                class="h-8 gap-1.5"
+                                as-child
+                            >
+                                <Link :href="`/encounters/${encounterId}/v2`">
+                                    <AppIcon name="chevron-left" class="size-3.5" />
+                                    Back to encounter
+                                </Link>
+                            </Button>
                             <Badge variant="secondary">{{ statusCount('all') ?? '—' }} orders</Badge>
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters">
                                 Clear filters

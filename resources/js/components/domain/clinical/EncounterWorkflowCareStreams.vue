@@ -93,6 +93,9 @@ const emit = defineEmits<{
         },
     ];
     viewLabResult: [orderId: string];
+    viewPharmacyDetail: [orderId: string];
+    viewRadiologyDetail: [orderId: string];
+    viewTheatreDetail: [orderId: string];
 }>();
 
 function emitLifecycle(
@@ -374,7 +377,19 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                 {{ formatEnumLabel(order.status || 'pending') }}
                             </Badge>
                         </div>
-                        <p class="mt-1 text-xs text-muted-foreground">
+                        <div
+                            v-if="(order.dosageInstruction ?? '').trim() !== ''"
+                            class="mt-1 flex flex-wrap items-center gap-2"
+                        >
+                            <LabResultSummaryPopover
+                                :result-summary="order.dosageInstruction"
+                                trigger-label="View dosage"
+                                show-view-full
+                                view-full-label="View full order"
+                                @view-full-result="emit('viewPharmacyDetail', order.id)"
+                            />
+                        </div>
+                        <p v-else class="mt-1 text-xs text-muted-foreground">
                             {{ pharmacyOrderSummaryText(order, formatDateTime) }}
                         </p>
                         <EncounterOrderProgress
@@ -396,6 +411,11 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" class="w-52">
+                                    <DropdownMenuItem @select="emit('viewPharmacyDetail', order.id)">
+                                        <AppIcon name="file-text" class="size-4" />
+                                        View details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         v-if="canUseInlineOrders"
                                         @select="emitInlineOrder('pharmacy', 'reorder', order.id, orderActionLabel(order.orderNumber, order.medicationName))"
@@ -514,7 +534,22 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                 {{ formatEnumLabel(order.status || 'ordered') }}
                             </Badge>
                         </div>
-                        <p class="mt-1 text-xs text-muted-foreground">
+                        <div
+                            v-if="(order.reportSummary ?? '').trim() !== ''"
+                            class="mt-1 flex flex-wrap items-center gap-2"
+                        >
+                            <LabResultSummaryPopover
+                                :result-summary="order.reportSummary ?? null"
+                                trigger-label="View report"
+                                show-view-full
+                                view-full-label="View full report"
+                                @view-full-result="emit('viewRadiologyDetail', order.id)"
+                            />
+                            <span v-if="order.completedAt" class="text-[11px] text-muted-foreground">
+                                Reported {{ formatDateTime(order.completedAt) }}
+                            </span>
+                        </div>
+                        <p v-else class="mt-1 text-xs text-muted-foreground">
                             {{ radiologyOrderSummaryText(order, formatDateTime) }}
                         </p>
                         <EncounterOrderProgress
@@ -536,6 +571,11 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" class="w-48">
+                                    <DropdownMenuItem @select="emit('viewRadiologyDetail', order.id)">
+                                        <AppIcon name="file-text" class="size-4" />
+                                        View details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         v-if="canUseInlineOrders"
                                         @select="emitInlineOrder('radiology', 'reorder', order.id, orderActionLabel(order.orderNumber, order.studyDescription))"
@@ -646,7 +686,19 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                 {{ formatEnumLabel(procedure.status || 'planned') }}
                             </Badge>
                         </div>
-                        <p class="mt-1 text-xs text-muted-foreground">
+                        <div
+                            v-if="(procedure.notes ?? '').trim() !== ''"
+                            class="mt-1 flex flex-wrap items-center gap-2"
+                        >
+                            <LabResultSummaryPopover
+                                :result-summary="procedure.notes"
+                                trigger-label="View notes"
+                                show-view-full
+                                view-full-label="View full details"
+                                @view-full-result="emit('viewTheatreDetail', procedure.id)"
+                            />
+                        </div>
+                        <p v-else class="mt-1 text-xs text-muted-foreground">
                             {{ theatreProcedureSummaryText(procedure, formatDateTime) }}
                         </p>
                         <EncounterOrderProgress
@@ -668,6 +720,11 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" class="w-52">
+                                    <DropdownMenuItem @select="emit('viewTheatreDetail', procedure.id)">
+                                        <AppIcon name="file-text" class="size-4" />
+                                        View details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem as-child>
                                         <Link :href="contextCreateHref('/theatre-procedures/legacy', { includeTabNew: true, reorderOfId: procedure.id })">
                                             <AppIcon name="repeat-2" class="size-4" />

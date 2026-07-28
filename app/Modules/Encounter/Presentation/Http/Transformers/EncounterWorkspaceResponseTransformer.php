@@ -66,6 +66,7 @@ class EncounterWorkspaceResponseTransformer
             'closeReadiness' => EncounterCloseReadinessResponseTransformer::transform(
                 is_array($workspace['closeReadiness'] ?? null) ? $workspace['closeReadiness'] : null,
             ),
+            'canEdit' => (bool) ($workspace['canEdit'] ?? true),
         ];
     }
 

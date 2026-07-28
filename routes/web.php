@@ -429,15 +429,8 @@ Route::get('billing-payer-contracts', function () {
     return Inertia::render('billing/PayerContracts');
 })->middleware(['auth', 'verified', 'can:billing.payer-contracts.read', 'facility.entitlement:billing.payer_contracts'])->name('billing-payer-contracts.page');
 
-Route::get('billing-service-catalog', function () {
-    return Inertia::render('billing/ServiceCatalogV2');
-})->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.page');
-
-Route::get('billing-service-catalog/{id}/prices', function (string $id) {
-    return Inertia::render('billing/ServicePriceWorkspaceV2', [
-        'itemId' => $id,
-    ]);
-})->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.prices.page');
+Route::permanentRedirect('billing-service-catalog', '/chargeable-items');
+Route::permanentRedirect('billing-service-catalog/{id}/prices', '/chargeable-items');
 
 Route::get('billing-consultation-mappings', function () {
     return Inertia::render('billing/ConsultationMappings');
@@ -820,14 +813,7 @@ Route::get('docs/billing-payer-contract-auth-rules-v1-contract', function () {
     ]);
 })->middleware(['auth', 'verified'])->name('docs.billing-payer-contract-auth-rules-v1-contract');
 
-Route::get('docs/billing-service-catalog-v1-contract', function () {
-    $path = base_path('documents/01-contracts/domain/BILLING_SERVICE_CATALOG_V1_CONTRACT.md');
-    abort_unless(is_file($path), 404);
 
-    return response()->file($path, [
-        'Content-Type' => 'text/markdown; charset=UTF-8',
-    ]);
-})->middleware(['auth', 'verified'])->name('docs.billing-service-catalog-v1-contract');
 
 Route::get('docs/clinical-catalog-governance-v1-contract', function () {
     $path = base_path('documents/01-contracts/domain/CLINICAL_CATALOG_GOVERNANCE_V1_CONTRACT.md');

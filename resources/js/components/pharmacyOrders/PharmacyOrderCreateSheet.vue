@@ -150,6 +150,11 @@ const formError = ref<string | null>(null);
 const form = reactive({
     catalogItemId: '',
     dosageInstruction: '',
+    route: '',
+    frequency: '',
+    durationValue: '',
+    durationUnit: '',
+    prescribedUnit: '',
     clinicalIndication: '',
     quantityPrescribed: '1',
     dispensingNotes: '',
@@ -178,6 +183,11 @@ function resetForm(): void {
     patientId.value = '';
     form.catalogItemId = '';
     form.dosageInstruction = '';
+    form.route = '';
+    form.frequency = '';
+    form.durationValue = '';
+    form.durationUnit = '';
+    form.prescribedUnit = '';
     form.clinicalIndication = '';
     form.quantityPrescribed = '1';
     form.dispensingNotes = '';
@@ -294,6 +304,11 @@ async function submit(): Promise<void> {
             medicationCode: item.code?.trim() ?? '',
             medicationName: item.name?.trim() ?? '',
             dosageInstruction: form.dosageInstruction.trim(),
+            route: form.route.trim() || undefined,
+            frequency: form.frequency.trim() || undefined,
+            durationValue: form.durationValue ? Number(form.durationValue) : null,
+            durationUnit: form.durationUnit.trim() || undefined,
+            prescribedUnit: form.prescribedUnit.trim() || undefined,
             clinicalIndication: form.clinicalIndication.trim(),
             quantityPrescribed: quantity,
             dispensingNotes: form.dispensingNotes.trim(),
@@ -407,6 +422,32 @@ async function submit(): Promise<void> {
                             <Label for="pharmacy-order-create-qty">Quantity prescribed</Label>
                             <Input id="pharmacy-order-create-qty" v-model="form.quantityPrescribed" type="number" min="1" step="1" />
                             <p v-if="fieldError('quantityPrescribed')" class="text-xs text-destructive">{{ fieldError('quantityPrescribed') }}</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-route">Route</Label>
+                            <Input id="pharmacy-order-create-route" v-model="form.route" placeholder="Oral, topical, IV…" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-freq">Frequency</Label>
+                            <Input id="pharmacy-order-create-freq" v-model="form.frequency" placeholder="Twice daily, PRN…" />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-dur-val">Duration value</Label>
+                            <Input id="pharmacy-order-create-dur-val" v-model="form.durationValue" type="number" min="0" step="0.01" placeholder="7" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-dur-unit">Duration unit</Label>
+                            <Input id="pharmacy-order-create-dur-unit" v-model="form.durationUnit" placeholder="days, weeks…" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-unit">Prescribed unit</Label>
+                            <Input id="pharmacy-order-create-unit" v-model="form.prescribedUnit" placeholder="tablets, ml…" />
                         </div>
                     </div>
 

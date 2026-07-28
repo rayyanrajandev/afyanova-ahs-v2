@@ -19,7 +19,6 @@ export const operationalFacilityScopePathPrefixes = [
     '/billing-financial-reports',
     '/billing-corporate',
     '/billing-payer-contracts',
-    '/billing-service-catalog',
     '/pos',
     '/claims-insurance',
     '/inventory-procurement',

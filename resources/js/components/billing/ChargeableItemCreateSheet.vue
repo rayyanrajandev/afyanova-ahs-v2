@@ -13,11 +13,70 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useCreateChargeableItem } from '@/composables/chargeableItems/useCreateChargeableItem';
 import type { ChargeableItem } from '@/composables/chargeableItems/useChargeableItems';
-import { useServiceCatalogClinicalCatalogOptions } from '@/composables/serviceCatalogIndex/useServiceCatalogClinicalCatalogOptions';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
-import { CLINICAL_CATALOG_SOURCES, clinicalCatalogGroupLabel, type ClinicalCatalogType } from '@/lib/billingServiceCatalog';
 import { messageFromUnknown, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
+import { useQuery } from '@tanstack/vue-query';
+import { apiGet } from '@/lib/apiClient';
+
+type ClinicalCatalogType = 'lab_test' | 'radiology_procedure' | 'theatre_procedure' | 'clinical_procedure' | 'formulary_item';
+
+const CLINICAL_CATALOG_SOURCES = [
+    { type: 'lab_test' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/lab-tests', label: 'Lab Tests', defaultServiceType: 'laboratory' },
+    { type: 'radiology_procedure' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/radiology-procedures', label: 'Radiology', defaultServiceType: 'radiology' },
+    { type: 'theatre_procedure' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/theatre-procedures', label: 'Theatre Procedures', defaultServiceType: 'theatre' },
+    { type: 'clinical_procedure' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/clinical-procedures', label: 'Clinical Procedures', defaultServiceType: 'procedure' },
+    { type: 'formulary_item' as ClinicalCatalogType, path: '/platform/admin/clinical-catalogs/formulary-items', label: 'Formulary', defaultServiceType: 'pharmacy' },
+] as const;
+
+function clinicalCatalogSourceConfig(catalogType: string | null | undefined) {
+    return CLINICAL_CATALOG_SOURCES.find((source) => source.type === catalogType) ?? null;
+}
+
+function clinicalCatalogGroupLabel(catalogType: string | null | undefined): string {
+    return clinicalCatalogSourceConfig(catalogType)?.label ?? 'Clinical Catalogs';
+}
+
+type ClinicalCatalogLookupItem = {
+    id: string | null;
+    catalogType: ClinicalCatalogType | null;
+    code: string | null;
+    name: string | null;
+    departmentId: string | null;
+    category: string | null;
+    unit: string | null;
+    description: string | null;
+    codes: unknown | null;
+    facilityTier: string | null;
+    billingServiceCode: string | null;
+    billingLinkStatus: string | null;
+    billingLink: unknown | null;
+    metadata: Record<string, unknown> | null;
+    status: string | null;
+};
+
+const clinicalCatalogOptionsQuery = useQuery({
+    queryKey: ['chargeable-item-create-clinical-catalog-options'],
+    queryFn: async () => {
+        const results: ClinicalCatalogLookupItem[] = [];
+        for (const source of CLINICAL_CATALOG_SOURCES) {
+            let page = 1;
+            let lastPage = 1;
+            do {
+                const response = await apiGet<{ data: ClinicalCatalogLookupItem[]; meta: { lastPage: number } | null }>(source.path, {
+                    status: 'active',
+                    page,
+                    perPage: 100,
+                });
+                results.push(...(response.data ?? []).map((item) => ({ ...item, catalogType: item.catalogType ?? source.type })));
+                lastPage = Math.max(response.meta?.lastPage ?? 1, 1);
+                page += 1;
+            } while (page <= lastPage);
+        }
+        return results;
+    },
+    staleTime: 5 * 60 * 1000,
+});
 
 /**
  * Standalone create Sheet for the new pricing engine's chargeable_items +
@@ -34,8 +93,6 @@ const emit = defineEmits<{
 
 const { activeCurrencyCode } = usePlatformCountryProfile();
 const defaultCurrencyCode = computed(() => activeCurrencyCode.value || 'TZS');
-
-const clinicalCatalogOptionsQuery = useServiceCatalogClinicalCatalogOptions();
 const create = useCreateChargeableItem();
 
 const identitySource = ref<'clinical' | 'standalone' | null>(null);

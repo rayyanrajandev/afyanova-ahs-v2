@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryWarehouseModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventorySupplierModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
@@ -309,7 +310,7 @@ class DskInventoryItemsSeeder extends Seeder
                 $clinicalCatalogItemId = $catalog->id;
             }
 
-            InventoryItemModel::firstOrCreate(
+            $item = InventoryItemModel::firstOrCreate(
                 [
                     'facility_id' => $facility->id,
                     'item_code' => $data['code'],
@@ -326,6 +327,22 @@ class DskInventoryItemsSeeder extends Seeder
                     'current_stock' => $data['current_stock'] ?? 0,
                     'reorder_level' => $data['reorder_level'] ?? 0,
                     'status' => 'active',
+                ],
+            );
+
+            InventoryItemUnitModel::firstOrCreate(
+                [
+                    'item_id' => $item->id,
+                    'unit_name' => $data['unit'],
+                ],
+                [
+                    'tenant_id' => $facility->tenant_id,
+                    'facility_id' => $facility->id,
+                    'base_quantity' => 1,
+                    'is_base_unit' => true,
+                    'is_default_sales_unit' => true,
+                    'is_default_purchase_unit' => true,
+                    'is_active' => true,
                 ],
             );
             $count++;

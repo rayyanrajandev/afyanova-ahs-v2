@@ -11,16 +11,10 @@ class ConsultationMappingModel extends Model
     protected $table = 'consultation_mappings';
 
     protected $fillable = [
-        'billing_service_catalog_item_id',
         'chargeable_item_id',
         'clinician_tier',
         'department',
     ];
-
-    public function billingServiceCatalogItem(): BelongsTo
-    {
-        return $this->belongsTo(BillingServiceCatalogItemModel::class, 'billing_service_catalog_item_id');
-    }
 
     public function chargeableItem(): BelongsTo
     {

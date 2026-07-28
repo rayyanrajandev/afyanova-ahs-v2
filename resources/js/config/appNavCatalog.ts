@@ -652,7 +652,7 @@ export const helpTipsBySection: Record<NavSectionKey, string[]> = {
         'The POS counter handles cash and card receipts for walk-in payments and OTC sales.',
         'Use the billing queue preset on the dashboard for invoices awaiting settlement.',
         'NHIF and insurance workspace tracks pre-authorisation, submission, and adjudication status.',
-        'Billing Service Catalog is the master price list — changes affect new invoices and quotes.',
+        'Chargeable Items define the master price list — changes affect new invoices and quotes.',
     ],
     stores: [
         'Stores and procurement covers stock levels, requisitions, and goods receipt.',

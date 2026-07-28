@@ -217,6 +217,11 @@ export type PharmacyInlineOrderInput = {
     medicationCode: string;
     medicationName: string;
     dosageInstruction: string;
+    route?: string;
+    frequency?: string;
+    durationValue?: number | null;
+    durationUnit?: string;
+    prescribedUnit?: string;
     clinicalIndication: string;
     quantityPrescribed: number;
     dispensingNotes: string;
@@ -449,6 +454,11 @@ export async function createPharmacyInlineOrder(
             medicationCode: item.medicationCode.trim(),
             medicationName: item.medicationName.trim(),
             dosageInstruction: item.dosageInstruction.trim(),
+            route: item.route?.trim() || null,
+            frequency: item.frequency?.trim() || null,
+            durationValue: item.durationValue ?? null,
+            durationUnit: item.durationUnit?.trim() || null,
+            prescribedUnit: item.prescribedUnit?.trim() || null,
             clinicalIndication: item.clinicalIndication.trim() || null,
             quantityPrescribed: item.quantityPrescribed,
             quantityDispensed: null,

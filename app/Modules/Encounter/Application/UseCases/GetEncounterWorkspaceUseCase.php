@@ -72,6 +72,7 @@ class GetEncounterWorkspaceUseCase
             'clinicalProcedureOrders' => $this->loadClinicalProcedureOrders($encounterId),
             'clinicalProcedureOrdersPendingCount' => $this->countPendingClinicalProcedureOrders($encounterId),
             'closeReadiness' => $this->encounterCloseReadinessUseCase->execute($encounterId),
+            'canEdit' => $this->resolveCanEdit($encounterArray, $appointment),
         ];
     }
 
@@ -248,5 +249,23 @@ class GetEncounterWorkspaceUseCase
     {
         $placeholders = implode(',', array_fill(0, count($terminalStatuses), '?'));
         $query->orderByRaw("CASE WHEN status IN ({$placeholders}) THEN 1 ELSE 0 END ASC", $terminalStatuses);
+    }
+
+    /**
+     * Whether the current user can edit the encounter (notes, orders, diagnoses).
+     * Standalone encounters (no linked appointment) are always editable.
+     * Encounters linked to an appointment require the appointment to be
+     * in_consultation — the clinician must start the consultation first.
+     *
+     * @param  array<string, mixed>  $encounter
+     * @param  array<string, mixed>|null  $appointment
+     */
+    private function resolveCanEdit(array $encounter, ?array $appointment): bool
+    {
+        if ($appointment === null) {
+            return true;
+        }
+
+        return ($appointment['status'] ?? '') === 'in_consultation';
     }
 }

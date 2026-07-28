@@ -57,7 +57,7 @@ type Contract = {
 };
 type Rule = {
     id: string | null;
-    billingServiceCatalogItemId: string | null;
+    chargeableItemId: string | null;
     ruleCode: string | null;
     ruleName: string | null;
     serviceCode: string | null;
@@ -111,7 +111,6 @@ type RuleExpression = {
 type PriceOverride = {
     id: string | null;
     billingPayerContractId: string | null;
-    billingServiceCatalogItemId: string | null;
     chargeableItemId: string | null;
     serviceCode: string | null;
     serviceName: string | null;
@@ -155,12 +154,6 @@ type CatalogItem = {
     effectiveTo: string | null;
     status: string | null;
 };
-/**
- * Additive "pricing engine" link for negotiated prices -- separate from
- * CatalogItem (the legacy billing_service_catalog_items lookup) so the
- * Authorization Rule picker, which has no chargeable_item_id column yet,
- * stays entirely untouched by this.
- */
 type ChargeableItemPriceEntry = { unitPrice: number; currencyCode: string; status: string };
 type ChargeableItemApiEntry = {
     id: string;
@@ -170,23 +163,12 @@ type ChargeableItemApiEntry = {
     status: string;
     prices: ChargeableItemPriceEntry[];
 };
-type ChargeableItemListResponse = { data: ChargeableItemApiEntry[] };
-type ChargeableItemLookupEntry = {
-    id: string;
-    code: string;
-    name: string;
-    catalogType: string;
-    basePrice: string | null;
-    currencyCode: string | null;
-};
 type ListResponse<T> = { data: T[]; meta: Pagination };
 type ItemResponse<T> = { data: T };
 type CountsResponse = { data: StatusCounts };
 type AuditResponse = { data: AuditLog[]; meta: Pagination };
-type PriceCatalogListResponse = { data: CatalogItem[]; meta: Pagination };
 type PolicySummaryResponse = { data: PolicySummary };
 type PriceOverrideFormState = {
-    billingServiceCatalogItemId: string;
     chargeableItemId: string;
     serviceCode: string;
     serviceName: string;
@@ -199,7 +181,7 @@ type PriceOverrideFormState = {
     overrideNotes: string;
 };
 type RuleFormState = {
-    billingServiceCatalogItemId: string;
+    chargeableItemId: string;
     ruleCode: string;
     ruleName: string;
     serviceCode: string;
@@ -285,7 +267,6 @@ const { activeCurrencyCode, loadCountryProfile } = usePlatformCountryProfile();
 const canRead = computed(() => permissionState('billing.payer-contracts.read') === 'allowed');
 const canManage = computed(() => permissionState('billing.payer-contracts.manage') === 'allowed');
 const canAudit = computed(() => permissionState('billing.payer-contracts.view-audit-logs') === 'allowed');
-const canReadServiceCatalog = computed(() => permissionState('billing.service-catalog.read') === 'allowed');
 const canReadChargeableItems = computed(() => permissionState('billing.chargeable-items.read') === 'allowed');
 const canManagePriceOverrides = computed(() => permissionState('billing.payer-contracts.manage-price-overrides') === 'allowed');
 const canPriceOverrideAudit = computed(() => permissionState('billing.payer-contracts.view-price-override-audit-logs') === 'allowed');
@@ -364,18 +345,13 @@ const priceOverrideErrors = ref<string[]>([]);
 const priceOverrides = ref<PriceOverride[]>([]);
 const priceOverridesPagination = ref<Pagination | null>(null);
 const priceOverrideFilters = reactive({ q: '', status: '', serviceType: '', pricingStrategy: '', page: 1, perPage: 20 });
-const serviceCatalogLookupLoading = ref(false);
-const serviceCatalogLookupError = ref<string | null>(null);
-const serviceCatalogLookupItems = ref<CatalogItem[]>([]);
-
 const chargeableItemLookupLoading = ref(false);
 const chargeableItemLookupError = ref<string | null>(null);
-const chargeableItemLookupItems = ref<ChargeableItemLookupEntry[]>([]);
+const chargeableItemLookupItems = ref<CatalogItem[]>([]);
 
 const createPriceOverrideLoading = ref(false);
 const createPriceOverrideRequestKey = ref(generateRequestKey('billing-payer-contract-price-override-create'));
 const createPriceOverrideForm = reactive({
-    billingServiceCatalogItemId: '',
     chargeableItemId: '',
     serviceCode: '',
     serviceName: '',
@@ -394,7 +370,6 @@ const editPriceOverrideDiscardConfirmOpen = ref(false);
 const editPriceOverrideRequestKey = ref(generateRequestKey('billing-payer-contract-price-override-edit'));
 const editPriceOverrideTarget = ref<PriceOverride | null>(null);
 const editPriceOverrideForm = reactive({
-    billingServiceCatalogItemId: '',
     chargeableItemId: '',
     serviceCode: '',
     serviceName: '',
@@ -425,7 +400,7 @@ const ruleFilters = reactive({ q: '', status: '', serviceType: '', coverageDecis
 const createRuleLoading = ref(false);
 const createRuleRequestKey = ref(generateRequestKey('billing-payer-contract-rule-create'));
 const createRuleForm = reactive({
-    billingServiceCatalogItemId: '',
+    chargeableItemId: '',
     ruleCode: '',
     ruleName: '',
     serviceCode: '',
@@ -457,7 +432,7 @@ const editRuleDiscardConfirmOpen = ref(false);
 const editRuleRequestKey = ref(generateRequestKey('billing-payer-contract-rule-edit'));
 const editRuleTarget = ref<Rule | null>(null);
 const editRuleForm = reactive({
-    billingServiceCatalogItemId: '',
+    chargeableItemId: '',
     ruleCode: '',
     ruleName: '',
     serviceCode: '',
@@ -561,8 +536,8 @@ const activeCoveredPolicyRuleCount = computed(() => rules.value.filter((item) =>
 const activePriceOverrideCount = computed(() => priceOverrides.value.filter((item) => (item.status ?? '').toLowerCase() === 'active').length);
 const activeFixedPriceOverrideCount = computed(() => priceOverrides.value.filter((item) => (item.status ?? '').toLowerCase() === 'active' && (item.pricingStrategy ?? '').toLowerCase() === 'fixed_price').length);
 const activeDiscountPriceOverrideCount = computed(() => priceOverrides.value.filter((item) => (item.status ?? '').toLowerCase() === 'active' && (item.pricingStrategy ?? '').toLowerCase() === 'discount_percent').length);
-const serviceCatalogPriceOptions = computed<SearchableSelectOption[]>(() =>
-    serviceCatalogLookupItems.value
+const catalogPriceOptions = computed<SearchableSelectOption[]>(() =>
+    chargeableItemLookupItems.value
         .map((item) => {
             const serviceCode = normalizeServiceCode(item.serviceCode);
             if (!serviceCode) return null;
@@ -590,14 +565,14 @@ const serviceCatalogPriceOptions = computed<SearchableSelectOption[]>(() =>
 const chargeableItemPriceOptions = computed<SearchableSelectOption[]>(() =>
     chargeableItemLookupItems.value.map((item) => ({
         value: item.id,
-        label: item.name,
+        label: item.serviceName?.trim() || item.serviceCode || 'Unknown',
         description: [
-            item.code,
-            formatEnumLabel(item.catalogType),
+            item.serviceCode,
+            item.serviceType ? formatEnumLabel(item.serviceType) : null,
             item.basePrice ? `${(item.currencyCode || defaultCurrencyCode.value).toUpperCase()} ${item.basePrice}` : 'No active price',
         ].filter(Boolean).join(' | '),
-        keywords: [item.code, item.name, item.catalogType].filter(Boolean),
-        group: formatEnumLabel(item.catalogType),
+        keywords: [item.serviceCode, item.serviceName, item.serviceType].filter(Boolean),
+        group: item.serviceType ? formatEnumLabel(item.serviceType) : 'Other services',
     } satisfies SearchableSelectOption)),
 );
 const createPriceOverrideChargeableItemOptions = computed<SearchableSelectOption[]>(() =>
@@ -634,7 +609,7 @@ const chargeableItemLookupHelperText = computed(() => {
 });
 const createPriceOverrideServiceOptions = computed<SearchableSelectOption[]>(() =>
     withSyntheticServiceOption(
-        serviceCatalogPriceOptions.value,
+        catalogPriceOptions.value,
         createPriceOverrideForm.serviceCode,
         createPriceOverrideForm.serviceName,
         createPriceOverrideForm.serviceType,
@@ -643,7 +618,7 @@ const createPriceOverrideServiceOptions = computed<SearchableSelectOption[]>(() 
 );
 const editPriceOverrideServiceOptions = computed<SearchableSelectOption[]>(() =>
     withSyntheticServiceOption(
-        serviceCatalogPriceOptions.value,
+        catalogPriceOptions.value,
         editPriceOverrideForm.serviceCode,
         editPriceOverrideForm.serviceName,
         editPriceOverrideForm.serviceType,
@@ -654,7 +629,7 @@ const selectedCreatePriceCatalogItem = computed(() => findCatalogItemForPriceOve
 const selectedEditPriceCatalogItem = computed(() => findCatalogItemForPriceOverrideForm(editPriceOverrideForm));
 const createRuleServiceOptions = computed<SearchableSelectOption[]>(() =>
     withSyntheticRuleServiceOption(
-        serviceCatalogPriceOptions.value,
+        catalogPriceOptions.value,
         createRuleForm.serviceCode,
         createRuleForm.serviceType,
         createRuleForm.department,
@@ -662,65 +637,65 @@ const createRuleServiceOptions = computed<SearchableSelectOption[]>(() =>
 );
 const editRuleServiceOptions = computed<SearchableSelectOption[]>(() =>
     withSyntheticRuleServiceOption(
-        serviceCatalogPriceOptions.value,
+        catalogPriceOptions.value,
         editRuleForm.serviceCode,
         editRuleForm.serviceType,
         editRuleForm.department,
     ),
 );
-const selectedCreateRuleCatalogItem = computed(() => findCatalogItemByServiceCode(createRuleForm.serviceCode, createRuleForm.billingServiceCatalogItemId));
-const selectedEditRuleCatalogItem = computed(() => findCatalogItemByServiceCode(editRuleForm.serviceCode, editRuleForm.billingServiceCatalogItemId));
-const createPriceOverrideServiceLookupEnabled = computed(() => canReadServiceCatalog.value && !serviceCatalogLookupError.value);
-const editPriceOverrideServiceLookupEnabled = computed(() => canReadServiceCatalog.value && !serviceCatalogLookupError.value);
-const createRuleServiceLookupEnabled = computed(() => canReadServiceCatalog.value && !serviceCatalogLookupError.value);
-const editRuleServiceLookupEnabled = computed(() => canReadServiceCatalog.value && !serviceCatalogLookupError.value);
+const selectedCreateRuleCatalogItem = computed(() => findCatalogItemByServiceCode(createRuleForm.serviceCode, createRuleForm.chargeableItemId));
+const selectedEditRuleCatalogItem = computed(() => findCatalogItemByServiceCode(editRuleForm.serviceCode, editRuleForm.chargeableItemId));
+const createPriceOverrideServiceLookupEnabled = computed(() => canReadChargeableItems.value && !chargeableItemLookupError.value);
+const editPriceOverrideServiceLookupEnabled = computed(() => canReadChargeableItems.value && !chargeableItemLookupError.value);
+const createRuleServiceLookupEnabled = computed(() => canReadChargeableItems.value && !chargeableItemLookupError.value);
+const editRuleServiceLookupEnabled = computed(() => canReadChargeableItems.value && !chargeableItemLookupError.value);
 const createPriceOverrideServiceHelperText = computed(() => {
-    if (!canReadServiceCatalog.value) {
+    if (!canReadChargeableItems.value) {
         return 'Service Prices access is unavailable, so manual entry is being used for this contract.';
     }
-    if (serviceCatalogLookupLoading.value) {
+    if (chargeableItemLookupLoading.value) {
         return 'Loading active Service Prices for this contract currency.';
     }
-    if (serviceCatalogLookupError.value) {
+    if (chargeableItemLookupError.value) {
         return 'Service Prices could not be loaded right now. Manual entry is available as a fallback.';
     }
-    if (serviceCatalogLookupItems.value.length === 0) {
+    if (chargeableItemLookupItems.value.length === 0) {
         return `No active Service Prices were found for ${(selectedContract.value?.currencyCode || defaultCurrencyCode.value).toUpperCase()}.`;
     }
     return `Search active Service Prices in ${(selectedContract.value?.currencyCode || defaultCurrencyCode.value).toUpperCase()}.`;
 });
 const editPriceOverrideServiceHelperText = computed(() => {
-    if (!canReadServiceCatalog.value) {
+    if (!canReadChargeableItems.value) {
         return 'Service Prices access is unavailable, so this override stays on manual service details.';
     }
-    if (serviceCatalogLookupLoading.value) {
+    if (chargeableItemLookupLoading.value) {
         return 'Loading active Service Prices for this contract currency.';
     }
-    if (serviceCatalogLookupError.value) {
+    if (chargeableItemLookupError.value) {
         return 'Service Prices could not be loaded right now. Manual service details remain available.';
     }
     return `Search active Service Prices in ${(selectedContract.value?.currencyCode || defaultCurrencyCode.value).toUpperCase()}.`;
 });
 const createRuleServiceHelperText = computed(() => {
-    if (!canReadServiceCatalog.value) {
+    if (!canReadChargeableItems.value) {
         return 'Service Prices access is unavailable, so manual service targeting is being used.';
     }
-    if (serviceCatalogLookupLoading.value) {
+    if (chargeableItemLookupLoading.value) {
         return 'Loading active Service Prices for policy targeting.';
     }
-    if (serviceCatalogLookupError.value) {
+    if (chargeableItemLookupError.value) {
         return 'Service Prices could not be loaded right now. Manual service targeting is available as a fallback.';
     }
     return 'Search active Service Prices to bind this policy to a real billing service.';
 });
 const editRuleServiceHelperText = computed(() => {
-    if (!canReadServiceCatalog.value) {
+    if (!canReadChargeableItems.value) {
         return 'Service Prices access is unavailable, so this policy stays on manual service targeting.';
     }
-    if (serviceCatalogLookupLoading.value) {
+    if (chargeableItemLookupLoading.value) {
         return 'Loading active Service Prices for policy targeting.';
     }
-    if (serviceCatalogLookupError.value) {
+    if (chargeableItemLookupError.value) {
         return 'Service Prices could not be loaded right now. Manual service targeting remains available.';
     }
     return 'Search active Service Prices to keep this policy aligned to the billing service list.';
@@ -1046,7 +1021,7 @@ const hasPendingCreateContractWorkflow = computed(() => Boolean(
 ));
 
 const hasPendingCreatePriceOverrideWorkflow = computed(() => Boolean(
-    createPriceOverrideForm.billingServiceCatalogItemId.trim()
+    createPriceOverrideForm.chargeableItemId.trim()
     || createPriceOverrideForm.serviceCode.trim()
     || createPriceOverrideForm.serviceName.trim()
     || createPriceOverrideForm.serviceType.trim()
@@ -1059,7 +1034,7 @@ const hasPendingCreatePriceOverrideWorkflow = computed(() => Boolean(
 ));
 
 const hasPendingCreateRuleWorkflow = computed(() => Boolean(
-    createRuleForm.billingServiceCatalogItemId.trim()
+    createRuleForm.chargeableItemId.trim()
     || createRuleForm.ruleCode.trim()
     || createRuleForm.ruleName.trim()
     || createRuleForm.serviceCode.trim()
@@ -1110,7 +1085,7 @@ const hasPendingEditPriceOverrideWorkflow = computed(() => {
     if (!editPriceOverrideOpen.value || !target) return false;
 
     return (
-        editPriceOverrideForm.billingServiceCatalogItemId.trim() !== String(target.billingServiceCatalogItemId ?? '').trim()
+        editPriceOverrideForm.chargeableItemId.trim() !== String(target.chargeableItemId ?? '').trim()
         || editPriceOverrideForm.serviceCode.trim().toUpperCase() !== String(target.serviceCode ?? '').trim().toUpperCase()
         || editPriceOverrideForm.serviceName.trim() !== String(target.serviceName ?? '').trim()
         || editPriceOverrideForm.serviceType.trim() !== String(target.serviceType ?? '').trim()
@@ -1134,7 +1109,7 @@ const hasPendingEditRuleWorkflow = computed(() => {
     if (!editRuleOpen.value || !target) return false;
 
     return (
-        editRuleForm.billingServiceCatalogItemId.trim() !== String(target.billingServiceCatalogItemId ?? '').trim()
+        editRuleForm.chargeableItemId.trim() !== String(target.chargeableItemId ?? '').trim()
         || editRuleForm.ruleCode.trim() !== String(target.ruleCode ?? '').trim()
         || editRuleForm.ruleName.trim() !== String(target.ruleName ?? '').trim()
         || editRuleForm.serviceCode.trim().toUpperCase() !== String(target.serviceCode ?? '').trim().toUpperCase()
@@ -1429,7 +1404,7 @@ function withSyntheticChargeableItemOption(options: SearchableSelectOption[], ch
     ];
 }
 
-function findChargeableItemById(chargeableItemId: string | null | undefined): ChargeableItemLookupEntry | null {
+function findChargeableItemById(chargeableItemId: string | null | undefined): CatalogItem | null {
     const normalizedId = String(chargeableItemId ?? '').trim();
     if (!normalizedId) return null;
     return chargeableItemLookupItems.value.find((item) => item.id === normalizedId) ?? null;
@@ -1441,21 +1416,21 @@ function findCatalogItemByServiceCode(serviceCode: string | null | undefined, pr
     if (!normalizedCode && !normalizedItemId) return null;
 
     if (normalizedItemId) {
-        const direct = serviceCatalogLookupItems.value.find((item) => (item.id ?? '').trim() === normalizedItemId);
+        const direct = chargeableItemLookupItems.value.find((item) => (item.id ?? '').trim() === normalizedItemId);
         if (direct) return direct;
     }
 
-    return serviceCatalogLookupItems.value.find((item) => normalizeServiceCode(item.serviceCode) === normalizedCode) ?? null;
+    return chargeableItemLookupItems.value.find((item) => normalizeServiceCode(item.serviceCode) === normalizedCode) ?? null;
 }
 
-function findCatalogItemForPriceOverrideForm(form: Pick<PriceOverrideFormState, 'billingServiceCatalogItemId' | 'serviceCode'>): CatalogItem | null {
-    return findCatalogItemByServiceCode(form.serviceCode, form.billingServiceCatalogItemId);
+function findCatalogItemForPriceOverrideForm(form: Pick<PriceOverrideFormState, 'chargeableItemId' | 'serviceCode'>): CatalogItem | null {
+    return findCatalogItemByServiceCode(form.serviceCode, form.chargeableItemId);
 }
 
 function syncPriceOverrideFormWithCatalog(form: PriceOverrideFormState): void {
     const matchedItem = findCatalogItemForPriceOverrideForm(form);
     if (matchedItem) {
-        form.billingServiceCatalogItemId = matchedItem.id ?? '';
+        form.chargeableItemId = matchedItem.id ?? '';
         form.serviceCode = normalizeServiceCode(matchedItem.serviceCode);
         form.serviceName = matchedItem.serviceName?.trim() || form.serviceName;
         form.serviceType = matchedItem.serviceType?.trim() || '';
@@ -1464,7 +1439,7 @@ function syncPriceOverrideFormWithCatalog(form: PriceOverrideFormState): void {
     }
 
     if (!normalizeServiceCode(form.serviceCode)) {
-        form.billingServiceCatalogItemId = '';
+        form.chargeableItemId = '';
         form.serviceCode = '';
         form.serviceName = '';
         form.serviceType = '';
@@ -1472,15 +1447,15 @@ function syncPriceOverrideFormWithCatalog(form: PriceOverrideFormState): void {
         return;
     }
 
-    if (serviceCatalogLookupItems.value.length > 0) {
-        form.billingServiceCatalogItemId = '';
+    if (chargeableItemLookupItems.value.length > 0) {
+        form.chargeableItemId = '';
     }
 }
 
 function syncRuleFormWithCatalog(form: RuleFormState): void {
-    const matchedItem = findCatalogItemByServiceCode(form.serviceCode, form.billingServiceCatalogItemId);
+    const matchedItem = findCatalogItemByServiceCode(form.serviceCode, form.chargeableItemId);
     if (matchedItem) {
-        form.billingServiceCatalogItemId = matchedItem.id ?? '';
+        form.chargeableItemId = matchedItem.id ?? '';
         form.serviceCode = normalizeServiceCode(matchedItem.serviceCode);
         form.serviceType = matchedItem.serviceType?.trim() || '';
         form.department = matchedItem.department?.trim() || '';
@@ -1488,15 +1463,15 @@ function syncRuleFormWithCatalog(form: RuleFormState): void {
     }
 
     if (!normalizeServiceCode(form.serviceCode)) {
-        form.billingServiceCatalogItemId = '';
+        form.chargeableItemId = '';
         form.serviceCode = '';
         form.serviceType = '';
         form.department = '';
         return;
     }
 
-    if (serviceCatalogLookupItems.value.length > 0) {
-        form.billingServiceCatalogItemId = '';
+    if (chargeableItemLookupItems.value.length > 0) {
+        form.chargeableItemId = '';
     }
 }
 
@@ -1516,12 +1491,12 @@ function formatCatalogBasePriceLabel(item: CatalogItem | null): string {
     return `${(item?.currencyCode || selectedContract.value?.currencyCode || defaultCurrencyCode.value).toUpperCase()} ${normalizedPrice}`;
 }
 
-function chargeableItemSelectionSummary(item: ChargeableItemLookupEntry | null): string {
+function chargeableItemSelectionSummary(item: CatalogItem | null): string {
     if (!item) return 'Not linked to a pricing-engine item -- negotiated price uses the service code above.';
-    return [item.code, formatEnumLabel(item.catalogType)].filter(Boolean).join(' | ');
+    return [item.serviceCode, formatEnumLabel(item.serviceType)].filter(Boolean).join(' | ');
 }
 
-function formatChargeableItemBasePriceLabel(item: ChargeableItemLookupEntry | null): string {
+function formatChargeableItemBasePriceLabel(item: CatalogItem | null): string {
     if (!item?.basePrice) return 'No active price';
     return `${(item.currencyCode || defaultCurrencyCode.value).toUpperCase()} ${item.basePrice}`;
 }
@@ -1560,7 +1535,7 @@ function booleanRuleValue(value: string | boolean | null | undefined, fallback =
 }
 
 function buildRuleExpression(source: {
-    billingServiceCatalogItemId: string | null | undefined;
+    chargeableItemId: string | null | undefined;
     serviceCode: string | null | undefined;
     serviceType: string | null | undefined;
     department: string | null | undefined;
@@ -1583,7 +1558,7 @@ function buildRuleExpression(source: {
     authorizationValidityDays: string | number | null | undefined;
 }): RuleExpression {
     const clauses: RuleExpressionClause[] = [];
-    const billingServiceCatalogItemId = nullableTrimmedValue(source.billingServiceCatalogItemId);
+    const chargeableItemId = nullableTrimmedValue(source.chargeableItemId);
     const serviceCode = normalizeServiceCode(source.serviceCode);
     const serviceType = nullableTrimmedValue(source.serviceType);
     const department = nullableTrimmedValue(source.department);
@@ -1602,7 +1577,7 @@ function buildRuleExpression(source: {
     const effectiveFrom = nullableTrimmedValue(source.effectiveFrom);
     const effectiveTo = nullableTrimmedValue(source.effectiveTo);
 
-    if (billingServiceCatalogItemId) clauses.push({ field: 'billingServiceCatalogItemId', operator: 'eq', value: billingServiceCatalogItemId });
+    if (chargeableItemId) clauses.push({ field: 'chargeableItemId', operator: 'eq', value: chargeableItemId });
     if (serviceCode) clauses.push({ field: 'serviceCode', operator: 'eq', value: serviceCode });
     if (serviceType) clauses.push({ field: 'serviceType', operator: 'eq', value: serviceType });
     if (department) clauses.push({ field: 'department', operator: 'eq', value: department });
@@ -1697,7 +1672,7 @@ function ruleEngineSummary(expression: RuleExpression | null): string {
 function storedRuleEngineSummary(item: Rule): string {
     return ruleEngineSummary(
         normalizeRuleExpression(item.ruleExpression) ?? buildRuleExpression({
-            billingServiceCatalogItemId: item.billingServiceCatalogItemId,
+            chargeableItemId: item.chargeableItemId,
             serviceCode: item.serviceCode,
             serviceType: item.serviceType,
             department: item.department,
@@ -1973,7 +1948,7 @@ function requestContractWorkspaceModeChange(mode: 'list' | 'create'): void {
 
 function resetCreateRuleForm() {
     Object.assign(createRuleForm, {
-        billingServiceCatalogItemId: '',
+        chargeableItemId: '',
         ruleCode: '',
         ruleName: '',
         serviceCode: '',
@@ -2003,7 +1978,7 @@ function resetCreateRuleForm() {
 
 function resetCreatePriceOverrideForm() {
     Object.assign(createPriceOverrideForm, {
-        billingServiceCatalogItemId: '',
+        chargeableItemId: '',
         chargeableItemId: '',
         serviceCode: '',
         serviceName: '',
@@ -2217,7 +2192,7 @@ function openContractStatusDialog(item: Contract, target: 'active' | 'inactive' 
 function openRuleEdit(item: Rule) {
     editRuleTarget.value = item;
     Object.assign(editRuleForm, {
-        billingServiceCatalogItemId: item.billingServiceCatalogItemId || '',
+        chargeableItemId: item.chargeableItemId || '',
         ruleCode: item.ruleCode || '',
         ruleName: item.ruleName || '',
         serviceCode: item.serviceCode || '',
@@ -2250,7 +2225,7 @@ function openRuleEdit(item: Rule) {
 function openPriceOverrideEdit(item: PriceOverride) {
     editPriceOverrideTarget.value = item;
     Object.assign(editPriceOverrideForm, {
-        billingServiceCatalogItemId: item.billingServiceCatalogItemId || '',
+        chargeableItemId: item.chargeableItemId || '',
         chargeableItemId: item.chargeableItemId || '',
         serviceCode: item.serviceCode || '',
         serviceName: item.serviceName || '',
@@ -2339,7 +2314,7 @@ async function refreshPage() {
     await Promise.all([loadCountryProfile(), loadContracts(), loadCounts(), loadChargeableItemLookup()]);
     applyCurrencyDefaults();
     if (selectedContract.value?.id) {
-        await Promise.all([loadPriceOverrides(), loadRules(), loadServiceCatalogLookup(), loadPolicySummary()]);
+        await Promise.all([loadPriceOverrides(), loadRules(), loadChargeableItemLookup(), loadPolicySummary()]);
     }
 }
 
@@ -2466,11 +2441,11 @@ function selectContract(item: Contract) {
     ruleFilters.page = 1;
     rules.value = [];
     rulesPagination.value = null;
-    serviceCatalogLookupItems.value = [];
-    serviceCatalogLookupError.value = null;
+    chargeableItemLookupItems.value = [];
+    chargeableItemLookupError.value = null;
     void loadPriceOverrides();
     void loadRules();
-    void loadServiceCatalogLookup();
+    void loadChargeableItemLookup();
     void loadPolicySummary();
 }
 
@@ -2487,8 +2462,8 @@ function clearSelectedContract() {
     priceOverrideAuditLogs.value = [];
     ruleAuditTarget.value = null;
     ruleAuditLogs.value = [];
-    serviceCatalogLookupItems.value = [];
-    serviceCatalogLookupError.value = null;
+    chargeableItemLookupItems.value = [];
+    chargeableItemLookupError.value = null;
 }
 
 async function loadPriceOverrides() {
@@ -2521,50 +2496,10 @@ async function loadPriceOverrides() {
     }
 }
 
-async function loadServiceCatalogLookup() {
-    const contractId = selectedContract.value?.id?.trim();
-    const currencyCode = (selectedContract.value?.currencyCode || defaultCurrencyCode.value).trim().toUpperCase();
-    if (!contractId || !canReadServiceCatalog.value) {
-        serviceCatalogLookupItems.value = [];
-        serviceCatalogLookupError.value = canReadServiceCatalog.value ? null : 'billing.service-catalog.read permission is required to search live Service Prices.';
-        serviceCatalogLookupLoading.value = false;
-        return;
-    }
-
-    serviceCatalogLookupLoading.value = true;
-    serviceCatalogLookupError.value = null;
-    try {
-        const response = await apiRequest<PriceCatalogListResponse>('GET', '/billing-service-catalog/items', {
-            query: {
-                status: 'active',
-                lifecycle: 'effective',
-                currencyCode,
-                page: 1,
-                perPage: 100,
-                sortBy: 'serviceName',
-                sortDir: 'asc',
-            },
-        });
-        serviceCatalogLookupItems.value = response.data ?? [];
-        syncPriceOverrideFormWithCatalog(createPriceOverrideForm);
-        syncPriceOverrideFormWithCatalog(editPriceOverrideForm);
-    } catch (error) {
-        serviceCatalogLookupItems.value = [];
-        serviceCatalogLookupError.value = messageFromUnknown(error, 'Unable to load Service Prices for negotiated pricing.');
-    } finally {
-        serviceCatalogLookupLoading.value = false;
-    }
-}
-
-/**
- * Additive lookup over the new pricing engine (chargeable_items), separate
- * from loadServiceCatalogLookup() above -- not contract/currency scoped
- * since linking here is optional metadata, not a hard requirement.
- */
 async function loadChargeableItemLookup() {
     if (!canReadChargeableItems.value) {
         chargeableItemLookupItems.value = [];
-        chargeableItemLookupError.value = 'billing.chargeable-items.read permission is required to link a pricing-engine item.';
+        chargeableItemLookupError.value = 'billing.chargeable-items.read permission is required to search live Chargeable Items.';
         chargeableItemLookupLoading.value = false;
         return;
     }
@@ -2572,27 +2507,35 @@ async function loadChargeableItemLookup() {
     chargeableItemLookupLoading.value = true;
     chargeableItemLookupError.value = null;
     try {
-        const response = await apiRequest<ChargeableItemListResponse>('GET', '/chargeable-items', {
+        const response = await apiRequest<{ data: ChargeableItemApiEntry[] }>('GET', '/chargeable-items', {
             query: { status: 'active' },
         });
         chargeableItemLookupItems.value = (response.data ?? []).map((item) => {
-            const activePrice = item.prices.find((price) => price.status === 'active') ?? item.prices[0] ?? null;
+            const activePrice = item.prices.find((p) => p.status === 'active') ?? item.prices[0] ?? null;
             return {
                 id: item.id,
-                code: item.code,
-                name: item.name,
-                catalogType: item.catalogType,
+                serviceCode: item.code,
+                serviceName: item.name,
+                serviceType: item.catalogType,
+                department: null,
                 basePrice: activePrice ? String(activePrice.unitPrice) : null,
                 currencyCode: activePrice ? activePrice.currencyCode : null,
+                effectiveFrom: null,
+                effectiveTo: null,
+                status: null,
             };
         });
+        syncPriceOverrideFormWithCatalog(createPriceOverrideForm);
+        syncPriceOverrideFormWithCatalog(editPriceOverrideForm);
     } catch (error) {
         chargeableItemLookupItems.value = [];
-        chargeableItemLookupError.value = messageFromUnknown(error, 'Unable to load pricing-engine items for linking.');
+        chargeableItemLookupError.value = messageFromUnknown(error, 'Unable to load Chargeable Items for negotiated pricing.');
     } finally {
         chargeableItemLookupLoading.value = false;
     }
 }
+
+
 
 async function loadPolicySummary() {
     const contractId = selectedContract.value?.id?.trim();
@@ -2662,7 +2605,7 @@ async function createPriceOverride() {
         const requestKey = createPriceOverrideRequestKey.value;
         const response = await apiRequest<ItemResponse<PriceOverride>>('POST', `/billing-payer-contracts/${contractId}/price-overrides`, {
             body: {
-                billingServiceCatalogItemId: nullableTrimmedValue(createPriceOverrideForm.billingServiceCatalogItemId),
+                chargeableItemId: nullableTrimmedValue(createPriceOverrideForm.chargeableItemId),
                 chargeableItemId: nullableTrimmedValue(createPriceOverrideForm.chargeableItemId),
                 serviceCode,
                 serviceName: nullableTrimmedValue(createPriceOverrideForm.serviceName),
@@ -2705,7 +2648,7 @@ async function createRule() {
         const requestKey = createRuleRequestKey.value;
         const response = await apiRequest<ItemResponse<Rule>>('POST', `/billing-payer-contracts/${contractId}/authorization-rules`, {
             body: {
-                billingServiceCatalogItemId: nullableTrimmedValue(createRuleForm.billingServiceCatalogItemId),
+                chargeableItemId: nullableTrimmedValue(createRuleForm.chargeableItemId),
                 ruleCode,
                 ruleName,
                 serviceCode: createRuleForm.serviceCode.trim().toUpperCase() || null,
@@ -2763,7 +2706,7 @@ async function savePriceOverrideEdit() {
         const requestKey = editPriceOverrideRequestKey.value;
         await apiRequest<ItemResponse<PriceOverride>>('PATCH', `/billing-payer-contracts/${contractId}/price-overrides/${overrideId}`, {
             body: {
-                billingServiceCatalogItemId: nullableTrimmedValue(editPriceOverrideForm.billingServiceCatalogItemId),
+                chargeableItemId: nullableTrimmedValue(editPriceOverrideForm.chargeableItemId),
                 chargeableItemId: nullableTrimmedValue(editPriceOverrideForm.chargeableItemId),
                 serviceCode,
                 serviceName: nullableTrimmedValue(editPriceOverrideForm.serviceName),
@@ -2806,7 +2749,7 @@ async function saveRuleEdit() {
         const requestKey = editRuleRequestKey.value;
         await apiRequest<ItemResponse<Rule>>('PATCH', `/billing-payer-contracts/${contractId}/authorization-rules/${ruleId}`, {
             body: {
-                billingServiceCatalogItemId: nullableTrimmedValue(editRuleForm.billingServiceCatalogItemId),
+                chargeableItemId: nullableTrimmedValue(editRuleForm.chargeableItemId),
                 ruleCode,
                 ruleName,
                 serviceCode: editRuleForm.serviceCode.trim().toUpperCase() || null,
@@ -3499,9 +3442,9 @@ onMounted(refreshPage);
                             </div>
                             <Alert v-if="!canManagePriceOverrides" variant="destructive"><AlertTitle>Create access restricted</AlertTitle><AlertDescription>Request <code>billing.payer-contracts.manage-price-overrides</code> permission.</AlertDescription></Alert>
                             <template v-else>
-                                <Alert v-if="serviceCatalogLookupError" variant="destructive">
-                                    <AlertTitle>Service Prices lookup issue</AlertTitle>
-                                    <AlertDescription>{{ serviceCatalogLookupError }}</AlertDescription>
+                                <Alert v-if="chargeableItemLookupError" variant="destructive">
+                                    <AlertTitle>Chargeable Items lookup issue</AlertTitle>
+                                    <AlertDescription>{{ chargeableItemLookupError }}</AlertDescription>
                                 </Alert>
                                 <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                                     <template v-if="createPriceOverrideServiceLookupEnabled">
@@ -3554,7 +3497,7 @@ onMounted(refreshPage);
                                         container-class="md:col-span-2"
                                     />
                                     <div class="rounded-lg border bg-muted/10 p-3 md:col-span-2 xl:col-span-1">
-                                        <p class="text-sm font-medium">{{ selectedCreateChargeableItem?.name || 'Not linked' }}</p>
+                                        <p class="text-sm font-medium">{{ selectedCreateChargeableItem?.serviceName || 'Not linked' }}</p>
                                         <p class="mt-1 text-xs text-muted-foreground">{{ chargeableItemSelectionSummary(selectedCreateChargeableItem) }}</p>
                                         <p v-if="selectedCreateChargeableItem" class="mt-2 text-xs text-muted-foreground">{{ formatChargeableItemBasePriceLabel(selectedCreateChargeableItem) }}</p>
                                     </div>
@@ -3650,7 +3593,7 @@ onMounted(refreshPage);
                         </div>
                         <Alert v-if="!canManageRules" variant="destructive"><AlertTitle>Create access restricted</AlertTitle><AlertDescription>Request <code>billing.payer-contracts.manage-authorization-rules</code> permission.</AlertDescription></Alert>
                         <template v-else>
-                            <Alert v-if="serviceCatalogLookupError" variant="destructive"><AlertTitle>Service Prices lookup issue</AlertTitle><AlertDescription>{{ serviceCatalogLookupError }}</AlertDescription></Alert>
+                            <Alert v-if="chargeableItemLookupError" variant="destructive"><AlertTitle>Chargeable Items lookup issue</AlertTitle><AlertDescription>{{ chargeableItemLookupError }}</AlertDescription></Alert>
                             <div class="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.8fr)]">
                                 <div class="space-y-4">
                                     <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -3882,9 +3825,9 @@ onMounted(refreshPage);
             <Dialog :open="editPriceOverrideOpen" @update:open="requestEditPriceOverrideOpenChange">
                 <DialogContent size="xl">
                     <DialogHeader><DialogTitle>Edit Negotiated Price</DialogTitle><DialogDescription>Update the insurer-specific price override for this contract.</DialogDescription></DialogHeader>
-                    <Alert v-if="serviceCatalogLookupError" variant="destructive">
-                        <AlertTitle>Service Prices lookup issue</AlertTitle>
-                        <AlertDescription>{{ serviceCatalogLookupError }}</AlertDescription>
+                    <Alert v-if="chargeableItemLookupError" variant="destructive">
+                        <AlertTitle>Chargeable Items lookup issue</AlertTitle>
+                        <AlertDescription>{{ chargeableItemLookupError }}</AlertDescription>
                     </Alert>
                     <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         <template v-if="editPriceOverrideServiceLookupEnabled">
@@ -3935,7 +3878,7 @@ onMounted(refreshPage);
                             container-class="md:col-span-2"
                         />
                         <div class="rounded-lg border bg-muted/10 p-3 md:col-span-2 xl:col-span-1">
-                            <p class="text-sm font-medium">{{ selectedEditChargeableItem?.name || 'Not linked' }}</p>
+                            <p class="text-sm font-medium">{{ selectedEditChargeableItem?.serviceName || 'Not linked' }}</p>
                             <p class="mt-1 text-xs text-muted-foreground">{{ chargeableItemSelectionSummary(selectedEditChargeableItem) }}</p>
                             <p v-if="selectedEditChargeableItem" class="mt-2 text-xs text-muted-foreground">{{ formatChargeableItemBasePriceLabel(selectedEditChargeableItem) }}</p>
                         </div>
@@ -3969,7 +3912,7 @@ onMounted(refreshPage);
                 <Dialog :open="editRuleOpen" @update:open="requestEditRuleOpenChange">
                 <DialogContent size="xl">
                     <DialogHeader><DialogTitle>Edit Coverage Policy</DialogTitle><DialogDescription>Update policy criteria, benefit posture, and claim-routing behavior.</DialogDescription></DialogHeader>
-                    <Alert v-if="serviceCatalogLookupError" variant="destructive"><AlertTitle>Service Prices lookup issue</AlertTitle><AlertDescription>{{ serviceCatalogLookupError }}</AlertDescription></Alert>
+                    <Alert v-if="chargeableItemLookupError" variant="destructive"><AlertTitle>Chargeable Items lookup issue</AlertTitle><AlertDescription>{{ chargeableItemLookupError }}</AlertDescription></Alert>
                     <div class="rounded-lg border bg-muted/10 px-3 py-2">
                         <p class="text-sm font-medium">Policy engine</p>
                         <p class="mt-1 text-xs text-muted-foreground">{{ editRuleEngineSummary }}</p>

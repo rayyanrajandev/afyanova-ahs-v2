@@ -17,6 +17,7 @@ import { logout } from '@/routes';
 import { edit as editProfile } from '@/routes/profile';
 import { show as showTwoFactor } from '@/routes/two-factor';
 import { edit as editPassword } from '@/routes/user-password';
+import { useSidebarHistory } from '@/composables/useSidebarHistory';
 import type { User } from '@/types';
 
 type Props = {
@@ -78,7 +79,10 @@ const helpLinks: HelpLink[] = [
     },
 ];
 
+const { clearHistory } = useSidebarHistory();
+
 const handleLogout = () => {
+    clearHistory();
     router.flushAll();
 };
 

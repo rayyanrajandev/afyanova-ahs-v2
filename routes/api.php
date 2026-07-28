@@ -10,7 +10,7 @@ use App\Modules\Billing\Presentation\Http\Controllers\BillingCorporateBillingCon
 use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingPayerContractController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingPaymentPlanController;
-use App\Modules\Billing\Presentation\Http\Controllers\BillingServiceCatalogController;
+
 use App\Modules\Billing\Presentation\Http\Controllers\PatientInsuranceController;
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceCaseController;
 use App\Modules\Department\Presentation\Http\Controllers\DepartmentController;
@@ -1222,45 +1222,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:pos.sales.refund')
         ->name('pos.sales.refund');
 
-    Route::get('billing-service-catalog/items', [BillingServiceCatalogController::class, 'index'])
-        ->middleware('can:billing.service-catalog.read')
-        ->name('billing-service-catalog.items.index');
-    Route::get('billing-service-catalog/items/status-counts', [BillingServiceCatalogController::class, 'statusCounts'])
-        ->middleware('can:billing.service-catalog.read')
-        ->name('billing-service-catalog.items.status-counts');
-    Route::get('billing-service-catalog/items/service-type-counts', [BillingServiceCatalogController::class, 'serviceTypeCounts'])
-        ->middleware('can:billing.service-catalog.read')
-        ->name('billing-service-catalog.items.service-type-counts');
-    Route::get('billing-service-catalog/items/export', [BillingServiceCatalogController::class, 'exportItemsCsv'])
-        ->middleware('can:billing.service-catalog.read')
-        ->name('billing-service-catalog.items.export');
-    Route::post('billing-service-catalog/items', [BillingServiceCatalogController::class, 'store'])
-        ->name('billing-service-catalog.items.store');
-    Route::post('billing-service-catalog/items/{id}/revisions', [BillingServiceCatalogController::class, 'storeRevision'])
-        ->name('billing-service-catalog.items.store-revision');
-    Route::patch('billing-service-catalog/items/bulk-status', [BillingServiceCatalogController::class, 'bulkUpdateStatus'])
-        ->name('billing-service-catalog.items.bulk-status');
-    Route::post('billing-service-catalog/items/bulk-sync-from-catalog', [BillingServiceCatalogController::class, 'bulkSyncFromCatalog'])
-        ->name('billing-service-catalog.items.bulk-sync-from-catalog');
-    Route::get('billing-service-catalog/items/{id}', [BillingServiceCatalogController::class, 'show'])
-        ->middleware('can:billing.service-catalog.read')
-        ->name('billing-service-catalog.items.show');
-    Route::patch('billing-service-catalog/items/{id}', [BillingServiceCatalogController::class, 'update'])
-        ->name('billing-service-catalog.items.update');
-    Route::patch('billing-service-catalog/items/{id}/status', [BillingServiceCatalogController::class, 'updateStatus'])
-        ->name('billing-service-catalog.items.update-status');
-    Route::get('billing-service-catalog/items/{id}/versions', [BillingServiceCatalogController::class, 'versions'])
-        ->middleware('can:billing.service-catalog.read')
-        ->name('billing-service-catalog.items.versions');
-    Route::get('billing-service-catalog/items/{id}/payer-impact', [BillingServiceCatalogController::class, 'payerImpact'])
-        ->middleware('can:billing.service-catalog.read')
-        ->name('billing-service-catalog.items.payer-impact');
-    Route::get('billing-service-catalog/items/{id}/audit-logs/export', [BillingServiceCatalogController::class, 'exportAuditLogsCsv'])
-        ->middleware('can:billing.service-catalog.view-audit-logs')
-        ->name('billing-service-catalog.items.audit-logs.export');
-    Route::get('billing-service-catalog/items/{id}/audit-logs', [BillingServiceCatalogController::class, 'auditLogs'])
-        ->middleware('can:billing.service-catalog.view-audit-logs')
-        ->name('billing-service-catalog.items.audit-logs');
+
 
     Route::get('billing-payer-contracts', [BillingPayerContractController::class, 'index'])
         ->middleware('can:billing.payer-contracts.read')

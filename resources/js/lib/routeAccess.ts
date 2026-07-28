@@ -181,10 +181,6 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['billing.payer-contracts.read'],
     },
     {
-        pathPrefix: '/billing-service-catalog',
-        requiredPermissions: ['billing.service-catalog.read'],
-    },
-    {
         pathPrefix: '/billing',
         requiredPermissions: ['billing.invoices.read'],
     },

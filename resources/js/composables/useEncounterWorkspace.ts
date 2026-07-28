@@ -52,6 +52,7 @@ export type EncounterWorkspaceResponse = {
         items: Record<string, unknown>[];
         billingSummary: Record<string, unknown>;
     };
+    canEdit: boolean;
 };
 
 type EncounterWorkspaceApiEnvelope = {

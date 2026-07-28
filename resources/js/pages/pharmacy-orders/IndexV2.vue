@@ -110,8 +110,7 @@ const queryClient = useQueryClient();
 const createSheetOpen = ref(false);
 
 function onOrderCreated(orderNumber: string): void {
-    void queryClient.invalidateQueries({ queryKey: ['pharmacy-orders-index'] });
-    void queryClient.invalidateQueries({ queryKey: ['sidebar-pharmacy-order-status-counts'] });
+    void invalidatePharmacyQueries();
     notifySuccess(`Placed ${orderNumber}.`);
 }
 
@@ -145,12 +144,7 @@ function setStatus(value: string | number): void {
 
 async function invalidatePharmacyQueries(): Promise<void> {
     await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['pharmacy-orders-index'] }),
-        // Must match usePharmacyOrderStatusCounts' own queryKey exactly —
-        // this was 'pharmacy-orders-status-counts' (a key nothing
-        // registers under), so the tile row only ever caught up on its
-        // next 30s refetchInterval poll instead of right after a status
-        // change.
+        list.refetch(),
         queryClient.invalidateQueries({ queryKey: ['sidebar-pharmacy-order-status-counts'] }),
     ]);
 }

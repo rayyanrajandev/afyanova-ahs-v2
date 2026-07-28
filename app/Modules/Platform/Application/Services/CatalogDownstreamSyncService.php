@@ -2,9 +2,7 @@
 
 namespace App\Modules\Platform\Application\Services;
 
-use App\Modules\Billing\Application\Support\BillingClinicalCatalogIdentitySynchronizer;
-use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
-use App\Modules\Billing\Domain\ValueObjects\BillingServiceCatalogItemStatus;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
 use App\Modules\InventoryProcurement\Domain\Services\CatalogIdentityResolver;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
@@ -12,17 +10,17 @@ use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
+use App\Support\CatalogGovernance\ChargeableItemCatalogSync;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
 use Illuminate\Support\Facades\DB;
 
 class CatalogDownstreamSyncService
 {
     public function __construct(
-        private readonly BillingServiceCatalogItemRepositoryInterface $billingRepository,
-        private readonly BillingClinicalCatalogIdentitySynchronizer $identitySynchronizer,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly StandardsCodeSupport $standardsCodeSupport,
         private readonly CatalogIdentityResolver $catalogIdentityResolver,
+        private readonly ChargeableItemCatalogSync $chargeableItemCatalogSync,
     ) {}
 
     public function syncToBilling(string $clinicalCatalogItemId, ?int $actorId = null): void
@@ -32,60 +30,36 @@ class CatalogDownstreamSyncService
             return;
         }
 
-        $existingVersions = $this->billingRepository->listVersionsByClinicalCatalogItemId(
-            $clinicalCatalogItemId,
-            $this->platformScopeContext->tenantId(),
-            $this->platformScopeContext->facilityId(),
-        );
+        $tenantId = $this->platformScopeContext->tenantId();
+        $facilityId = $this->platformScopeContext->facilityId();
 
-        if ($existingVersions !== []) {
+        $this->chargeableItemCatalogSync->sync($catalogItem);
+
+        $existingPriceEntry = PriceBookEntryModel::query()
+            ->where('chargeable_item_id', $clinicalCatalogItemId)
+            ->where('tenant_id', $tenantId)
+            ->where('facility_id', $facilityId)
+            ->whereNull('payer_contract_id')
+            ->first();
+
+        if ($existingPriceEntry !== null) {
             return;
         }
 
-        $tenantId = $this->platformScopeContext->tenantId();
-        $facilityId = $this->platformScopeContext->facilityId();
         $meta = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
         $currencyCode = $meta['currencyCode'] ?? $meta['currency_code'] ?? 'TZS';
 
-        $payload = $this->identitySynchronizer->forCreate(
-            payload: [
-                'service_code' => $catalogItem->code,
-                'service_name' => $catalogItem->name,
-                'service_type' => ClinicalCatalogType::tryFrom((string) $catalogItem->catalog_type)?->defaultBillingServiceType(),
-                'unit' => $catalogItem->unit,
-                'base_price' => 0,
-                'currency_code' => $currencyCode,
-                'price_unit' => $meta['priceUnit'] ?? $meta['price_unit'] ?? $catalogItem->unit,
-                'department_id' => $catalogItem->department_id,
-                'description' => $catalogItem->description,
-                'codes' => $this->standardsCodeSupport->normalize(
-                    is_array($catalogItem->codes) ? $catalogItem->codes : null,
-                ),
-            ],
-            tenantId: $tenantId,
-            facilityId: $facilityId,
-        );
-
-        $this->billingRepository->create([
-            'tenant_id' => $tenantId,
-            'facility_id' => $facilityId,
-            'clinical_catalog_item_id' => $clinicalCatalogItemId,
-            'service_code' => strtoupper(trim((string) ($payload['service_code'] ?? $catalogItem->code))),
-            'tariff_version' => 1,
-            'service_name' => trim((string) ($payload['service_name'] ?? $catalogItem->name)),
-            'service_type' => $payload['service_type'] ?? null,
-            'unit' => $payload['unit'] ?? $catalogItem->unit ?? 'service',
-            'price_unit' => $payload['price_unit'] ?? null,
-            'base_price' => 0,
-            'currency_code' => $currencyCode,
-            'department_id' => $payload['department_id'] ?? $catalogItem->department_id,
-            'facility_tier' => $payload['facility_tier'] ?? $catalogItem->facility_tier,
-            'description' => $payload['description'] ?? $catalogItem->description,
-            'codes' => $this->standardsCodeSupport->normalize(
-                is_array($payload['codes'] ?? $catalogItem->codes) ? ($payload['codes'] ?? $catalogItem->codes) : null,
-            ),
-            'status' => BillingServiceCatalogItemStatus::ACTIVE->value,
-        ]);
+        $priceBookEntry = new PriceBookEntryModel();
+        $priceBookEntry->id = (string) \Illuminate\Support\Str::orderedUuid();
+        $priceBookEntry->chargeable_item_id = $clinicalCatalogItemId;
+        $priceBookEntry->tenant_id = $tenantId;
+        $priceBookEntry->facility_id = $facilityId;
+        $priceBookEntry->facility_tier = $catalogItem->facility_tier;
+        $priceBookEntry->currency_code = $currencyCode;
+        $priceBookEntry->unit_price = 0;
+        $priceBookEntry->tariff_version = 1;
+        $priceBookEntry->status = 'active';
+        $priceBookEntry->save();
     }
 
     public function syncToInventory(string $clinicalCatalogItemId, ?int $actorId = null): void

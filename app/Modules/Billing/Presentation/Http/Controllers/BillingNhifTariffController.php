@@ -4,8 +4,8 @@ namespace App\Modules\Billing\Presentation\Http\Controllers;
 
 use App\Modules\Billing\Infrastructure\Integrations\NHIF\NhifTariffSyncService;
 use App\Modules\Billing\Infrastructure\Models\BillingNhifTariffImportModel;
-use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -90,11 +90,11 @@ class BillingNhifTariffController extends Controller
 
     public function catalogItems(Request $request): JsonResponse
     {
-        $items = BillingServiceCatalogItemModel::query()
+        $items = ChargeableItemModel::query()
             ->where('tenant_id', $this->scopeContext->tenantId())
             ->where('facility_id', $this->scopeContext->facilityId())
-            ->whereNotNull('codes->nhif_code')
-            ->orderBy('service_name')
+            ->where('catalog_type', 'nhif_tariff')
+            ->orderBy('name')
             ->paginate(min((int) ($request->input('per_page', 50)), 100));
 
         return response()->json(['data' => $items]);

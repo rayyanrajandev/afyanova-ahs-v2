@@ -15,7 +15,7 @@ class ConsultationMappingController
     public function index(): JsonResponse
     {
         $mappings = ConsultationMappingModel::query()
-            ->with('billingServiceCatalogItem')
+            ->with('chargeableItem.priceBookEntries')
             ->orderBy('clinician_tier')
             ->orderBy('department')
             ->get();
@@ -28,7 +28,7 @@ class ConsultationMappingController
     public function store(StoreConsultationMappingRequest $request): JsonResponse
     {
         $mapping = ConsultationMappingModel::create($request->validated());
-        $mapping->load('billingServiceCatalogItem');
+        $mapping->load('chargeableItem.priceBookEntries');
 
         return $this->successResponse(
             data: $this->transform($mapping),
@@ -45,7 +45,7 @@ class ConsultationMappingController
         }
 
         $mapping->update($request->validated());
-        $mapping->load('billingServiceCatalogItem');
+        $mapping->load('chargeableItem.priceBookEntries');
 
         return $this->successResponse($this->transform($mapping));
     }
@@ -68,20 +68,20 @@ class ConsultationMappingController
      */
     private function transform(ConsultationMappingModel $mapping): array
     {
-        $catalogItem = $mapping->billingServiceCatalogItem;
+        $chargeableItem = $mapping->chargeableItem;
+        $firstPriceEntry = $chargeableItem?->priceBookEntries->first();
 
         return [
             'id' => (string) $mapping->id,
             'clinician_tier' => $mapping->clinician_tier,
             'department' => $mapping->department,
-            'billing_service_catalog_item_id' => $mapping->billing_service_catalog_item_id === null ? null : (string) $mapping->billing_service_catalog_item_id,
             'chargeable_item_id' => $mapping->chargeable_item_id === null ? null : (string) $mapping->chargeable_item_id,
-            'catalog_item' => $catalogItem === null ? null : [
-                'id' => (string) $catalogItem->id,
-                'service_code' => $catalogItem->service_code,
-                'service_name' => $catalogItem->service_name,
-                'base_price' => $catalogItem->base_price,
-                'status' => $catalogItem->status,
+            'catalog_item' => $chargeableItem === null ? null : [
+                'id' => (string) $chargeableItem->id,
+                'service_code' => $chargeableItem->code,
+                'service_name' => $chargeableItem->name,
+                'base_price' => $firstPriceEntry?->unit_price ?? 0,
+                'status' => $chargeableItem->status ?? 'active',
             ],
             'created_at' => $mapping->created_at?->toISOString(),
             'updated_at' => $mapping->updated_at?->toISOString(),

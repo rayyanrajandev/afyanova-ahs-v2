@@ -75,7 +75,7 @@ describe('useEncounterClose', () => {
             baseOptions({
                 readiness: () =>
                     readiness({
-                        items: [{ id: 'unbilled_services', label: 'Billable services captured', severity: 'warn', status: 'fail', message: '', count: 1, details: [] }],
+                        items: [{ id: 'unbilled_services', label: 'Charge capture', severity: 'warn', status: 'fail', message: '', count: 1, details: [] }],
                     }),
                 onClosed,
             }),

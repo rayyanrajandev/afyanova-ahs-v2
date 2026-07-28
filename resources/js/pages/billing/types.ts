@@ -450,21 +450,6 @@ export type BillingDialogPreviewCard = {
     valueClass?: string;
 };
 
-export type BillingServiceCatalogItem = {
-    id: string;
-    serviceCode: string | null;
-    serviceName: string | null;
-    serviceType: string | null;
-    department: string | null;
-    unit: string | null;
-    basePrice: string | number | null;
-    currencyCode: string | null;
-    taxRatePercent: string | number | null;
-    isTaxable: boolean | null;
-    description: string | null;
-    status: string | null;
-};
-
 export type BillingPayerContract = {
     id: string;
     contractCode: string | null;
@@ -577,16 +562,6 @@ export type BillingDraftExecutionPreview = {
     toneClass: string;
     afterIssueLabel: string;
     afterIssueHelper: string;
-};
-
-export type BillingServiceCatalogListResponse = {
-    data: BillingServiceCatalogItem[];
-    meta?: {
-        currentPage?: number;
-        perPage?: number;
-        total?: number;
-        lastPage?: number;
-    };
 };
 
 export type CreateForm = {

@@ -52,6 +52,17 @@ watch(
     { deep: true },
 );
 
+watch(
+    () => props.template,
+    () => {
+        const initial = buildInitial(props.template.sections);
+        for (const key of Object.keys(values)) {
+            delete values[key];
+        }
+        Object.assign(values, initial);
+    },
+);
+
 function toggleMultiSelect(code: string, option: string): void {
     const current = values[code] as string[];
     const idx = current.indexOf(option);

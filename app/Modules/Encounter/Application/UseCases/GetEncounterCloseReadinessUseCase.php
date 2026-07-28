@@ -169,7 +169,7 @@ class GetEncounterCloseReadinessUseCase
             ),
             $this->buildItem(
                 id: 'unbilled_services',
-                label: 'Billable services captured',
+                label: 'Charge capture',
                 severity: 'warn',
                 passed: (int) ($billingSummary['pendingCandidates'] ?? 0) === 0,
                 count: (int) ($billingSummary['pendingCandidates'] ?? 0),

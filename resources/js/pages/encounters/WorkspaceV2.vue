@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, useTemplateRef, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -23,6 +23,9 @@ import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLife
 import EncounterCloseChecklistDialog from '@/components/domain/clinical/EncounterCloseChecklistDialog.vue';
 import EncounterHistorySheet from '@/components/clinical/panels/EncounterHistorySheet.vue';
 import LaboratoryOrderDetailSheet from '@/components/laboratoryOrders/LaboratoryOrderDetailSheet.vue';
+import PharmacyOrderDetailSheet from '@/components/pharmacyOrders/PharmacyOrderDetailSheet.vue';
+import RadiologyOrderDetailSheet from '@/components/radiologyOrders/RadiologyOrderDetailSheet.vue';
+import TheatreProcedureDetailSheet from '@/components/theatreProcedures/TheatreProcedureDetailSheet.vue';
 import LabResultSummaryPopover from '@/components/laboratoryOrders/LabResultSummaryPopover.vue';
 import TheatreInlineOrderForm from '@/components/clinical/panels/TheatreInlineOrderForm.vue';
 import EncounterInlineBillingForm from '@/components/clinical/panels/EncounterInlineBillingForm.vue';
@@ -38,8 +41,13 @@ import {
 } from '@/composables/clinical/useEncounterOrdering';
 import { useEncounterClose } from '@/composables/clinical/useEncounterClose';
 import { useEncounterDiagnoses } from '@/composables/clinical/useEncounterDiagnoses';
+import { useStartConsultation } from '@/composables/clinician/useStartConsultation';
+import { notifyError, notifySuccess } from '@/lib/notify';
 import { useEncounterNotes } from '@/composables/clinical/useEncounterNotes';
 import { useLaboratoryOrder } from '@/composables/laboratoryOrders/useLaboratoryOrder';
+import { usePharmacyOrder } from '@/composables/pharmacyOrders/usePharmacyOrder';
+import { useRadiologyOrder } from '@/composables/radiologyOrders/useRadiologyOrder';
+import { useTheatreProcedure } from '@/composables/theatreProcedures/useTheatreProcedure';
 import { useEncounterCharges } from '@/composables/clinical/useEncounterCharges';
 import { useAppointmentReferrals } from '@/composables/clinician/useAppointmentReferrals';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
@@ -347,7 +355,7 @@ const locationLabel = computed(() => {
 
 const diagnoses = computed(() => workspace.data.value?.diagnoses ?? []);
 const canManageDiagnoses = computed(() =>
-    permissions.has('medical.records.create'),
+    permissions.has('medical.records.create') && canEdit.value,
 );
 
 const encounterDiagnoses = useEncounterDiagnoses(
@@ -412,6 +420,36 @@ const reviewLabOrderQuery = useLaboratoryOrder(reviewLabOrderId);
 function openLabResultReview(id: string): void {
     reviewLabOrderId.value = id;
     reviewLabSheetOpen.value = true;
+}
+
+// "View full order" — opens PharmacyOrderDetailSheet.vue
+const reviewPharmOrderId = ref<string | null>(null);
+const reviewPharmSheetOpen = ref(false);
+const reviewPharmOrderQuery = usePharmacyOrder(reviewPharmOrderId);
+
+function openPharmOrderReview(id: string): void {
+    reviewPharmOrderId.value = id;
+    reviewPharmSheetOpen.value = true;
+}
+
+// "View full report" — opens RadiologyOrderDetailSheet.vue
+const reviewRadOrderId = ref<string | null>(null);
+const reviewRadSheetOpen = ref(false);
+const reviewRadOrderQuery = useRadiologyOrder(reviewRadOrderId);
+
+function openRadOrderReview(id: string): void {
+    reviewRadOrderId.value = id;
+    reviewRadSheetOpen.value = true;
+}
+
+// "View full details" — opens TheatreProcedureDetailSheet.vue
+const reviewTheatreProcedureId = ref<string | null>(null);
+const reviewTheatreSheetOpen = ref(false);
+const reviewTheatreProcedureQuery = useTheatreProcedure(reviewTheatreProcedureId);
+
+function openTheatreProcedureReview(id: string): void {
+    reviewTheatreProcedureId.value = id;
+    reviewTheatreSheetOpen.value = true;
 }
 
 // Medications: pharmacy orders are combined prescription+dispense records.
@@ -596,14 +634,29 @@ const encounterClose = useEncounterClose({
         permissions.has('appointments.manage-provider-session'),
     onClosed: () => void workspace.refetch(),
 });
+const canEdit = computed(() => workspace.data.value?.canEdit ?? true);
+const startConsultation = useStartConsultation();
+async function handleStartConsultation(): Promise<void> {
+    if (!appointmentId.value) return;
+    try {
+        await startConsultation.mutateAsync({ appointmentId: appointmentId.value });
+        notifySuccess('Consultation started.');
+        void workspace.refetch();
+    } catch (err) {
+        notifyError('Unable to start this consultation.');
+    }
+}
+
 const canCloseEncounter = computed(
     () =>
         permissions.has('medical.records.finalize') &&
         encounterStatus.value !== 'closed' &&
-        ['finalized', 'amended'].includes(activeRecord.value?.status ?? ''),
+        ['finalized', 'amended'].includes(activeRecord.value?.status ?? '') &&
+        canEdit.value,
 );
 const closeButtonDisabledReason = computed<string | null>(() => {
     if (canCloseEncounter.value) return null;
+    if (!canEdit.value) return 'Start the consultation before closing this encounter.';
     if (encounterStatus.value === 'closed')
         return 'This encounter is already closed.';
     if (!['finalized', 'amended'].includes(activeRecord.value?.status ?? '')) {
@@ -1013,6 +1066,34 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                     </Alert>
 
                     <template v-else-if="workspace.data.value && patientId">
+                        <Alert
+                            v-if="!canEdit && appointmentId"
+                            class="mb-4 border-info/25 bg-info/5"
+                        >
+                            <div class="flex items-center justify-between gap-4">
+                                <div>
+                                    <AlertTitle class="text-info">
+                                        Consultation not started
+                                    </AlertTitle>
+                                    <AlertDescription class="text-info/80">
+                                        Start the consultation to add notes,
+                                        place orders, and manage this visit.
+                                    </AlertDescription>
+                                </div>
+                                <Button
+                                    :disabled="startConsultation.isPending.value"
+                                    @click="void handleStartConsultation()"
+                                >
+                                    <AppIcon
+                                        v-if="startConsultation.isPending.value"
+                                        name="loader-circle"
+                                        class="mr-1.5 size-4 animate-spin"
+                                    />
+                                    Start consultation
+                                </Button>
+                            </div>
+                        </Alert>
+
                         <TabsContent value="overview" class="space-y-4">
                             <!-- Visit summary -->
                             <div class="rounded-lg border bg-card p-4">
@@ -1290,7 +1371,7 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                     v-if="
                                         permissions.has(
                                             'medical.records.create',
-                                        )
+                                        ) && canEdit
                                     "
                                     variant="outline"
                                     size="sm"
@@ -1319,15 +1400,15 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                     :can-finalize="
                                         permissions.has(
                                             'medical.records.finalize',
-                                        )
+                                        ) && canEdit
                                     "
                                     :can-amend="
-                                        permissions.has('medical.records.amend')
+                                        permissions.has('medical.records.amend') && canEdit
                                     "
                                     :can-archive="
                                         permissions.has(
                                             'medical.records.archive',
-                                        )
+                                        ) && canEdit
                                     "
                                     :encounter-diagnoses="diagnoses"
                                     :can-manage-encounter-diagnoses="
@@ -1343,7 +1424,16 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
 
                         <TabsContent value="orders" class="space-y-4">
                             <div class="space-y-4">
+                                <div
+                                    v-if="!canEdit && appointmentId"
+                                    class="rounded-lg border border-info/25 bg-info/5 px-4 py-6 text-center"
+                                >
+                                    <p class="text-sm text-info">
+                                        Start the consultation to place orders.
+                                    </p>
+                                </div>
                                 <EncounterOrdersCommandCenter
+                                    v-else
                                     :patient-id="patientId"
                                     :has-workflow-actions="
                                         ordering.hasWorkflowActions.value
@@ -1373,6 +1463,9 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                     "
                                     :can-open-theatre-workflow="
                                         ordering.canOpenTheatreWorkflow.value
+                                    "
+                                    :can-open-clinical-procedure-workflow="
+                                        ordering.canOpenClinicalProcedureWorkflow.value
                                     "
                                     :can-open-billing-workflow="
                                         ordering.canOpenBillingWorkflow.value
@@ -1545,6 +1638,15 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                     "
                                     @view-lab-result="
                                         openLabResultReview($event)
+                                    "
+                                    @view-pharmacy-detail="
+                                        openPharmOrderReview($event)
+                                    "
+                                    @view-radiology-detail="
+                                        openRadOrderReview($event)
+                                    "
+                                    @view-theatre-detail="
+                                        openTheatreProcedureReview($event)
                                     "
                                 />
                             </section>
@@ -2145,6 +2247,45 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                         : null
                 "
                 :can-create="false"
+            />
+
+            <PharmacyOrderDetailSheet
+                v-model:open="reviewPharmSheetOpen"
+                :order="reviewPharmOrderQuery.data.value?.data ?? null"
+                :loading="reviewPharmOrderQuery.isPending.value"
+                :load-error="
+                    reviewPharmOrderQuery.isError.value
+                        ? ((reviewPharmOrderQuery.error.value as Error | null)
+                              ?.message ?? 'Unable to load this order.')
+                        : null
+                "
+                :can-create="false"
+            />
+
+            <RadiologyOrderDetailSheet
+                v-model:open="reviewRadSheetOpen"
+                :order="reviewRadOrderQuery.data.value?.data ?? null"
+                :loading="reviewRadOrderQuery.isPending.value"
+                :load-error="
+                    reviewRadOrderQuery.isError.value
+                        ? ((reviewRadOrderQuery.error.value as Error | null)
+                              ?.message ?? 'Unable to load this report.')
+                        : null
+                "
+                :can-create="false"
+            />
+
+            <TheatreProcedureDetailSheet
+                v-model:open="reviewTheatreSheetOpen"
+                :order="reviewTheatreProcedureQuery.data.value?.data ?? null"
+                :loading="reviewTheatreProcedureQuery.isPending.value"
+                :load-error="
+                    reviewTheatreProcedureQuery.isError.value
+                        ? ((reviewTheatreProcedureQuery.error.value as Error | null)
+                              ?.message ?? 'Unable to load this procedure.')
+                        : null
+                "
+                :clinician-name-by-id="{}"
             />
 
             <ReferralManagementSheet

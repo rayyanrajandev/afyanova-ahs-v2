@@ -51,7 +51,6 @@ export const FACILITY_WEB_PATH_RULES: readonly FacilityWebPathRule[] = [
     { pathPrefix: '/billing-financial-reports', requiredAll: ['billing.financial_controls'] },
     { pathPrefix: '/billing-corporate', requiredAll: ['billing.payer_contracts'] },
     { pathPrefix: '/billing-payer-contracts', requiredAll: ['billing.payer_contracts'] },
-    { pathPrefix: '/billing-service-catalog', requiredAll: ['billing.service_catalog'] },
     { pathPrefix: '/billing-consultation-mappings', requiredAll: ['billing.service_catalog'] },
     { pathPrefix: '/chargeable-items', requiredAll: ['billing.service_catalog'] },
     { pathPrefix: '/pos/sales', requiredAll: ['pos.sales'] },

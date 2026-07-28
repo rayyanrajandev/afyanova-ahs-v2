@@ -84,6 +84,12 @@ export function useEncounterOrdering(options: {
     const canCreateTheatreProcedures = computed(() =>
         permissions.has('theatre.procedures.create'),
     );
+    const canReadClinicalProcedureOrders = computed(() =>
+        permissions.has('clinical-procedure.orders.read'),
+    );
+    const canCreateClinicalProcedureOrders = computed(() =>
+        permissions.has('clinical-procedure.order'),
+    );
     const canReadBillingInvoices = computed(() =>
         permissions.has('billing.invoices.read'),
     );
@@ -104,6 +110,10 @@ export function useEncounterOrdering(options: {
         () =>
             canReadTheatreProcedures.value && canCreateTheatreProcedures.value,
     );
+    const canOpenClinicalProcedureWorkflow = computed(
+        () =>
+            canReadClinicalProcedureOrders.value && canCreateClinicalProcedureOrders.value,
+    );
     const canOpenBillingWorkflow = computed(() => canReadBillingInvoices.value);
     const canCreateBillingWorkflow = computed(
         () => canReadBillingInvoices.value && canCreateBillingInvoices.value,
@@ -115,6 +125,7 @@ export function useEncounterOrdering(options: {
             canOpenPharmacyWorkflow.value ||
             canOpenRadiologyWorkflow.value ||
             canOpenTheatreWorkflow.value ||
+            canOpenClinicalProcedureWorkflow.value ||
             canOpenBillingWorkflow.value,
     );
 
@@ -448,6 +459,7 @@ export function useEncounterOrdering(options: {
         canOpenPharmacyWorkflow,
         canOpenRadiologyWorkflow,
         canOpenTheatreWorkflow,
+        canOpenClinicalProcedureWorkflow,
         canOpenBillingWorkflow,
         canCreateBillingWorkflow,
         canCreateLaboratoryOrders,

@@ -44,6 +44,7 @@ use App\Modules\Pharmacy\Presentation\Http\Transformers\MedicationLaboratorySign
 use App\Modules\Pharmacy\Presentation\Http\Transformers\PharmacyOrderAuditLogResponseTransformer;
 use App\Modules\Pharmacy\Presentation\Http\Transformers\PharmacyMedicationAvailabilityResponseTransformer;
 use App\Modules\Pharmacy\Presentation\Http\Transformers\PharmacyOrderResponseTransformer;
+use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
 use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemsUseCase;
@@ -161,8 +162,12 @@ class PharmacyOrderController extends Controller
         $order = $useCase->execute($id);
         abort_if($order === null, 404, 'Pharmacy order not found.');
 
+        $transformed = PharmacyOrderResponseTransformer::transform($order);
+        $enriched = ClinicalOrderPatientSummaryEnricher::attachToTransformedOrders([$order], [$transformed]);
+        $enriched = ClinicalOrderUserSummaryEnricher::attachOrderingClinicianToTransformedOrders([$order], $enriched);
+
         return response()->json([
-            'data' => PharmacyOrderResponseTransformer::transform($order),
+            'data' => $enriched[0],
         ]);
     }
 
@@ -357,6 +362,14 @@ class PharmacyOrderController extends Controller
         UpdatePharmacyOrderStatusRequest $request,
         UpdatePharmacyOrderStatusUseCase $useCase
     ): JsonResponse {
+        $order = PharmacyOrderModel::query()->findOrFail($id);
+
+        if ($order->verified_at === null) {
+            abort_unless($request->user()?->can('medication.dispense'), 403, 'This action is unauthorized.');
+        } else {
+            Gate::authorize('dispense', $order);
+        }
+
         try {
             $order = $useCase->execute(
                 id: $id,
@@ -378,8 +391,6 @@ class PharmacyOrderController extends Controller
         }
 
         abort_if($order === null, 404, 'Pharmacy order not found.');
-
-        Gate::authorize('dispense', $order);
 
         return response()->json([
             'data' => PharmacyOrderResponseTransformer::transform($order),

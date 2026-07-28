@@ -2,10 +2,11 @@
 
 namespace App\Modules\Billing\Infrastructure\Integrations\NHIF;
 
-use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Billing\Infrastructure\Models\BillingNhifTariffImportModel;
+use App\Modules\Billing\Infrastructure\Models\PriceBookEntryModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class NhifTariffSyncService
 {
@@ -89,41 +90,62 @@ class NhifTariffSyncService
                 continue;
             }
 
-            $existing = BillingServiceCatalogItemModel::query()
+            $existing = ChargeableItemModel::query()
                 ->where('tenant_id', $tenantId)
                 ->where('facility_id', $facilityId)
-                ->whereJsonContains('codes->nhif_code', $nhifCode)
+                ->where('metadata->nhif_code', $nhifCode)
                 ->first();
 
             if ($existing) {
-                $codes = $existing->codes ?? [];
-                $codes['nhif_tariff'] = $price;
-                $codes['nhif_tariff_version'] = $tariffVersion;
+                $metadata = is_array($existing->metadata) ? $existing->metadata : [];
+                $metadata['nhif_tariff'] = $price;
+                $metadata['nhif_tariff_version'] = $tariffVersion;
+
                 $existing->update([
-                    'codes' => $codes,
-                    'base_price' => $price,
+                    'metadata' => $metadata,
                 ]);
+
+                PriceBookEntryModel::query()
+                    ->where('chargeable_item_id', $existing->id)
+                    ->where('tenant_id', $tenantId)
+                    ->where('facility_id', $facilityId)
+                    ->whereNull('payer_contract_id')
+                    ->update(['unit_price' => $price]);
+
                 $updated++;
-                $log[] = ['action' => 'updated', 'catalog_id' => $existing->id, 'nhif_code' => $nhifCode];
+                $log[] = ['action' => 'updated', 'chargeable_item_id' => $existing->id, 'nhif_code' => $nhifCode];
             } else {
-                $existing = BillingServiceCatalogItemModel::create([
+                $chargeableItem = new ChargeableItemModel();
+                $chargeableItem->id = (string) Str::orderedUuid();
+                $chargeableItem->fill([
                     'tenant_id' => $tenantId,
                     'facility_id' => $facilityId,
-                    'service_code' => $nhifCode,
-                    'service_name' => $serviceName,
-                    'service_type' => $item['category'] ?? 'NHIF Tariff',
-                    'department' => $item['category'] ?? 'NHIF Tariff',
-                    'base_price' => $price,
-                    'currency_code' => 'TZS',
-                    'codes' => [
+                    'catalog_type' => 'nhif_tariff',
+                    'code' => $nhifCode,
+                    'name' => $serviceName,
+                    'default_unit' => 'service',
+                    'status' => 'active',
+                    'metadata' => [
                         'nhif_code' => $nhifCode,
                         'nhif_tariff' => $price,
                         'nhif_tariff_version' => $tariffVersion,
                     ],
-                    'status' => 'active',
                 ]);
+                $chargeableItem->save();
+
+                $priceEntry = new PriceBookEntryModel();
+                $priceEntry->id = (string) Str::orderedUuid();
+                $priceEntry->chargeable_item_id = $chargeableItem->id;
+                $priceEntry->tenant_id = $tenantId;
+                $priceEntry->facility_id = $facilityId;
+                $priceEntry->currency_code = 'TZS';
+                $priceEntry->unit_price = $price;
+                $priceEntry->tariff_version = 1;
+                $priceEntry->status = 'active';
+                $priceEntry->save();
+
                 $imported++;
-                $log[] = ['action' => 'created', 'catalog_id' => $existing->id, 'nhif_code' => $nhifCode];
+                $log[] = ['action' => 'created', 'chargeable_item_id' => $chargeableItem->id, 'nhif_code' => $nhifCode];
             }
         }
 

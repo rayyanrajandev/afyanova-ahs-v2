@@ -80,6 +80,11 @@ const labForm = reactive({
 const pharmacyForm = reactive({
     catalogItemId: '',
     dosageInstruction: '',
+    route: '',
+    frequency: '',
+    durationValue: '',
+    durationUnit: '',
+    prescribedUnit: '',
     clinicalIndication: '',
     quantityPrescribed: '1',
     dispensingNotes: '',
@@ -218,6 +223,11 @@ function resetForms() {
     labForm.clinicalNotes = '';
     pharmacyForm.catalogItemId = '';
     pharmacyForm.dosageInstruction = '';
+    pharmacyForm.route = '';
+    pharmacyForm.frequency = '';
+    pharmacyForm.durationValue = '';
+    pharmacyForm.durationUnit = '';
+    pharmacyForm.prescribedUnit = '';
     pharmacyForm.clinicalIndication = '';
     pharmacyForm.quantityPrescribed = '1';
     pharmacyForm.dispensingNotes = '';
@@ -477,6 +487,11 @@ async function submitOrder() {
                 medicationCode: item.code?.trim() ?? '',
                 medicationName: item.name?.trim() ?? '',
                 dosageInstruction: pharmacyForm.dosageInstruction.trim(),
+                route: pharmacyForm.route.trim() || undefined,
+                frequency: pharmacyForm.frequency.trim() || undefined,
+                durationValue: pharmacyForm.durationValue ? Number(pharmacyForm.durationValue) : null,
+                durationUnit: pharmacyForm.durationUnit.trim() || undefined,
+                prescribedUnit: pharmacyForm.prescribedUnit.trim() || undefined,
                 clinicalIndication: pharmacyForm.clinicalIndication.trim(),
                 quantityPrescribed: quantity,
                 dispensingNotes: pharmacyForm.dispensingNotes.trim(),
@@ -692,23 +707,62 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                         {{ fieldError('dosageInstruction') }}
                     </p>
                 </div>
-                <div class="grid gap-2">
-                    <Label for="encounter-inline-pharm-qty"
-                        >Quantity prescribed</Label
-                    >
-                    <Input
-                        id="encounter-inline-pharm-qty"
-                        v-model="pharmacyForm.quantityPrescribed"
-                        type="number"
-                        min="1"
-                        step="1"
-                    />
-                    <p
-                        v-if="fieldError('quantityPrescribed')"
-                        class="text-xs text-destructive"
-                    >
-                        {{ fieldError('quantityPrescribed') }}
-                    </p>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="grid gap-2">
+                        <Label for="encounter-inline-pharm-route"
+                            >Route</Label
+                        >
+                        <Input
+                            id="encounter-inline-pharm-route"
+                            v-model="pharmacyForm.route"
+                            placeholder="Oral, topical, IV…"
+                        />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="encounter-inline-pharm-freq"
+                            >Frequency</Label
+                        >
+                        <Input
+                            id="encounter-inline-pharm-freq"
+                            v-model="pharmacyForm.frequency"
+                            placeholder="Twice daily, PRN…"
+                        />
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="grid gap-2">
+                        <Label for="encounter-inline-pharm-dur-val"
+                            >Duration value</Label
+                        >
+                        <Input
+                            id="encounter-inline-pharm-dur-val"
+                            v-model="pharmacyForm.durationValue"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="7"
+                        />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="encounter-inline-pharm-dur-unit"
+                            >Duration unit</Label
+                        >
+                        <Input
+                            id="encounter-inline-pharm-dur-unit"
+                            v-model="pharmacyForm.durationUnit"
+                            placeholder="days, weeks…"
+                        />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="encounter-inline-pharm-unit"
+                            >Prescribed unit</Label
+                        >
+                        <Input
+                            id="encounter-inline-pharm-unit"
+                            v-model="pharmacyForm.prescribedUnit"
+                            placeholder="tablets, ml…"
+                        />
+                    </div>
                 </div>
                 <div class="grid gap-2">
                     <Label for="encounter-inline-pharm-indication"

@@ -4,8 +4,8 @@ namespace App\Modules\Billing\Infrastructure\Repositories;
 
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
-use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Billing\Infrastructure\Models\GLJournalEntryModel;
+use App\Modules\Platform\Infrastructure\Models\ChargeableItemModel;
 use App\Modules\Billing\Infrastructure\Models\RevenueRecognitionModel;
 use App\Modules\ClaimsInsurance\Infrastructure\Models\ClaimsInsuranceCaseModel;
 use App\Modules\Department\Infrastructure\Models\DepartmentModel;
@@ -262,18 +262,14 @@ class EloquentBillingInvoiceRepository implements BillingInvoiceRepositoryInterf
     {
         $billingServiceTypes = ['Clinical', 'Diagnostic', 'Pharmacy'];
 
-        $catalogQuery = BillingServiceCatalogItemModel::query()
+        $catalogQuery = ChargeableItemModel::query()
             ->where('status', 'active')
-            ->where(function (Builder $builder): void {
-                $builder
-                    ->whereNotNull('department_id')
-                    ->orWhereNotNull('department');
-            });
+            ->whereNotNull('department_id');
         $this->applyPlatformScopeIfEnabled($catalogQuery);
 
         $catalogRows = $catalogQuery
-            ->orderBy('department')
-            ->get(['department_id', 'department']);
+            ->orderBy('name')
+            ->get(['department_id']);
 
         if ($catalogRows->isEmpty()) {
             return [];
@@ -287,20 +283,10 @@ class EloquentBillingInvoiceRepository implements BillingInvoiceRepositoryInterf
             ->values()
             ->all();
 
-        $fallbackNamesByKey = [];
-        foreach ($catalogRows as $catalogRow) {
-            $label = $this->normalizeNullableTrimmed($catalogRow->department ?? null);
-            if ($label === null) {
-                continue;
-            }
-
-            $fallbackNamesByKey[$this->normalizeDepartmentValue($label)] = $label;
-        }
-
         $departmentQuery = DepartmentModel::query()
             ->where('status', 'active');
         $this->applyPlatformScopeIfEnabled($departmentQuery);
-        $departmentQuery->where(function (Builder $builder) use ($billingServiceTypes, $departmentIds, $fallbackNamesByKey): void {
+        $departmentQuery->where(function (Builder $builder) use ($billingServiceTypes, $departmentIds): void {
             $builder->where(function (Builder $billingBuilder) use ($billingServiceTypes): void {
                 $billingBuilder
                     ->where('is_patient_facing', true)
@@ -310,37 +296,17 @@ class EloquentBillingInvoiceRepository implements BillingInvoiceRepositoryInterf
             if ($departmentIds !== []) {
                 $builder->orWhereIn('id', $departmentIds);
             }
-
-            $fallbackNames = array_values($fallbackNamesByKey);
-            if ($fallbackNames !== []) {
-                $builder->orWhereIn('name', $fallbackNames);
-            }
         });
 
         $options = [];
         foreach ($departmentQuery
             ->orderBy('name')
             ->get(['id', 'code', 'name', 'service_type']) as $department) {
-            $normalizedName = $this->normalizeDepartmentValue((string) ($department->name ?? ''));
-            if ($normalizedName !== '' && array_key_exists($normalizedName, $fallbackNamesByKey)) {
-                unset($fallbackNamesByKey[$normalizedName]);
-            }
-
             $options[(string) $department->id] = [
                 'id' => (string) $department->id,
                 'code' => $this->normalizeNullableTrimmed($department->code ?? null),
                 'name' => (string) ($department->name ?? ''),
                 'serviceType' => $this->normalizeNullableTrimmed($department->service_type ?? null),
-            ];
-        }
-
-        foreach ($fallbackNamesByKey as $fallbackName) {
-            $options['label:'.$fallbackName] = [
-                // Name-based fallbacks remain valid because finance summaries accept department labels.
-                'id' => $fallbackName,
-                'code' => null,
-                'name' => $fallbackName,
-                'serviceType' => null,
             ];
         }
 
@@ -1081,23 +1047,21 @@ class EloquentBillingInvoiceRepository implements BillingInvoiceRepositoryInterf
             return [];
         }
 
-        $query = BillingServiceCatalogItemModel::query()
-            ->whereIn('service_code', $serviceCodes)
-            ->where('status', 'active')
-            ->orderByDesc('effective_from')
-            ->orderByDesc('updated_at');
+        $query = ChargeableItemModel::query()
+            ->whereIn('code', $serviceCodes)
+            ->where('status', 'active');
         $this->applyPlatformScopeIfEnabled($query);
 
         $rows = [];
-        foreach ($query->get(['service_code', 'department_id', 'department']) as $item) {
-            $serviceCode = strtoupper(trim((string) ($item->service_code ?? '')));
+        foreach ($query->get(['code', 'department_id']) as $item) {
+            $serviceCode = strtoupper(trim((string) ($item->code ?? '')));
             if ($serviceCode === '' || array_key_exists($serviceCode, $rows)) {
                 continue;
             }
 
             $rows[$serviceCode] = [
                 'department_id' => $this->normalizeNullableTrimmed($item->department_id ?? null),
-                'department' => $this->normalizeNullableTrimmed($item->department ?? null),
+                'department' => null,
             ];
         }
 

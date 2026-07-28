@@ -19,9 +19,14 @@ import { useDeleteConsultationMapping } from '@/composables/consultationMappings
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatMoney } from '@/lib/billingServiceCatalog';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
+
+function formatMoney(value: string | number | null | undefined, currencyCode?: string | null): string {
+    if (value === null || value === undefined) return 'N/A';
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode || 'KES', minimumFractionDigits: 2 }).format(num);
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Billing', href: '/billing' },

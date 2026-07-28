@@ -95,8 +95,12 @@ class RadiologyOrderController extends Controller
         $order = $useCase->execute($id);
         abort_if($order === null, 404, 'Radiology order not found.');
 
+        $transformed = RadiologyOrderResponseTransformer::transform($order, true);
+        $enriched = ClinicalOrderPatientSummaryEnricher::attachToTransformedOrders([$order], [$transformed]);
+        $enriched = ClinicalOrderUserSummaryEnricher::attachOrderingClinicianToTransformedOrders([$order], $enriched);
+
         return response()->json([
-            'data' => RadiologyOrderResponseTransformer::transform($order, true),
+            'data' => $enriched[0],
         ]);
     }
 
