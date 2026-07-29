@@ -85,9 +85,11 @@ function toNumber(value: number | string | null | undefined): number | null {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatQuantity(value: number | null): string {
-    if (value === null) return '—';
-    return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
+function formatQuantity(value: number | string | null | undefined): string {
+    if (value === null || value === undefined || value === '') return '—';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '—';
+    return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.?0+$/, '');
 }
 
 const availableStock = computed(() => toNumber(availability.data.value?.currentStock));
@@ -206,9 +208,21 @@ function submit(): void {
 
             <div class="space-y-4">
                 <div class="rounded-lg border bg-muted/20 p-3">
-                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Order</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Prescription</p>
                     <p class="mt-2 text-sm font-medium text-foreground">
                         {{ order?.medicationName || order?.medicationCode || 'Pharmacy order' }}
+                    </p>
+                    <p v-if="order?.dosageInstruction" class="mt-0.5 text-sm text-muted-foreground">
+                        {{ order.dosageInstruction }}
+                    </p>
+                    <div v-if="order?.doseQuantity" class="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                        <span v-if="order.doseQuantity">Dose: <strong>{{ formatQuantity(order.doseQuantity) }} {{ order.doseUnit || '' }}</strong></span>
+                        <span v-if="order.route">Route: {{ order.route }}</span>
+                        <span v-if="order.frequency">Freq: {{ order.frequency }}</span>
+                        <span v-if="order.durationValue">Duration: {{ order.durationValue }} {{ order.durationUnit || '' }}</span>
+                    </div>
+                    <p v-if="order?.quantityPrescribed !== null" class="mt-1.5 text-xs text-muted-foreground">
+                        <strong>{{ formatQuantity(order.quantityPrescribed) }}</strong> {{ order?.prescribedUnit || 'unit(s)' }} prescribed
                     </p>
                 </div>
 
@@ -261,9 +275,6 @@ function submit(): void {
                             <Input id="pharmacy-dispense-unit" v-model="dispensedUnit" placeholder="e.g. tablets" />
                         </div>
                     </div>
-                    <p v-if="order?.quantityPrescribed !== null" class="text-xs text-muted-foreground">
-                        {{ order?.quantityPrescribed }} {{ order?.prescribedUnit }} prescribed in total.
-                    </p>
                     <Alert v-if="exceedsAvailableStock" variant="destructive">
                         <AlertDescription>
                             This exceeds the currently available stock ({{ formatQuantity(availableStock) }} {{ availability.data.value?.unit }}). The server will reject the dispense if stock hasn't changed by submission.

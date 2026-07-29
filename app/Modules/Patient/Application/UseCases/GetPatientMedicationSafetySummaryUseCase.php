@@ -42,6 +42,8 @@ class GetPatientMedicationSafetySummaryUseCase
         $dosageInstruction = trim((string) ($context['dosage_instruction'] ?? ''));
         $clinicalIndication = trim((string) ($context['clinical_indication'] ?? ''));
         $quantityPrescribed = $this->normalizeNumeric($context['quantity_prescribed'] ?? null);
+        $frequency = $this->normalizeText($context['frequency'] ?? null);
+        $doseQuantity = $this->normalizeNumeric($context['dose_quantity'] ?? null);
         $appointmentId = $this->normalizeText($context['appointment_id'] ?? null);
         $admissionId = $this->normalizeText($context['admission_id'] ?? null);
         $approvedMedicineCatalogItemId = $this->normalizeText(
@@ -213,6 +215,8 @@ class GetPatientMedicationSafetySummaryUseCase
             patientAgeYears: $patientContext['age_years'],
             patientAgeMonths: $patientContext['age_months'],
             patientWeightKg: $patientContext['weight_kg'],
+            frequency: $frequency,
+            doseQuantity: $doseQuantity,
         ) as $doseRule) {
             $rules[] = $doseRule;
         }

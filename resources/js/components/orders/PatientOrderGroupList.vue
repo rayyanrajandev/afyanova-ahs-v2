@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import type { DirectServiceOrderLike, PatientOrderGroup } from '@/lib/directServicePatientWorklist';
@@ -14,6 +15,7 @@ defineProps<{
 
 defineSlots<{
     orders: (props: { group: PatientOrderGroup<T> }) => unknown;
+    'header-actions': (props: { group: PatientOrderGroup<T> }) => unknown;
 }>();
 
 const emit = defineEmits<{
@@ -80,19 +82,31 @@ const emit = defineEmits<{
                         {{ group.summarySubtitle }}
                     </p>
                 </div>
-                <button
-                    type="button"
-                    class="flex shrink-0 items-center pt-0.5"
-                    :aria-expanded="isExpanded(group.patientId)"
-                    :aria-controls="`patient-order-group-${group.patientId}`"
-                    :aria-label="isExpanded(group.patientId) ? 'Collapse patient orders' : 'Expand patient orders'"
-                    @click.stop="emit('update:expanded', group.patientId, !isExpanded(group.patientId))"
-                >
-                    <AppIcon
-                        name="chevron-down"
-                        :class="['chevron size-4 text-muted-foreground transition-transform duration-200', isExpanded(group.patientId) ? 'rotate-180' : '']"
-                    />
-                </button>
+                <div class="flex shrink-0 items-center gap-3">
+                    <slot name="header-actions" :group="group" />
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <button
+                                    type="button"
+                                    class="flex items-center pt-0.5"
+                                :aria-expanded="isExpanded(group.patientId)"
+                                :aria-controls="`patient-order-group-${group.patientId}`"
+                                :aria-label="isExpanded(group.patientId) ? 'Collapse patient orders' : 'Expand patient orders'"
+                                @click.stop="emit('update:expanded', group.patientId, !isExpanded(group.patientId))"
+                            >
+                                <AppIcon
+                                    name="chevron-down"
+                                    :class="['chevron size-4 text-muted-foreground transition-transform duration-200', isExpanded(group.patientId) ? 'rotate-180' : '']"
+                                />
+                            </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                {{ isExpanded(group.patientId) ? 'Collapse' : 'Expand' }}
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
             </div>
             <CollapsibleContent :id="`patient-order-group-${group.patientId}`">
                 <div

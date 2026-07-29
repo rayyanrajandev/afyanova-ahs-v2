@@ -7,6 +7,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -124,10 +125,10 @@ const { patientOrderGroups, useGroupedQueueView, isPatientGroupExpanded, setPati
 );
 
 const statusOptions: Array<{ value: PharmacyOrderStatus | 'all'; label: string }> = [
-    { value: 'all', label: 'All' },
     { value: 'pending', label: 'Pending' },
     { value: 'in_preparation', label: 'In preparation' },
     { value: 'partially_dispensed', label: 'Partially dispensed' },
+    { value: 'all', label: 'All' },
     { value: 'dispensed', label: 'Dispensed' },
     { value: 'cancelled', label: 'Cancelled' },
 ];
@@ -170,7 +171,7 @@ function resetFilters(): void {
     filters.q = '';
     filters.patientId = '';
     patientSearchQuery.value = '';
-    filters.status = '';
+    filters.status = 'pending';
     filters.from = '';
     filters.to = '';
     filters.page = 1;
@@ -283,6 +284,15 @@ const detailOpen = ref(false);
 function openDetail(order: PharmacyOrder): void {
     detailOrder.value = order;
     detailOpen.value = true;
+}
+
+function printPrescription(order: PharmacyOrder): void {
+    if (order.id) window.open(`/pharmacy-orders/${order.id}/print`, '_blank');
+}
+
+function printPatientOrders(group: { orders: PharmacyOrder[] }): void {
+    const ids = group.orders.map(o => o.id).filter(Boolean).join(',');
+    if (ids) window.open(`/pharmacy-orders/print-batch?ids=${ids}`, '_blank');
 }
 
 const linkagePatientId = ref<string | null>(null);
@@ -637,6 +647,23 @@ function openAuditSheet(order: PharmacyOrder): void {
                             :is-expanded="isPatientGroupExpanded"
                             @update:expanded="setPatientGroupExpanded"
                         >
+                            <template #header-actions="{ group }">
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger as-child>
+                                            <button
+                                                type="button"
+                                                class="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground whitespace-nowrap"
+                                                @click.stop="printPatientOrders(group)"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                                                Print {{ group.orders.length }}
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Print all {{ group.orders.length }} prescriptions</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </template>
                             <template #orders="{ group }">
                                 <div
                                     v-for="order in group.orders"
@@ -703,16 +730,39 @@ function openAuditSheet(order: PharmacyOrder): void {
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
-                                            <Button
-                                                v-if="canViewAuditLogs"
-                                                size="sm"
-                                                variant="ghost"
-                                                class="h-7 px-1.5"
-                                                aria-label="View audit log"
-                                                @click="openAuditSheet(order)"
-                                            >
-                                                <AppIcon name="clock" class="size-3.5" />
-                                            </Button>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger as-child>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            class="h-7 px-1.5"
+                                                            aria-label="Print prescription"
+                                                            @click="printPrescription(order)"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>Print prescription</TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger as-child>
+                                                        <Button
+                                                            v-if="canViewAuditLogs"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            class="h-7 px-1.5"
+                                                            aria-label="View audit log"
+                                                            @click="openAuditSheet(order)"
+                                                        >
+                                                            <AppIcon name="clock" class="size-3.5" />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>View audit log</TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         </div>
                                     </div>
                                 </div>

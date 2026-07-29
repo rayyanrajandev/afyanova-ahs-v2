@@ -23,6 +23,8 @@ final class MedicationDoseSafetyKnowledgeBase
         ?int $patientAgeYears = null,
         ?int $patientAgeMonths = null,
         ?float $patientWeightKg = null,
+        ?string $frequency = null,
+        ?float $doseQuantity = null,
     ): array {
         $normalizedInstruction = trim((string) ($dosageInstruction ?? ''));
         $normalizedMedicationCode = self::normalize($targetMedicationCode);
@@ -40,8 +42,10 @@ final class MedicationDoseSafetyKnowledgeBase
 
         $rules = [];
 
+        $hasStructuredFrequency = $frequency !== null && $frequency !== '';
         if (
             $normalizedInstruction !== ''
+            && ! $hasStructuredFrequency
             && ! self::hasRecognizableDoseSchedule($normalizedInstruction)
         ) {
             $rules[] = MedicationSafetyRuleCatalog::makeRule(

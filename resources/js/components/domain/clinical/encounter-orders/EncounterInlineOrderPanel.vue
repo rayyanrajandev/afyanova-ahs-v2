@@ -32,17 +32,21 @@ import {
     fetchApprovedMedicinesCatalog,
     fetchLabTestCatalog,
     fetchPatientMedicationSafetySummary,
+    fetchPharmacyMedicationAvailability,
     fetchRadiologyProcedureCatalog,
     labTestCatalogSpecimenType,
     laboratoryPriorityOptions,
+    prescribedUnitOptions as getPrescribedUnitOptions,
     radiologyModalityOptions,
     type ClinicalCatalogItem,
     type EncounterDuplicateCheckResult,
     type EncounterInlineOrderLinkageContext,
     type EncounterInlineOrderType,
     type EncounterOrderContext,
+    type MedicationAvailability,
     type MedicationSafetyContinuationDecision,
 } from '@/lib/encounterInlineOrders';
+import { calculateDispenseQuantity, generateDosageInstruction } from '@/lib/dosageCalculator';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 
 const props = defineProps<{
@@ -77,9 +81,25 @@ const labForm = reactive({
     clinicalNotes: '',
 });
 
+const pharmacyMedicationAvailability = ref<MedicationAvailability | null>(null);
+const pharmacyPrescribedUnitOptions = computed(() => getPrescribedUnitOptions(selectedCatalogItem.value));
+const pharmacyInferredStrength = computed(() => {
+    const item = selectedCatalogItem.value;
+    if (!item?.strength) return null;
+    const s = item.strength.match(/^([\d.]+)\s*([a-zA-Z°%]+)(?:\s*\/\s*([\d.]+)\s*([a-zA-Z°%]+))?$/);
+    if (!s) return null;
+    return {
+        numeratorValue: Number(s[1]),
+        numeratorUnit: s[2],
+        denominatorValue: s[3] ? Number(s[3]) : 1,
+        denominatorUnit: s[4] ?? null,
+    };
+});
 const pharmacyForm = reactive({
     catalogItemId: '',
     dosageInstruction: '',
+    doseQuantity: '',
+    doseUnit: '',
     route: '',
     frequency: '',
     durationValue: '',
@@ -223,6 +243,8 @@ function resetForms() {
     labForm.clinicalNotes = '';
     pharmacyForm.catalogItemId = '';
     pharmacyForm.dosageInstruction = '';
+    pharmacyForm.doseQuantity = '';
+    pharmacyForm.doseUnit = '';
     pharmacyForm.route = '';
     pharmacyForm.frequency = '';
     pharmacyForm.durationValue = '';
@@ -231,6 +253,7 @@ function resetForms() {
     pharmacyForm.clinicalIndication = '';
     pharmacyForm.quantityPrescribed = '1';
     pharmacyForm.dispensingNotes = '';
+    pharmacyMedicationAvailability.value = null;
     radiologyForm.catalogItemId = '';
     radiologyForm.modality = 'xray';
     radiologyForm.clinicalIndication = '';
@@ -305,6 +328,64 @@ watch(
     },
 );
 
+watch(
+    () => pharmacyForm.catalogItemId,
+    async () => {
+        if (props.orderType !== 'pharmacy') return;
+
+        const item = selectedCatalogItem.value;
+        if (!item) return;
+
+        const route = item.route?.trim();
+        if (route && !pharmacyForm.route) pharmacyForm.route = route;
+
+        const doseUnit = pharmacyInferredStrength.value?.numeratorUnit;
+        if (doseUnit && !pharmacyForm.doseUnit) pharmacyForm.doseUnit = doseUnit;
+
+        const catalogUnit = item.unit?.trim();
+        if (catalogUnit && !pharmacyForm.prescribedUnit) pharmacyForm.prescribedUnit = catalogUnit;
+
+        pharmacyMedicationAvailability.value = null;
+        const availability = await fetchPharmacyMedicationAvailability(item.id);
+        if (availability && selectedCatalogItem.value?.id === item.id) {
+            pharmacyMedicationAvailability.value = availability;
+        }
+    },
+);
+
+watch(
+    [() => pharmacyForm.doseQuantity, () => pharmacyForm.doseUnit, () => pharmacyForm.route, () => pharmacyForm.frequency, () => pharmacyForm.durationValue, () => pharmacyForm.durationUnit],
+    () => {
+        if (props.orderType !== 'pharmacy') return;
+
+        const strength = pharmacyInferredStrength.value;
+        const doseQty = pharmacyForm.doseQuantity ? Number(pharmacyForm.doseQuantity) : null;
+        const doseUnit = pharmacyForm.doseUnit?.trim();
+        const route = pharmacyForm.route?.trim();
+        const frequency = pharmacyForm.frequency?.trim();
+        const durVal = pharmacyForm.durationValue ? Number(pharmacyForm.durationValue) : null;
+        const durUnit = pharmacyForm.durationUnit?.trim();
+
+        if (strength && doseQty && doseQty > 0 && doseUnit) {
+            const dispense = calculateDispenseQuantity(
+                { value: doseQty, unit: doseUnit },
+                strength,
+            );
+            if (dispense.quantity > 0) {
+                pharmacyForm.quantityPrescribed = String(dispense.quantity);
+            }
+
+            const instruction = generateDosageInstruction(
+                { value: doseQty, unit: doseUnit },
+                route,
+                frequency,
+                durVal && durUnit ? { value: durVal, unit: durUnit } : null,
+            );
+            pharmacyForm.dosageInstruction = instruction;
+        }
+    },
+);
+
 async function confirmDuplicateCheck(
     title: string,
     result: EncounterDuplicateCheckResult,
@@ -346,6 +427,8 @@ async function resolvePharmacySafetyDecision(payload: {
         dosageInstruction: payload.dosageInstruction,
         clinicalIndication: payload.clinicalIndication,
         quantityPrescribed: payload.quantityPrescribed,
+        frequency: pharmacyForm.frequency?.trim() || null,
+        doseQuantity: pharmacyForm.doseQuantity ? Number(pharmacyForm.doseQuantity) : null,
     });
 
     if (!summary) {
@@ -487,6 +570,8 @@ async function submitOrder() {
                 medicationCode: item.code?.trim() ?? '',
                 medicationName: item.name?.trim() ?? '',
                 dosageInstruction: pharmacyForm.dosageInstruction.trim(),
+                doseQuantity: pharmacyForm.doseQuantity ? Number(pharmacyForm.doseQuantity) : null,
+                doseUnit: pharmacyForm.doseUnit.trim() || undefined,
                 route: pharmacyForm.route.trim() || undefined,
                 frequency: pharmacyForm.frequency.trim() || undefined,
                 durationValue: pharmacyForm.durationValue ? Number(pharmacyForm.durationValue) : null,
@@ -691,45 +776,59 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
             </template>
 
             <template v-else-if="orderType === 'pharmacy'">
-                <div class="grid gap-2">
-                    <Label for="encounter-inline-pharm-dose"
-                        >Dosage instruction</Label
+                <div v-if="selectedCatalogItem" class="space-y-1.5">
+                    <div class="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        <span class="font-medium text-foreground">{{ selectedCatalogItem.name }}</span>
+                        <span v-if="selectedCatalogItem.strength"> — {{ selectedCatalogItem.strength }}</span>
+                        <br>
+                        <span v-if="selectedCatalogItem.dosageForm">Form: {{ selectedCatalogItem.dosageForm }}</span>
+                        <span v-if="selectedCatalogItem.route"> | Route: {{ selectedCatalogItem.route }}</span>
+                        <span v-if="selectedCatalogItem.unit"> | Unit: {{ selectedCatalogItem.unit }}</span>
+                    </div>
+
+                    <div
+                        v-if="pharmacyMedicationAvailability"
+                        class="flex items-center gap-2 rounded-md border px-3 py-2 text-xs"
+                        :class="pharmacyMedicationAvailability.stockState === 'out_of_stock' ? 'border-destructive/30 bg-destructive/5 text-destructive' : pharmacyMedicationAvailability.stockState === 'low_stock' ? 'border-warning/30 bg-warning/5 text-warning-foreground' : 'border-primary/20 bg-primary/5 text-primary'"
                     >
-                    <Input
-                        id="encounter-inline-pharm-dose"
-                        v-model="pharmacyForm.dosageInstruction"
-                        placeholder="1 tablet orally twice daily"
-                    />
-                    <p
-                        v-if="fieldError('dosageInstruction')"
-                        class="text-xs text-destructive"
-                    >
-                        {{ fieldError('dosageInstruction') }}
-                    </p>
+                        <AppIcon
+                            :name="pharmacyMedicationAvailability.stockState === 'out_of_stock' ? 'circle-alert' : pharmacyMedicationAvailability.stockState === 'low_stock' ? 'alert-triangle' : 'check-circle'"
+                            class="size-3.5 shrink-0"
+                        />
+                        <span>
+                            <strong>{{ pharmacyMedicationAvailability.availableStock ?? pharmacyMedicationAvailability.currentStock ?? 0 }}</strong>
+                            in stock
+                            <span v-if="pharmacyMedicationAvailability.stockState === 'out_of_stock'" class="font-semibold"> — Out of stock</span>
+                            <span v-else-if="pharmacyMedicationAvailability.stockState === 'low_stock'" class="font-semibold"> — Low stock</span>
+                        </span>
+                    </div>
                 </div>
+
                 <div class="grid grid-cols-2 gap-3">
                     <div class="grid gap-2">
-                        <Label for="encounter-inline-pharm-route"
-                            >Route</Label
-                        >
-                        <Input
-                            id="encounter-inline-pharm-route"
-                            v-model="pharmacyForm.route"
-                            placeholder="Oral, topical, IV…"
-                        />
+                        <Label for="encounter-inline-pharm-dose-qty">Dose quantity</Label>
+                        <Input id="encounter-inline-pharm-dose-qty" v-model="pharmacyForm.doseQuantity" type="number" min="0" step="0.01" placeholder="e.g. 100" />
+                        <p v-if="fieldError('doseQuantity')" class="text-xs text-destructive">{{ fieldError('doseQuantity') }}</p>
                     </div>
                     <div class="grid gap-2">
-                        <Label for="encounter-inline-pharm-freq"
-                            >Frequency</Label
-                        >
-                        <Input
-                            id="encounter-inline-pharm-freq"
-                            v-model="pharmacyForm.frequency"
-                            placeholder="Twice daily, PRN…"
-                        />
+                        <Label for="encounter-inline-pharm-dose-unit">Dose unit</Label>
+                        <Input id="encounter-inline-pharm-dose-unit" v-model="pharmacyForm.doseUnit" placeholder="mg, mcg, ml…" />
+                        <p v-if="fieldError('doseUnit')" class="text-xs text-destructive">{{ fieldError('doseUnit') }}</p>
                     </div>
                 </div>
-                <div class="grid grid-cols-3 gap-3">
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="grid gap-2">
+                        <Label for="encounter-inline-pharm-route">Route</Label>
+                        <Input id="encounter-inline-pharm-route" v-model="pharmacyForm.route" placeholder="Oral, topical, IV…" />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="encounter-inline-pharm-freq">Frequency</Label>
+                        <Input id="encounter-inline-pharm-freq" v-model="pharmacyForm.frequency" placeholder="e.g. bid, tid, q8h, prn, twice daily" />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
                     <div class="grid gap-2">
                         <Label for="encounter-inline-pharm-dur-val"
                             >Duration value</Label
@@ -753,15 +852,41 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                             placeholder="days, weeks…"
                         />
                     </div>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="encounter-inline-pharm-dose-instruction">Dosage instruction</Label>
+                    <Input id="encounter-inline-pharm-dose-instruction" v-model="pharmacyForm.dosageInstruction" placeholder="Auto-filled: e.g. 500 mg Oral q8h × 7 days" />
+                    <p class="text-xs text-muted-foreground">Auto-generated from fields above — edit if needed</p>
+                    <p v-if="fieldError('dosageInstruction')" class="text-xs text-destructive">{{ fieldError('dosageInstruction') }}</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
                     <div class="grid gap-2">
                         <Label for="encounter-inline-pharm-unit"
                             >Prescribed unit</Label
                         >
+                        <Select v-model="pharmacyForm.prescribedUnit">
+                            <SelectTrigger id="encounter-inline-pharm-unit" class="w-full">
+                                <SelectValue placeholder="Select unit" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem v-for="u in pharmacyPrescribedUnitOptions" :key="u" :value="u">{{ u }}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="encounter-inline-pharm-qty"
+                            >Quantity prescribed</Label
+                        >
                         <Input
-                            id="encounter-inline-pharm-unit"
-                            v-model="pharmacyForm.prescribedUnit"
-                            placeholder="tablets, ml…"
+                            id="encounter-inline-pharm-qty"
+                            v-model="pharmacyForm.quantityPrescribed"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
                         />
+                        <p v-if="fieldError('quantityPrescribed')" class="text-xs text-destructive">{{ fieldError('quantityPrescribed') }}</p>
                     </div>
                 </div>
                 <div class="grid gap-2">

@@ -22,11 +22,15 @@ import {
     encounterInlineOrderModeLabel,
     fetchApprovedMedicinesCatalog,
     fetchPatientMedicationSafetySummary,
+    fetchPharmacyMedicationAvailability,
+    prescribedUnitOptions as getPrescribedUnitOptions,
     type ClinicalCatalogItem,
     type EncounterInlineOrderLinkageContext,
+    type MedicationAvailability,
     type MedicationSafetyContinuationDecision,
     type PatientMedicationSafetySummary,
 } from '@/lib/encounterInlineOrders';
+import { calculateDispenseQuantity, generateDosageInstruction } from '@/lib/dosageCalculator';
 import { messageFromUnknown, notifyError } from '@/lib/notify';
 
 /**
@@ -148,9 +152,13 @@ const submitLoading = ref(false);
 const fieldErrors = ref<Record<string, string[]>>({});
 const formError = ref<string | null>(null);
 
+const medicationAvailability = ref<MedicationAvailability | null>(null);
+
 const form = reactive({
     catalogItemId: '',
     dosageInstruction: '',
+    doseQuantity: '',
+    doseUnit: '',
     route: '',
     frequency: '',
     durationValue: '',
@@ -176,6 +184,21 @@ const catalogOptions = computed(() =>
 const safetyMedicationCode = computed(() => selectedCatalogItem.value?.code?.trim() ?? '');
 const safetyMedicationName = computed(() => selectedCatalogItem.value?.name?.trim() ?? '');
 
+const prescribedUnitOptions = computed(() => getPrescribedUnitOptions(selectedCatalogItem.value));
+
+const inferredStrength = computed(() => {
+    const item = selectedCatalogItem.value;
+    if (!item?.strength) return null;
+    const s = item.strength.match(/^([\d.]+)\s*([a-zA-Z°%]+)(?:\s*\/\s*([\d.]+)\s*([a-zA-Z°%]+))?$/);
+    if (!s) return null;
+    return {
+        numeratorValue: Number(s[1]),
+        numeratorUnit: s[2],
+        denominatorValue: s[3] ? Number(s[3]) : 1,
+        denominatorUnit: s[4] ?? null,
+    };
+});
+
 function fieldError(field: string): string | null {
     return fieldErrors.value[field]?.[0] ?? null;
 }
@@ -184,6 +207,8 @@ function resetForm(): void {
     patientId.value = '';
     form.catalogItemId = '';
     form.dosageInstruction = '';
+    form.doseQuantity = '';
+    form.doseUnit = '';
     form.route = '';
     form.frequency = '';
     form.durationValue = '';
@@ -192,6 +217,7 @@ function resetForm(): void {
     form.clinicalIndication = '';
     form.quantityPrescribed = '1';
     form.dispensingNotes = '';
+    medicationAvailability.value = null;
     fieldErrors.value = {};
     formError.value = null;
     catalogError.value = null;
@@ -220,6 +246,54 @@ watch(open, (isOpen) => {
     void loadCatalog();
 });
 
+watch([() => form.doseQuantity, () => form.doseUnit, () => form.route, () => form.frequency, () => form.durationValue, () => form.durationUnit], () => {
+    const strength = inferredStrength.value;
+    const doseQty = form.doseQuantity ? Number(form.doseQuantity) : null;
+    const doseUnit = form.doseUnit?.trim();
+    const route = form.route?.trim();
+    const frequency = form.frequency?.trim();
+    const durVal = form.durationValue ? Number(form.durationValue) : null;
+    const durUnit = form.durationUnit?.trim();
+
+    if (strength && doseQty && doseQty > 0 && doseUnit) {
+        const dispense = calculateDispenseQuantity(
+            { value: doseQty, unit: doseUnit },
+            strength,
+        );
+        if (dispense.quantity > 0) {
+            form.quantityPrescribed = String(dispense.quantity);
+        }
+
+        const instruction = generateDosageInstruction(
+            { value: doseQty, unit: doseUnit },
+            route,
+            frequency,
+            durVal && durUnit ? { value: durVal, unit: durUnit } : null,
+        );
+        form.dosageInstruction = instruction;
+    }
+});
+
+watch(() => form.catalogItemId, async () => {
+    const item = selectedCatalogItem.value;
+    if (!item) return;
+
+    const route = item.route?.trim();
+    if (route && !form.route) form.route = route;
+
+    const doseUnit = inferredStrength.value?.numeratorUnit;
+    if (doseUnit && !form.doseUnit) form.doseUnit = doseUnit;
+
+    const catalogUnit = item.unit?.trim();
+    if (catalogUnit && !form.prescribedUnit) form.prescribedUnit = catalogUnit;
+
+    medicationAvailability.value = null;
+    const availability = await fetchPharmacyMedicationAvailability(item.id);
+    if (availability && selectedCatalogItem.value?.id === item.id) {
+        medicationAvailability.value = availability;
+    }
+});
+
 const canSubmit = computed(
     () => patientId.value.trim() !== '' && form.catalogItemId.trim() !== '' && !submitLoading.value,
 );
@@ -240,6 +314,8 @@ async function resolveSafetyDecision(payload: {
         dosageInstruction: payload.dosageInstruction,
         clinicalIndication: payload.clinicalIndication,
         quantityPrescribed: payload.quantityPrescribed,
+        frequency: form.frequency?.trim() || null,
+        doseQuantity: form.doseQuantity ? Number(form.doseQuantity) : null,
     });
 
     if (!summary) {
@@ -305,6 +381,8 @@ async function submit(): Promise<void> {
             medicationCode: item.code?.trim() ?? '',
             medicationName: item.name?.trim() ?? '',
             dosageInstruction: form.dosageInstruction.trim(),
+            doseQuantity: form.doseQuantity ? Number(form.doseQuantity) : null,
+            doseUnit: form.doseUnit.trim() || undefined,
             route: form.route.trim() || undefined,
             frequency: form.frequency.trim() || undefined,
             durationValue: form.durationValue ? Number(form.durationValue) : null,
@@ -413,17 +491,44 @@ async function submit(): Promise<void> {
                         required
                     />
 
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="grid gap-2">
-                            <Label for="pharmacy-order-create-dose">Dosage instruction</Label>
-                            <Input id="pharmacy-order-create-dose" v-model="form.dosageInstruction" placeholder="1 tablet orally twice daily" />
-                            <p v-if="fieldError('dosageInstruction')" class="text-xs text-destructive">{{ fieldError('dosageInstruction') }}</p>
+                    <div v-if="selectedCatalogItem" class="space-y-1.5">
+                        <div class="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                            <span class="font-medium text-foreground">{{ selectedCatalogItem.name }}</span>
+                            <span v-if="selectedCatalogItem.strength"> — {{ selectedCatalogItem.strength }}</span>
+                            <br>
+                            <span v-if="selectedCatalogItem.dosageForm">Form: {{ selectedCatalogItem.dosageForm }}</span>
+                            <span v-if="selectedCatalogItem.route"> | Route: {{ selectedCatalogItem.route }}</span>
+                            <span v-if="selectedCatalogItem.unit"> | Unit: {{ selectedCatalogItem.unit }}</span>
                         </div>
 
+                        <div
+                            v-if="medicationAvailability"
+                            class="flex items-center gap-2 rounded-md border px-3 py-2 text-xs"
+                            :class="medicationAvailability.stockState === 'out_of_stock' ? 'border-destructive/30 bg-destructive/5 text-destructive' : medicationAvailability.stockState === 'low_stock' ? 'border-warning/30 bg-warning/5 text-warning-foreground' : 'border-primary/20 bg-primary/5 text-primary'"
+                        >
+                            <AppIcon
+                                :name="medicationAvailability.stockState === 'out_of_stock' ? 'circle-alert' : medicationAvailability.stockState === 'low_stock' ? 'alert-triangle' : 'check-circle'"
+                                class="size-3.5 shrink-0"
+                            />
+                            <span>
+                                <strong>{{ medicationAvailability.availableStock ?? medicationAvailability.currentStock ?? 0 }}</strong>
+                                in stock
+                                <span v-if="medicationAvailability.stockState === 'out_of_stock'" class="font-semibold"> — Out of stock</span>
+                                <span v-else-if="medicationAvailability.stockState === 'low_stock'" class="font-semibold"> — Low stock</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
                         <div class="grid gap-2">
-                            <Label for="pharmacy-order-create-qty">Quantity prescribed</Label>
-                            <Input id="pharmacy-order-create-qty" v-model="form.quantityPrescribed" type="number" min="1" step="1" />
-                            <p v-if="fieldError('quantityPrescribed')" class="text-xs text-destructive">{{ fieldError('quantityPrescribed') }}</p>
+                            <Label for="pharmacy-order-create-dose-qty">Dose quantity</Label>
+                            <Input id="pharmacy-order-create-dose-qty" v-model="form.doseQuantity" type="number" min="0" step="0.01" placeholder="e.g. 100" />
+                            <p v-if="fieldError('doseQuantity')" class="text-xs text-destructive">{{ fieldError('doseQuantity') }}</p>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-dose-unit">Dose unit</Label>
+                            <Input id="pharmacy-order-create-dose-unit" v-model="form.doseUnit" placeholder="mg, mcg, ml…" />
+                            <p v-if="fieldError('doseUnit')" class="text-xs text-destructive">{{ fieldError('doseUnit') }}</p>
                         </div>
                     </div>
 
@@ -434,11 +539,11 @@ async function submit(): Promise<void> {
                         </div>
                         <div class="grid gap-2">
                             <Label for="pharmacy-order-create-freq">Frequency</Label>
-                            <Input id="pharmacy-order-create-freq" v-model="form.frequency" placeholder="Twice daily, PRN…" />
+                            <Input id="pharmacy-order-create-freq" v-model="form.frequency" placeholder="e.g. bid, tid, q8h, prn, twice daily" />
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-2 gap-3">
                         <div class="grid gap-2">
                             <Label for="pharmacy-order-create-dur-val">Duration value</Label>
                             <Input id="pharmacy-order-create-dur-val" v-model="form.durationValue" type="number" min="0" step="0.01" placeholder="7" />
@@ -447,9 +552,31 @@ async function submit(): Promise<void> {
                             <Label for="pharmacy-order-create-dur-unit">Duration unit</Label>
                             <Input id="pharmacy-order-create-dur-unit" v-model="form.durationUnit" placeholder="days, weeks…" />
                         </div>
+                    </div>
+
+                    <div class="grid gap-2">
+                        <Label for="pharmacy-order-create-dose-instruction">Dosage instruction</Label>
+                        <Input id="pharmacy-order-create-dose-instruction" v-model="form.dosageInstruction" placeholder="Auto-filled: e.g. 500 mg Oral q8h × 7 days" />
+                        <p class="text-xs text-muted-foreground">Auto-generated from fields above — edit if needed</p>
+                        <p v-if="fieldError('dosageInstruction')" class="text-xs text-destructive">{{ fieldError('dosageInstruction') }}</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
                         <div class="grid gap-2">
                             <Label for="pharmacy-order-create-unit">Prescribed unit</Label>
-                            <Input id="pharmacy-order-create-unit" v-model="form.prescribedUnit" placeholder="tablets, ml…" />
+                            <Select v-model="form.prescribedUnit">
+                                <SelectTrigger id="pharmacy-order-create-unit" class="w-full">
+                                    <SelectValue placeholder="Select unit" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem v-for="u in prescribedUnitOptions" :key="u" :value="u">{{ u }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-qty">Quantity prescribed</Label>
+                            <Input id="pharmacy-order-create-qty" v-model="form.quantityPrescribed" type="number" min="0.01" step="0.01" />
+                            <p v-if="fieldError('quantityPrescribed')" class="text-xs text-destructive">{{ fieldError('quantityPrescribed') }}</p>
                         </div>
                     </div>
 

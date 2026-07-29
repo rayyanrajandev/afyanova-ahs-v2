@@ -98,11 +98,13 @@ class PharmacyOrderController extends Controller
         $payload = $request->validate([
             'medicationCode' => ['nullable', 'string', 'max:255'],
             'medicationName' => ['nullable', 'string', 'max:255'],
+            'catalogItemId' => ['nullable', 'uuid'],
         ]);
 
         $item = $useCase->execute(
             $payload['medicationCode'] ?? null,
             $payload['medicationName'] ?? null,
+            $payload['catalogItemId'] ?? null,
         );
 
         return response()->json([

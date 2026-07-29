@@ -20,6 +20,14 @@ export type ClinicalCatalogItem = {
     id: string;
     code: string | null;
     name: string | null;
+    genericName: string | null;
+    dosageForm: string | null;
+    strength: string | null;
+    strengthNumeratorValue: number | null;
+    strengthNumeratorUnit: string | null;
+    strengthDenominatorValue: number | null;
+    strengthDenominatorUnit: string | null;
+    route: string | null;
     category: string | null;
     unit: string | null;
     description: string | null;
@@ -124,9 +132,52 @@ export function labTestCatalogSpecimenType(
 export function catalogItemLabel(item: ClinicalCatalogItem): string {
     const code = item.code?.trim();
     const name = item.name?.trim();
+    const strength = item.strength?.trim();
 
-    if (code && name) return `${code} — ${name}`;
-    return name || code || 'Unnamed catalog item';
+    let label = '';
+    if (code && name) label = `${code} — ${name}`;
+    else label = name || code || 'Unnamed catalog item';
+    if (strength) label += ` (${strength})`;
+    return label;
+}
+
+export function catalogItemStrengthLabel(item: ClinicalCatalogItem): string {
+    const parts: string[] = [];
+    if (item.strength) parts.push(item.strength);
+    if (item.dosageForm) parts.push(item.dosageForm);
+    if (item.route) parts.push(item.route);
+    if (item.unit) parts.push(item.unit);
+    return parts.join(' — ') || '';
+}
+
+export function prescribedUnitOptions(item: ClinicalCatalogItem | null): string[] {
+    const catalogUnit = item?.unit?.trim().toLowerCase();
+    const form = item?.dosageForm?.trim().toLowerCase() ?? '';
+    const options = new Set<string>();
+
+    if (catalogUnit) options.add(catalogUnit);
+
+    if (form.includes('tablet') || form.includes('tab')) {
+        for (const u of ['tablet', 'mg', 'mcg']) options.add(u);
+    } else if (form.includes('capsule') || form.includes('cap')) {
+        for (const u of ['capsule', 'mg']) options.add(u);
+    } else if (form.includes('ampoule') || form.includes('injection') || form.includes('vial')) {
+        for (const u of ['ml', 'mg', 'ampoule', 'vial']) options.add(u);
+    } else if (form.includes('cream') || form.includes('ointment') || form.includes('gel')) {
+        for (const u of ['g', 'mg', 'tube']) options.add(u);
+    } else if (form.includes('syrup') || form.includes('suspension') || form.includes('oral solution') || form.includes('drops') || form.includes('elixir')) {
+        for (const u of ['ml', 'mg']) options.add(u);
+    } else if (form.includes('patch') || form.includes('transdermal')) {
+        for (const u of ['patch', 'mg']) options.add(u);
+    } else if (form.includes('suppository') || form.includes('pessary')) {
+        for (const u of ['suppository', 'mg']) options.add(u);
+    } else if (form.includes('spray') || form.includes('inhaler') || form.includes('aerosol')) {
+        for (const u of ['puff', 'actuation', 'spray']) options.add(u);
+    } else {
+        for (const u of ['ml', 'mg', 'tablet', 'capsule']) options.add(u);
+    }
+
+    return Array.from(options);
 }
 
 export async function fetchLabTestCatalog(): Promise<ClinicalCatalogItem[]> {
@@ -217,6 +268,8 @@ export type PharmacyInlineOrderInput = {
     medicationCode: string;
     medicationName: string;
     dosageInstruction: string;
+    doseQuantity?: number | null;
+    doseUnit?: string | null;
     route?: string;
     frequency?: string;
     durationValue?: number | null;
@@ -255,6 +308,8 @@ export async function fetchPatientMedicationSafetySummary(input: {
     dosageInstruction?: string | null;
     clinicalIndication?: string | null;
     quantityPrescribed?: string | number | null;
+    frequency?: string | null;
+    doseQuantity?: string | number | null;
 }): Promise<PatientMedicationSafetySummary | null> {
     const patientId = input.patientId.trim();
     if (!patientId) {
@@ -277,6 +332,12 @@ export async function fetchPatientMedicationSafetySummary(input: {
                 input.quantityPrescribed === undefined
                     ? null
                     : Number(input.quantityPrescribed),
+            frequency: input.frequency?.trim() || null,
+            doseQuantity:
+                input.doseQuantity === null ||
+                input.doseQuantity === undefined
+                    ? null
+                    : Number(input.doseQuantity),
         },
     );
 
@@ -456,6 +517,8 @@ export async function createPharmacyInlineOrder(
             medicationCode: item.medicationCode.trim(),
             medicationName: item.medicationName.trim(),
             dosageInstruction: item.dosageInstruction.trim(),
+            doseQuantity: item.doseQuantity ?? null,
+            doseUnit: item.doseUnit?.trim() || null,
             route: item.route?.trim() || null,
             frequency: item.frequency?.trim() || null,
             durationValue: item.durationValue ?? null,
@@ -542,6 +605,30 @@ export function encounterInlineOrderTypeLabel(
             return 'Imaging order';
         case 'clinical_procedure':
             return 'Clinical procedure';
+    }
+}
+
+export type MedicationAvailability = {
+    currentStock: number | null;
+    onHandStock: number | null;
+    availableStock: number | null;
+    stockState: string | null;
+    batchTrackingMode: string | null;
+    blockedBatchQuantity: number | null;
+};
+
+export async function fetchPharmacyMedicationAvailability(
+    catalogItemId: string,
+): Promise<MedicationAvailability | null> {
+    const { apiGet } = await import('@/lib/apiClient');
+    try {
+        const response = await apiGet<{ data: MedicationAvailability | null }>(
+            '/pharmacy-orders/availability',
+            { catalogItemId },
+        );
+        return response.data ?? null;
+    } catch {
+        return null;
     }
 }
 

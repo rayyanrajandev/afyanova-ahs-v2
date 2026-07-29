@@ -161,6 +161,8 @@ class PatientMedicationSafetyController extends Controller
             'appointment_id' => $request->query('appointmentId'),
             'admission_id' => $request->query('admissionId'),
             'exclude_order_id' => $request->query('excludeOrderId'),
+            'frequency' => $request->query('frequency'),
+            'dose_quantity' => $request->query('doseQuantity'),
         ]);
         abort_if($summary === null, 404, 'Patient not found.');
 

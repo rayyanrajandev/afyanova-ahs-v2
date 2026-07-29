@@ -16,7 +16,7 @@ export function usePharmacyOrderFilters() {
     return reactive({
         q: '',
         patientId: '',
-        status: '' as string,
+        status: 'pending' as string,
         worklistScope: '' as '' | 'open',
         from: '',
         to: '',

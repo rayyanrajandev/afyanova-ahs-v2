@@ -298,6 +298,14 @@ Route::get('pharmacy-orders/legacy', function () {
     return Inertia::render('pharmacy-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page.legacy');
 
+Route::get('pharmacy-orders/{id}/print', [App\Modules\Pharmacy\Presentation\Http\Controllers\PharmacyPrescriptionDocumentController::class, 'show'])
+    ->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])
+    ->name('pharmacy-orders.print.page');
+
+Route::get('pharmacy-orders/print-batch', [App\Modules\Pharmacy\Presentation\Http\Controllers\PharmacyPrescriptionDocumentController::class, 'showBatch'])
+    ->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])
+    ->name('pharmacy-orders.print.batch');
+
 Route::get('walk-in-service-requests', function () {
     return Inertia::render('walk-in-service-requests/Index');
 })->middleware(['auth', 'verified', 'can:service.requests.read', 'facility.entitlement:clinical.walk_in_queue'])->name('walk-in-service-requests.page');

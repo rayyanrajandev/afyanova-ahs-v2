@@ -15,9 +15,15 @@ class GetPharmacyMedicationAvailabilityUseCase
     /**
      * @return array<string, mixed>|null
      */
-    public function execute(?string $medicationCode, ?string $medicationName): ?array
+    public function execute(?string $medicationCode, ?string $medicationName, ?string $catalogItemId = null): ?array
     {
-        $item = $this->inventoryItemRepository->findBestActiveMatchByCodeOrName($medicationCode, $medicationName);
+        if ($catalogItemId !== null) {
+            $linked = $this->inventoryItemRepository->listLinkedByClinicalCatalogIds([$catalogItemId]);
+            $item = ! empty($linked) ? $linked[0] : null;
+        } else {
+            $item = $this->inventoryItemRepository->findBestActiveMatchByCodeOrName($medicationCode, $medicationName);
+        }
+
         if ($item === null) {
             return null;
         }

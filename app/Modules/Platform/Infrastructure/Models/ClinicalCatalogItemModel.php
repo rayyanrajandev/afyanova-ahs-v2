@@ -64,4 +64,40 @@ class ClinicalCatalogItemModel extends Model
     {
         return $this->hasMany(ClinicalCatalogItemPackagingTemplateModel::class, 'clinical_catalog_item_id');
     }
+
+    /**
+     * @return array{numeratorValue: int|float, numeratorUnit: string|null, denominatorValue: int|float, denominatorUnit: string|null}|null
+     */
+    public function parsedStrength(): ?array
+    {
+        $strength = $this->strength;
+        if ($strength === null || $strength === '') {
+            return null;
+        }
+
+        $strength = trim($strength);
+
+        // Match patterns: "100 mg/2 ml", "500 mg", "250 mg/5 ml", "10 mg/1.5 ml"
+        if (preg_match('/^([\d.]+)\s*([a-zA-Z°%]+)(?:\s*\/\s*([\d.]+)\s*([a-zA-Z°%]+))?$/', $strength, $m)) {
+            $numValue = is_numeric($m[1]) ? (str_contains($m[1], '.') ? (float) $m[1] : (int) $m[1]) : 0;
+            $numUnit = $m[2] !== '' ? $m[2] : null;
+
+            if (isset($m[3], $m[4]) && $m[3] !== '' && $m[4] !== '') {
+                $denValue = is_numeric($m[3]) ? (str_contains($m[3], '.') ? (float) $m[3] : (int) $m[3]) : 1;
+                $denUnit = $m[4] !== '' ? $m[4] : null;
+            } else {
+                $denValue = 1;
+                $denUnit = null;
+            }
+
+            return [
+                'numeratorValue' => $numValue,
+                'numeratorUnit' => $numUnit,
+                'denominatorValue' => $denValue,
+                'denominatorUnit' => $denUnit,
+            ];
+        }
+
+        return null;
+    }
 }

@@ -10,6 +10,8 @@ class ClinicalCatalogItemResponseTransformer
             ? $item['metadata']
             : null;
 
+        $strengthParsed = self::parseStrengthString($item['strength'] ?? null);
+
         return [
             'id' => $item['id'] ?? null,
             'tenantId' => $item['tenant_id'] ?? null,
@@ -21,6 +23,10 @@ class ClinicalCatalogItemResponseTransformer
             'genericName' => $item['generic_name'] ?? null,
             'dosageForm' => $item['dosage_form'] ?? null,
             'strength' => $item['strength'] ?? null,
+            'strengthNumeratorValue' => $strengthParsed['numeratorValue'] ?? null,
+            'strengthNumeratorUnit' => $strengthParsed['numeratorUnit'] ?? null,
+            'strengthDenominatorValue' => $strengthParsed['denominatorValue'] ?? null,
+            'strengthDenominatorUnit' => $strengthParsed['denominatorUnit'] ?? null,
             'route' => $item['route'] ?? null,
             'storageConditions' => $item['storage_conditions'] ?? null,
             'requiresColdChain' => (bool) ($item['requires_cold_chain'] ?? false),
@@ -118,5 +124,39 @@ class ClinicalCatalogItemResponseTransformer
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    /**
+     * @return array{numeratorValue: int|float, numeratorUnit: string|null, denominatorValue: int|float, denominatorUnit: string|null}|null
+     */
+    private static function parseStrengthString(?string $strength): ?array
+    {
+        if ($strength === null || $strength === '') {
+            return null;
+        }
+
+        $strength = trim($strength);
+
+        if (preg_match('/^([\d.]+)\s*([a-zA-Z°%]+)(?:\s*\/\s*([\d.]+)\s*([a-zA-Z°%]+))?$/', $strength, $m)) {
+            $numValue = is_numeric($m[1]) ? (str_contains($m[1], '.') ? (float) $m[1] : (int) $m[1]) : 0;
+            $numUnit = $m[2] !== '' ? $m[2] : null;
+
+            if (isset($m[3], $m[4]) && $m[3] !== '' && $m[4] !== '') {
+                $denValue = is_numeric($m[3]) ? (str_contains($m[3], '.') ? (float) $m[3] : (int) $m[3]) : 1;
+                $denUnit = $m[4] !== '' ? $m[4] : null;
+            } else {
+                $denValue = 1;
+                $denUnit = null;
+            }
+
+            return [
+                'numeratorValue' => $numValue,
+                'numeratorUnit' => $numUnit,
+                'denominatorValue' => $denValue,
+                'denominatorUnit' => $denUnit,
+            ];
+        }
+
+        return null;
     }
 }

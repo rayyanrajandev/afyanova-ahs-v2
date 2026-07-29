@@ -74,6 +74,7 @@ class CreatePharmacyOrderUseCase
         }
 
         $selectedCatalogItem = $this->applyCatalogManagedApprovedMedicineSelection($payload);
+        $this->validateStructuredDoseFields($payload, $selectedCatalogItem);
         foreach (ApprovedMedicineGovernance::draftPolicyDefaults($selectedCatalogItem) as $field => $value) {
             $payload[$field] = $value;
         }
@@ -378,6 +379,120 @@ class CreatePharmacyOrderUseCase
         if (array_key_exists('duration_value', $payload) && $payload['duration_value'] !== null && $payload['duration_value'] !== '') {
             $payload['duration_value'] = round((float) $payload['duration_value'], 2);
         }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $catalogItem
+     */
+    private function validateStructuredDoseFields(array $payload, array $catalogItem): void
+    {
+        $strength = isset($catalogItem['strength']) ? trim((string) $catalogItem['strength']) : '';
+        if ($strength === '') {
+            return;
+        }
+
+        $errors = [];
+
+        $hasDoseQuantity = array_key_exists('dose_quantity', $payload)
+            && $payload['dose_quantity'] !== null
+            && $payload['dose_quantity'] !== '';
+        $hasDoseUnit = array_key_exists('dose_unit', $payload)
+            && isset($payload['dose_unit'])
+            && $payload['dose_unit'] !== null
+            && $payload['dose_unit'] !== '';
+
+        if (! $hasDoseQuantity) {
+            $errors['doseQuantity'][] = 'Dose quantity is required when the catalog item has a defined strength.';
+        }
+
+        if (! $hasDoseUnit) {
+            $errors['doseUnit'][] = 'Dose unit is required when the catalog item has a defined strength.';
+        }
+
+        if (! empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        if (! $hasDoseQuantity || ! $hasDoseUnit) {
+            return;
+        }
+
+        $parsedStrength = $this->parseStrengthString($strength);
+        if ($parsedStrength === null) {
+            return;
+        }
+
+        $doseUnit = mb_strtolower(trim((string) $payload['dose_unit']));
+
+        $numeratorUnit = $parsedStrength['numeratorUnit'] !== null
+            ? mb_strtolower($parsedStrength['numeratorUnit'])
+            : null;
+        $denominatorUnit = $parsedStrength['denominatorUnit'] !== null
+            ? mb_strtolower($parsedStrength['denominatorUnit'])
+            : null;
+
+        $compatible = ($numeratorUnit !== null && $doseUnit === $numeratorUnit)
+            || ($denominatorUnit !== null && $doseUnit === $denominatorUnit);
+
+        if (! $compatible) {
+            $compatibleUnits = array_values(array_filter([
+                $numeratorUnit,
+                $denominatorUnit,
+            ]));
+            $compatibleList = ! empty($compatibleUnits) ? implode(', ', $compatibleUnits) : $strength;
+            throw ValidationException::withMessages([
+                'doseUnit' => [
+                    "Dose unit \"{$doseUnit}\" is not compatible with the catalog item's strength ({$strength}). Expected: {$compatibleList}.",
+                ],
+            ]);
+        }
+
+        $doseQuantity = (float) $payload['dose_quantity'];
+        $expectedQuantity = ($doseQuantity / $parsedStrength['numeratorValue']) * $parsedStrength['denominatorValue'];
+        $expectedQuantity = round($expectedQuantity, 4);
+
+        $prescribedQuantity = isset($payload['quantity_prescribed'])
+            ? (float) $payload['quantity_prescribed']
+            : 0;
+
+        if ($prescribedQuantity > 0 && abs($prescribedQuantity - $expectedQuantity) > 0.01) {
+            $expectedUnit = $parsedStrength['denominatorUnit'] ?? $parsedStrength['numeratorUnit'] ?? '';
+            throw ValidationException::withMessages([
+                'quantityPrescribed' => [
+                    "Quantity prescribed ({$prescribedQuantity}) does not match the calculated dispense quantity ({$expectedQuantity} {$expectedUnit}) for the given dose ({$doseQuantity} {$doseUnit}) and strength ({$strength}).",
+                ],
+            ]);
+        }
+    }
+
+    /**
+     * @return array{numeratorValue: int|float, numeratorUnit: string|null, denominatorValue: int|float, denominatorUnit: string|null}|null
+     */
+    private function parseStrengthString(string $strength): ?array
+    {
+        $strength = trim($strength);
+        if (preg_match('/^([\d.]+)\s*([a-zA-Z°%]+)(?:\s*\/\s*([\d.]+)\s*([a-zA-Z°%]+))?$/', $strength, $m)) {
+            $numValue = is_numeric($m[1]) ? (str_contains($m[1], '.') ? (float) $m[1] : (int) $m[1]) : 0;
+            $numUnit = $m[2] !== '' ? $m[2] : null;
+
+            if (isset($m[3], $m[4]) && $m[3] !== '' && $m[4] !== '') {
+                $denValue = is_numeric($m[3]) ? (str_contains($m[3], '.') ? (float) $m[3] : (int) $m[3]) : 1;
+                $denUnit = $m[4] !== '' ? $m[4] : null;
+            } else {
+                $denValue = 1;
+                $denUnit = null;
+            }
+
+            return [
+                'numeratorValue' => $numValue,
+                'numeratorUnit' => $numUnit,
+                'denominatorValue' => $denValue,
+                'denominatorUnit' => $denUnit,
+            ];
+        }
+
+        return null;
     }
 
     private function normalizeUnit(mixed $value): ?string
