@@ -12,7 +12,7 @@ export function useLaboratoryOrderFilters() {
     return reactive({
         q: '',
         patientId: '',
-        status: '' as string,
+        status: 'ordered' as string,
         priority: '' as '' | 'routine' | 'urgent' | 'stat',
         worklistScope: '' as '' | 'open',
         from: '',

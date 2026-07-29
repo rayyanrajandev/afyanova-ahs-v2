@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -101,12 +102,27 @@ function resetFilters(): void {
     filters.from = '';
     filters.to = '';
     filters.page = 1;
+    showMyEncountersOnly.value = false;
 }
 
 function goToPage(page: number): void {
     const last = encounters.data.value?.meta.lastPage ?? 1;
     filters.page = Math.max(1, Math.min(page, last));
 }
+
+const page = usePage();
+const currentUserId = computed<number | null>(() => {
+    const raw = page.props.auth?.user?.id;
+    const normalized = Number(raw ?? 0);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+});
+
+const showMyEncountersOnly = ref(false);
+
+watch(showMyEncountersOnly, (val) => {
+    filters.primaryClinicianUserId = val && currentUserId.value ? String(currentUserId.value) : '';
+    filters.page = 1;
+});
 </script>
 
 <template>
@@ -193,6 +209,10 @@ function goToPage(page: number): void {
                     <Input v-model="filters.from" type="date" class="h-9 w-40" />
                     <span class="text-xs text-muted-foreground self-center">to</span>
                     <Input v-model="filters.to" type="date" class="h-9 w-40" />
+                    <label class="flex items-center gap-1.5 self-center text-sm cursor-pointer select-none">
+                        <Checkbox v-model="showMyEncountersOnly" />
+                        <span class="text-muted-foreground">My encounters only</span>
+                    </label>
                 </div>
             </div>
 

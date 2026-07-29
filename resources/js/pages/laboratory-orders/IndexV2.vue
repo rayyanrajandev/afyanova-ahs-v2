@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import PatientQuickSearchField from '@/components/patients/PatientQuickSearchField.vue';
 import { type PatientQuickSearchResult } from '@/composables/patients/usePatientQuickSearch';
@@ -107,11 +108,11 @@ const { patientOrderGroups, useGroupedQueueView, isPatientGroupExpanded, setPati
 );
 
 const statusOptions: Array<{ value: LaboratoryOrderStatus | 'all'; label: string }> = [
-    { value: 'all', label: 'All' },
     { value: 'ordered', label: 'Ordered' },
     { value: 'collected', label: 'Collected' },
     { value: 'in_progress', label: 'In progress' },
     { value: 'completed', label: 'Completed' },
+    { value: 'all', label: 'All' },
     { value: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -164,7 +165,7 @@ function resetFilters(): void {
     filters.q = '';
     filters.patientId = '';
     patientSearchQuery.value = '';
-    filters.status = '';
+    filters.status = 'ordered';
     filters.priority = '';
     filters.from = '';
     filters.to = '';
@@ -606,16 +607,23 @@ function openAuditSheet(order: LaboratoryOrder): void {
                                             >
                                                 Cancel
                                             </Button>
-                                            <Button
-                                                v-if="canViewAuditLogs"
-                                                size="sm"
-                                                variant="ghost"
-                                                class="h-7 px-1.5"
-                                                aria-label="View audit log"
-                                                @click="openAuditSheet(order)"
-                                            >
-                                                <AppIcon name="clock" class="size-3.5" />
-                                            </Button>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger as-child>
+                                                        <Button
+                                                            v-if="canViewAuditLogs"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            class="h-7 px-1.5"
+                                                            aria-label="View audit log"
+                                                            @click="openAuditSheet(order)"
+                                                        >
+                                                            <AppIcon name="clock" class="size-3.5" />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>View audit log</TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         </div>
                                     </div>
                                 </div>

@@ -246,7 +246,7 @@ function formatAvgWait(minutes: number | null): string {
     return remainder > 0 ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 
-const activeTab = ref<'all' | 'waiting' | 'on_hold' | 'in_progress'>('all');
+const activeTab = ref<'all' | 'waiting' | 'on_hold' | 'in_progress'>('waiting');
 
 const filteredEntries = computed<ReceptionQueueEntry[]>(() => {
     if (activeTab.value === 'waiting') {
@@ -453,33 +453,31 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </div>
                 </div>
 
-                <div v-if="canRead" class="mt-3">
-                    <div class="w-fit rounded-md border bg-muted/50 px-2.5 py-1.5">
+                    <div v-if="canRead" class="w-fit rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Avg wait time</p>
                         <p class="text-sm font-bold tabular-nums">{{ formatAvgWait(avgWaitMinutes) }}</p>
                     </div>
-                </div>
 
-                <Tabs v-if="canRead" v-model="activeTab" class="mt-3">
-                    <TabsList class="grid w-full grid-cols-4">
-                        <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
-                            All
-                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ totalInQueue }}</Badge>
-                        </TabsTrigger>
-                        <TabsTrigger value="waiting" class="inline-flex items-center gap-1.5">
-                            Waiting
-                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.waiting ?? '—' }}</Badge>
-                        </TabsTrigger>
-                        <TabsTrigger value="on_hold" class="inline-flex items-center gap-1.5">
-                            On hold
-                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.onHold ?? '—' }}</Badge>
-                        </TabsTrigger>
-                        <TabsTrigger value="in_progress" class="inline-flex items-center gap-1.5">
-                            In progress
-                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.inProgress ?? '—' }}</Badge>
-                        </TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                    <Tabs v-if="canRead" v-model="activeTab" class="mt-3">
+                        <TabsList class="grid w-full grid-cols-4">
+                            <TabsTrigger value="waiting" class="inline-flex items-center gap-1.5">
+                                Waiting
+                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.waiting ?? '—' }}</Badge>
+                            </TabsTrigger>
+                            <TabsTrigger value="on_hold" class="inline-flex items-center gap-1.5">
+                                On hold
+                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.onHold ?? '—' }}</Badge>
+                            </TabsTrigger>
+                            <TabsTrigger value="in_progress" class="inline-flex items-center gap-1.5">
+                                In progress
+                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusCounts.data.value?.inProgress ?? '—' }}</Badge>
+                            </TabsTrigger>
+                            <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
+                                All
+                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ totalInQueue }}</Badge>
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
