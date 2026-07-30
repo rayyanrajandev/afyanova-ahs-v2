@@ -12,7 +12,35 @@ return new class extends Migration
             $table->string('internal_batch_number', 100)->nullable()->after('id');
         });
 
-        DB::statement('UPDATE inventory_batches SET internal_batch_number = batch_number WHERE internal_batch_number IS NULL');
+        // batch_number is the vendor/lot-supplied value and is only unique
+        // per (item, warehouse) — it regularly collides across items, so it
+        // can't be copied straight into the now-globally-unique
+        // internal_batch_number. internal_batch_number is shown directly to
+        // staff (dispense dialog, stock control, reports), so keep the
+        // familiar batch_number for the first occurrence and only suffix
+        // the rows that actually collide, rather than replacing everything
+        // with an opaque generated code.
+        $used = [];
+        DB::table('inventory_batches')
+            ->whereNull('internal_batch_number')
+            ->orderBy('batch_number')
+            ->orderBy('id')
+            ->select('id', 'batch_number')
+            ->get()
+            ->each(function ($batch) use (&$used): void {
+                $base = substr((string) $batch->batch_number, 0, 100);
+                $candidate = $base;
+                $suffix = 2;
+                while (isset($used[$candidate])) {
+                    $candidate = substr($base, 0, 100 - strlen('-' . $suffix)) . '-' . $suffix;
+                    $suffix++;
+                }
+                $used[$candidate] = true;
+
+                DB::table('inventory_batches')
+                    ->where('id', $batch->id)
+                    ->update(['internal_batch_number' => $candidate]);
+            });
 
         Schema::table('inventory_batches', function (Blueprint $table): void {
             $table->string('internal_batch_number', 100)->nullable(false)->change();
