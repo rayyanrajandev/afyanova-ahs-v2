@@ -58,7 +58,7 @@ function badgeClass(href: string): string | undefined {
 <template>
     <div
         v-if="recentItems.length > 0"
-        class="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 max-w-[calc(100vw-2rem)]"
+        class="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 max-w-[90vw]"
     >
         <div class="flex items-center gap-2 overflow-x-auto">
             <span class="shrink-0 text-xs font-medium text-muted-foreground/60">
