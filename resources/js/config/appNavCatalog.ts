@@ -120,19 +120,6 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Front desk lookup, registration, and duplicate checks',
     },
     {
-        // Patient flow redesign B5: replaces the legacy walk-in service
-        // desk entry — /walk-in-service-requests still renders (now marked
-        // "(Legacy)") but is no longer nav-linked, same "URL-only rollback
-        // path" treatment as /patients/legacy, /appointments/legacy,
-        // /emergency-triage.
-        title: 'Direct Service Queue',
-        href: '/direct-service/queue',
-        iconName: 'layout-list',
-        section: 'front_office',
-        permissionPrefixes: ['service.requests.'],
-        helpNote: 'Per-department direct service tickets — lab, pharmacy, radiology, theatre',
-    },
-    {
         title: 'OPD appointments',
         href: '/appointments',
         iconName: 'calendar-clock',
@@ -210,6 +197,14 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         section: 'clinical_care',
         permissionPrefixes: ['appointments.start-consultation'],
         helpNote: 'Your own patients waiting for review or already in consultation',
+    },
+    {
+        title: 'Nurse Queue',
+        href: '/nurse-queue',
+        iconName: 'clipboard-list',
+        section: 'clinical_care',
+        permissionPrefixes: ['service.requests.'],
+        helpNote: 'Walk-in patients awaiting nurse assessment',
     },
 
     {

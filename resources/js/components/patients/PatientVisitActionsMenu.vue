@@ -16,7 +16,6 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePatientSummary } from '@/composables/patientSummary/usePatientSummary';
 import { type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { notifyError, notifySuccess } from '@/lib/notify';
-import PatientDirectServiceSheet from './PatientDirectServiceSheet.vue';
 
 /**
  * Phase 5 of reports/patients-index-modernization-plan.md — "Visit
@@ -61,12 +60,10 @@ function hasAccess(permission: string): boolean {
     return isFacilitySuperAdmin.value || hasPermission(permission);
 }
 const canStartVisit = computed(() => hasAccess('appointments.create') && hasAccess('appointment.check-in'));
-const canCreateServiceRequest = computed(() => hasAccess('service.requests.create'));
 const canCreateInvoice = computed(() => hasAccess('billing.invoices.create'));
-const canShowMenu = computed(() => canStartVisit.value || canCreateServiceRequest.value || canCreateInvoice.value);
+const canShowMenu = computed(() => canStartVisit.value || canCreateInvoice.value);
 
 const walkIn = useWalkInCheckIn();
-const directServiceDialogOpen = ref(false);
 
 const menuOpen = ref(false);
 const patientId = computed(() => props.patient.id);
@@ -128,11 +125,7 @@ async function startVisit(arrivalMode: WalkInArrivalMode): Promise<void> {
                     Send to emergency
                 </DropdownMenuItem>
             </template>
-            <DropdownMenuSeparator v-if="canStartVisit && canCreateServiceRequest" />
-            <DropdownMenuItem v-if="canCreateServiceRequest" class="cursor-pointer text-sm" @select="directServiceDialogOpen = true">
-                Direct service request…
-            </DropdownMenuItem>
-            <DropdownMenuSeparator v-if="(canStartVisit || canCreateServiceRequest) && canCreateInvoice" />
+            <DropdownMenuSeparator v-if="canStartVisit && canCreateInvoice" />
             <DropdownMenuItem v-if="canCreateInvoice" class="cursor-pointer text-sm" as-child>
                 <Link :href="patientChartModuleHref('/billing', patient.id, null, { includeAppointment: false, includeTabNew: true })">
                     Create invoice
@@ -140,10 +133,4 @@ async function startVisit(arrivalMode: WalkInArrivalMode): Promise<void> {
             </DropdownMenuItem>
         </DropdownMenuContent>
     </DropdownMenu>
-
-    <PatientDirectServiceSheet
-        v-model:open="directServiceDialogOpen"
-        :patient="patient"
-        @created="(requestNumber) => notifySuccess(`Direct service request ${requestNumber ?? ''} created.`)"
-    />
 </template>

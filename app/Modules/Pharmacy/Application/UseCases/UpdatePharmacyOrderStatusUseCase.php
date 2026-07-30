@@ -38,6 +38,7 @@ class UpdatePharmacyOrderStatusUseCase
         ?float $quantityDispensed,
         ?string $dispensedUnit,
         ?string $dispensingNotes,
+        ?string $batchId = null,
         ?int $actorId = null
     ): ?array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
@@ -112,6 +113,7 @@ class UpdatePharmacyOrderStatusUseCase
             $payload,
             $existing,
             $actorId,
+            $batchId,
             $reasonRequired,
             $quantityDispensedInputProvided,
             $dispensingNotesInputProvided,
@@ -128,6 +130,7 @@ class UpdatePharmacyOrderStatusUseCase
                     existing: $existing,
                     updated: $updated,
                     quantityIssued: $stockIssueQuantity,
+                    batchId: $batchId,
                     actorId: $actorId,
                 );
 
@@ -135,6 +138,7 @@ class UpdatePharmacyOrderStatusUseCase
                     order: $updated,
                     quantityConsumed: $stockIssueQuantity,
                     actorId: $actorId,
+                    batchId: $batchId,
                 );
             }
 
@@ -405,6 +409,7 @@ class UpdatePharmacyOrderStatusUseCase
         array $existing,
         array $updated,
         float $quantityIssued,
+        ?string $batchId = null,
         ?int $actorId
     ): void {
         [$dispenseTargetCode, $dispenseTargetName] = $this->resolveDispenseTargetMedication($updated);
@@ -427,35 +432,39 @@ class UpdatePharmacyOrderStatusUseCase
 
         $resolvedDispenseUnit = $this->normalizeUnit($updated['dispensed_unit'] ?? $existing['dispensed_unit'] ?? $existing['prescribed_unit'] ?? null);
 
-        $this->inventoryBatchStockService->issue(
-            payload: [
-                'item_id' => (string) $inventoryItem['id'],
-                'source_warehouse_id' => $inventoryItem['default_warehouse_id'] ?? null,
-                'quantity' => $quantityIssued,
-                'unit' => $resolvedDispenseUnit,
-                'reason' => $movementReason,
-                'notes' => $updated['dispensing_notes'] ?? null,
-                'occurred_at' => $updated['dispensed_at'] ?? now(),
-                'metadata' => [
-                    'source_module' => 'pharmacy',
-                    'source_action' => 'pharmacy-order.status.updated',
-                    'pharmacy_order_id' => $updated['id'] ?? null,
-                    'pharmacy_order_number' => $updated['order_number'] ?? null,
-                    'patient_id' => $updated['patient_id'] ?? null,
-                    'appointment_id' => $updated['appointment_id'] ?? null,
-                    'admission_id' => $updated['admission_id'] ?? null,
-                    'status_from' => $existing['status'] ?? null,
-                    'status_to' => $updated['status'] ?? null,
-                    'quantity_dispensed_before' => $existing['quantity_dispensed'] ?? null,
-                    'quantity_dispensed_after' => $updated['quantity_dispensed'] ?? null,
-                    'dispensed_unit' => $resolvedDispenseUnit,
-                    'dispense_target_code' => $dispenseTargetCode,
-                    'dispense_target_name' => $dispenseTargetName,
-                    'substitution_made' => $this->orderIndicatesSubstitution($updated),
-                ],
+        $payload = [
+            'item_id' => (string) $inventoryItem['id'],
+            'source_warehouse_id' => $inventoryItem['default_warehouse_id'] ?? null,
+            'quantity' => $quantityIssued,
+            'unit' => $resolvedDispenseUnit,
+            'reason' => $movementReason,
+            'notes' => $updated['dispensing_notes'] ?? null,
+            'occurred_at' => $updated['dispensed_at'] ?? now(),
+            'metadata' => [
+                'source_module' => 'pharmacy',
+                'source_action' => 'pharmacy-order.status.updated',
+                'pharmacy_order_id' => $updated['id'] ?? null,
+                'pharmacy_order_number' => $updated['order_number'] ?? null,
+                'patient_id' => $updated['patient_id'] ?? null,
+                'appointment_id' => $updated['appointment_id'] ?? null,
+                'admission_id' => $updated['admission_id'] ?? null,
+                'status_from' => $existing['status'] ?? null,
+                'status_to' => $updated['status'] ?? null,
+                'quantity_dispensed_before' => $existing['quantity_dispensed'] ?? null,
+                'quantity_dispensed_after' => $updated['quantity_dispensed'] ?? null,
+                'dispensed_unit' => $resolvedDispenseUnit,
+                'dispense_target_code' => $dispenseTargetCode,
+                'dispense_target_name' => $dispenseTargetName,
+                'substitution_made' => $this->orderIndicatesSubstitution($updated),
             ],
-            actorId: $actorId,
-        );
+        ];
+
+        if ($batchId !== null) {
+            $payload['batch_id'] = $batchId;
+            $this->inventoryBatchStockService->issueExactBatch($payload, $actorId);
+        } else {
+            $this->inventoryBatchStockService->issue($payload, $actorId);
+        }
     }
 
     /**
@@ -501,6 +510,7 @@ class UpdatePharmacyOrderStatusUseCase
         array $order,
         float $quantityConsumed,
         ?int $actorId,
+        ?string $batchId = null,
     ): void {
         $departmentId = $this->resolveDepartmentId($order);
         if ($departmentId === null) {
@@ -527,7 +537,7 @@ class UpdatePharmacyOrderStatusUseCase
             departmentId: $departmentId,
             itemId: (string) $inventoryItem['id'],
             quantity: $quantityConsumed,
-            batchId: null,
+            batchId: $batchId,
             source: 'pharmacy_dispense',
             sourceId: $order['id'] ?? null,
             actorId: $actorId,

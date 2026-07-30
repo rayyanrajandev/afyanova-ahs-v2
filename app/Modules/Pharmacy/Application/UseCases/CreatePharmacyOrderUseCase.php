@@ -74,7 +74,9 @@ class CreatePharmacyOrderUseCase
         }
 
         $selectedCatalogItem = $this->applyCatalogManagedApprovedMedicineSelection($payload);
-        $this->validateStructuredDoseFields($payload, $selectedCatalogItem);
+        if (!empty($payload['dose_quantity']) && !empty($payload['dose_unit'])) {
+            $this->validateStructuredDoseFields($payload, $selectedCatalogItem);
+        }
         foreach (ApprovedMedicineGovernance::draftPolicyDefaults($selectedCatalogItem) as $field => $value) {
             $payload[$field] = $value;
         }
@@ -109,6 +111,10 @@ class CreatePharmacyOrderUseCase
             $actorId,
         );
         if ($entryState === 'draft') {
+            if (! array_key_exists('dosage_instruction', $payload) || blank($payload['dosage_instruction'])) {
+                $payload['dosage_instruction'] = '';
+            }
+
             $safetyReview = [
                 'severity' => 'none',
                 'blockers' => [],
@@ -160,7 +166,7 @@ class CreatePharmacyOrderUseCase
             ClinicalOrderLifecycle::applyActiveEntryState($payload, $actorId);
         }
 
-        unset($payload['safety_acknowledged'], $payload['safety_override_code'], $payload['safety_override_reason']);
+        unset($payload['safety_acknowledged'], $payload['safety_override_code'], $payload['safety_override_reason'], $payload['entry_mode']);
 
         $createdOrder = $this->pharmacyOrderRepository->create($payload);
 

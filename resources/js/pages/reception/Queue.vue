@@ -16,7 +16,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReceptionQueueList from '@/components/reception/ReceptionQueueList.vue';
 import ScheduledArrivalsList from '@/components/reception/ScheduledArrivalsList.vue';
 import AppointmentCreateSheet from '@/components/appointments/AppointmentCreateSheet.vue';
-import PatientDirectServiceSheet from '@/components/patients/PatientDirectServiceSheet.vue';
 import PatientQuickSearchField from '@/components/patients/PatientQuickSearchField.vue';
 import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
 import { type AppointmentListItem } from '@/composables/appointmentsIndex/useAppointmentList';
@@ -152,7 +151,6 @@ const canReadAppointments = computed(() => hasAccess('appointments.read'));
 // to waiting_triage/waiting_provider in one atomic write, so both
 // permissions are required, not just appointments.create.
 const canStartVisit = computed(() => hasAccess('appointments.create') && hasAccess('appointment.check-in'));
-const canCreateServiceRequest = computed(() => hasAccess('service.requests.create'));
 const canCreateAppointment = computed(() => hasAccess('appointments.create'));
 const canCreatePatients = computed(() => hasAccess('patients.create'));
 const canRecordTriage = computed(() => hasAccess('appointments.record-triage'));
@@ -277,9 +275,9 @@ async function handleCheckIn(appointmentId: string): Promise<void> {
  * file's own docblock for why. 'walk_in'/'emergency' match
  * WalkInArrivalMode's values directly (no translation needed when calling
  * useWalkInCheckIn); 'direct_service'/'schedule' are this page's own
- * labels, since those two don't correspond to an arrival mode at all.
+ * labels, since it doesn't correspond to an arrival mode at all.
  */
-type VisitType = 'walk_in' | 'emergency' | 'direct_service' | 'schedule';
+type VisitType = 'walk_in' | 'emergency' | 'schedule';
 
 type VisitOption = { value: VisitType; label: string; description: string };
 
@@ -294,9 +292,6 @@ const visitOptions = computed<VisitOption[]>(() => {
     if (canStartVisit.value) {
         options.push({ value: 'walk_in', label: 'Walk-in OPD', description: 'Send straight to nurse triage.' });
         options.push({ value: 'emergency', label: 'Emergency', description: 'Send straight to emergency triage.' });
-    }
-    if (canCreateServiceRequest.value) {
-        options.push({ value: 'direct_service', label: 'Direct service', description: 'Lab, pharmacy, radiology, or theatre — no doctor visit.' });
     }
     if (canCreateAppointment.value) {
         options.push({ value: 'schedule', label: 'Book appointment', description: 'Schedule a future visit with a specific doctor.' });
@@ -355,13 +350,7 @@ async function submitWalkIn(): Promise<void> {
     await invalidateReceptionQueueAndCounts();
 }
 
-const directServiceDialogOpen = ref(false);
 const scheduleAppointmentSheetOpen = ref(false);
-
-function onDirectServiceCreated(requestNumber: string | null): void {
-    notifySuccess(`Direct service request ${requestNumber ?? ''} created.`);
-    resetVisitSelection();
-}
 
 async function onAppointmentScheduled(appointment: AppointmentListItem): Promise<void> {
     notifySuccess(`Appointment ${appointment.appointmentNumber ?? ''} scheduled.`);
@@ -499,9 +488,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 @click="submitWalkIn"
                             >
                                 {{ walkIn.isPending.value ? 'Checking in…' : 'Check in' }}
-                            </Button>
-                            <Button v-else-if="selectedPatient && visitType === 'direct_service'" @click="directServiceDialogOpen = true">
-                                Continue
                             </Button>
                             <Button v-else-if="selectedPatient && visitType === 'schedule'" @click="scheduleAppointmentSheetOpen = true">
                                 Continue
@@ -653,12 +639,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
             </div>
             </Tabs>
         </div>
-
-        <PatientDirectServiceSheet
-            v-model:open="directServiceDialogOpen"
-            :patient="selectedPatient"
-            @created="onDirectServiceCreated"
-        />
 
         <AppointmentCreateSheet
             v-model:open="scheduleAppointmentSheetOpen"

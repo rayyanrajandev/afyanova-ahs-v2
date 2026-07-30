@@ -82,6 +82,13 @@ class ServiceRequestResponseTransformer
                     : optional($serviceRequest['acknowledged_at'])->toISOString())
                 : null,
             'acknowledgedByUserId' => $serviceRequest['acknowledged_by_user_id'] ?? null,
+            'encounterId' => $serviceRequest['encounter_id'] ?? null,
+            'assessedByUserId' => $serviceRequest['assessed_by_user_id'] ?? null,
+            'assessedAt' => isset($serviceRequest['assessed_at'])
+                ? (is_string($serviceRequest['assessed_at'])
+                    ? $serviceRequest['assessed_at']
+                    : optional($serviceRequest['assessed_at'])->toISOString())
+                : null,
             'completedAt' => isset($serviceRequest['completed_at'])
                 ? (is_string($serviceRequest['completed_at'])
                     ? $serviceRequest['completed_at']

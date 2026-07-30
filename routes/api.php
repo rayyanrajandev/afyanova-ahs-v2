@@ -32,6 +32,7 @@ use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordControl
 use App\Modules\Patient\Presentation\Http\Controllers\PatientController;
 use App\Modules\Patient\Presentation\Http\Controllers\PatientMedicationSafetyController;
 use App\Modules\Pharmacy\Presentation\Http\Controllers\PharmacyOrderController;
+use App\Modules\Pharmacy\Presentation\Http\Controllers\PharmacyReportsController;
 use App\Modules\Platform\Presentation\Http\Controllers\DashboardContextController;
 use App\Modules\Platform\Presentation\Http\Controllers\FacilityConfigurationController;
 use App\Modules\Platform\Presentation\Http\Controllers\FacilityResourceRegistryController;
@@ -1320,9 +1321,6 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::patch('pharmacy-orders/{id}', [PharmacyOrderController::class, 'update'])
         ->middleware('can:medication.prescribe')
         ->name('pharmacy-orders.update');
-    Route::post('pharmacy-orders/{id}/sign', [PharmacyOrderController::class, 'sign'])
-        ->middleware('can:medication.prescribe')
-        ->name('pharmacy-orders.sign');
     Route::delete('pharmacy-orders/{id}/draft', [PharmacyOrderController::class, 'discardDraft'])
         ->middleware('can:medication.prescribe')
         ->name('pharmacy-orders.discard-draft');
@@ -1362,6 +1360,23 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('pharmacy-orders/{id}/audit-logs', [PharmacyOrderController::class, 'auditLogs'])
         ->middleware('can:pharmacy.orders.audit-logs.view')
         ->name('pharmacy-orders.audit-logs');
+
+    // ─── Pharmacy Reports ────────────────────────────────────────
+    Route::prefix('pharmacy-reports')->middleware('can:pharmacy.orders.read')->group(function () {
+        Route::get('inventory/stock-status', [PharmacyReportsController::class, 'stockStatus'])->name('pharmacy-reports.inventory.stock-status');
+        Route::get('inventory/low-stock', [PharmacyReportsController::class, 'lowStock'])->name('pharmacy-reports.inventory.low-stock');
+        Route::get('inventory/out-of-stock', [PharmacyReportsController::class, 'outOfStock'])->name('pharmacy-reports.inventory.out-of-stock');
+        Route::get('inventory/near-expiry', [PharmacyReportsController::class, 'nearExpiry'])->name('pharmacy-reports.inventory.near-expiry');
+        Route::get('inventory/expired', [PharmacyReportsController::class, 'expired'])->name('pharmacy-reports.inventory.expired');
+        Route::get('dispensing/dispensed-medicines', [PharmacyReportsController::class, 'dispensedMedicines'])->name('pharmacy-reports.dispensing.dispensed-medicines');
+        Route::get('dispensing/batch-tracking', [PharmacyReportsController::class, 'batchTracking'])->name('pharmacy-reports.dispensing.batch-tracking');
+        Route::get('dispensing/by-clinician', [PharmacyReportsController::class, 'medicinesByClinician'])->name('pharmacy-reports.dispensing.by-clinician');
+        Route::get('compliance/controlled-drugs', [PharmacyReportsController::class, 'controlledDrugsRegister'])->name('pharmacy-reports.compliance.controlled-drugs');
+        Route::get('compliance/insurance-claims', [PharmacyReportsController::class, 'insuranceClaims'])->name('pharmacy-reports.compliance.insurance-claims');
+        Route::get('analytics/prescription-trends', [PharmacyReportsController::class, 'prescriptionTrends'])->name('pharmacy-reports.analytics.prescription-trends');
+        Route::get('analytics/medicine-consumption', [PharmacyReportsController::class, 'medicineConsumption'])->name('pharmacy-reports.analytics.medicine-consumption');
+        Route::get('dashboard-kpis', [PharmacyReportsController::class, 'dashboardKpis'])->name('pharmacy-reports.dashboard-kpis');
+    });
 
     Route::get('radiology-orders', [RadiologyOrderController::class, 'index'])
         ->middleware('can:radiology.orders.read')
@@ -1498,6 +1513,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('service-requests', [ServiceRequestController::class, 'store'])
         ->middleware('can:service.requests.create')
         ->name('service-requests.store');
+    Route::post('service-requests/{id}/items', [ServiceRequestController::class, 'storeItems'])
+        ->middleware('can:service.requests.create')
+        ->name('service-requests.items.store');
     Route::get('service-requests/{id}/audit-events', [ServiceRequestController::class, 'auditEvents'])
         ->middleware('can:service.requests.audit-logs.read')
         ->name('service-requests.audit-events.index');
@@ -1507,6 +1525,13 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::patch('service-requests/{id}/status', [ServiceRequestController::class, 'updateStatus'])
         ->middleware('can:service.requests.update-status')
         ->name('service-requests.update-status');
+
+    Route::get('nurse-queue', [\App\Modules\ServiceRequest\Presentation\Http\Controllers\NurseQueueController::class, 'index'])
+        ->middleware('can:service.requests.read')
+        ->name('nurse-queue.index');
+    Route::post('nurse-queue/{encounterId}/assess', [\App\Modules\ServiceRequest\Presentation\Http\Controllers\NurseQueueController::class, 'assess'])
+        ->middleware('can:service.requests.create')
+        ->name('nurse-queue.assess');
 
     Route::get('claims-insurance', [ClaimsInsuranceCaseController::class, 'index'])
         ->middleware('can:claims.insurance.read')

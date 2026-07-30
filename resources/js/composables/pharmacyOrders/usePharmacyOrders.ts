@@ -118,7 +118,6 @@ export type PharmacyOrder = {
     reconciledAt: string | null;
     reconciledByUserId: number | null;
     status: PharmacyOrderStatus;
-    entryState: 'draft' | 'active' | null;
     signedAt: string | null;
     signedByUserId: number | null;
     statusReason: string | null;
@@ -126,6 +125,7 @@ export type PharmacyOrder = {
     enteredInErrorAt: string | null;
     enteredInErrorByUserId: number | null;
     lifecycleLockedAt: string | null;
+    serviceRequestItemId: string | null;
     currentCare: PharmacyOrderCurrentCare;
     createdAt: string | null;
     updatedAt: string | null;

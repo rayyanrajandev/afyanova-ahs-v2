@@ -229,10 +229,6 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['service.requests.read'],
     },
     {
-        pathPrefix: '/direct-service',
-        requiredPermissions: ['service.requests.read'],
-    },
-    {
         pathPrefix: '/patients',
         requiredPermissions: ['patients.read'],
     },
@@ -243,6 +239,10 @@ const routeAccessRules: RouteAccessRule[] = [
     {
         pathPrefix: '/reception',
         requiredPermissions: ['appointments.read'],
+    },
+    {
+        pathPrefix: '/nurse-queue',
+        requiredPermissions: ['service.requests.read'],
     },
     {
         pathPrefix: '/triage',

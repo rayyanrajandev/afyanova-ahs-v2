@@ -12,6 +12,16 @@ import { apiGet } from '@/lib/apiClient';
  * as a numeric string, e.g. "480.000" — normalize with Number() before
  * doing arithmetic).
  */
+export type PharmacyMedicationAvailabilityBatch = {
+    id: string;
+    internalBatchNumber: string | null;
+    batchNumber: string | null;
+    expiryDate: string | null;
+    quantity: number;
+    reserved: number;
+    available: number;
+};
+
 export type PharmacyMedicationAvailability = {
     id: string;
     itemCode: string | null;
@@ -27,6 +37,7 @@ export type PharmacyMedicationAvailability = {
     stockState: 'out_of_stock' | 'low_stock' | 'healthy' | string | null;
     batchTrackingMode: 'tracked' | 'untracked' | string | null;
     blockedBatchQuantity: number | string | null;
+    availableBatches: PharmacyMedicationAvailabilityBatch[];
 };
 
 type PharmacyMedicationAvailabilityResponse = { data: PharmacyMedicationAvailability | null };

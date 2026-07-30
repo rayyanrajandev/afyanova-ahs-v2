@@ -30,6 +30,7 @@ class InventoryStockReservationModel extends Model
         'facility_id',
         'item_id',
         'batch_id',
+        'internal_batch_number',
         'warehouse_id',
         'source_type',
         'source_id',

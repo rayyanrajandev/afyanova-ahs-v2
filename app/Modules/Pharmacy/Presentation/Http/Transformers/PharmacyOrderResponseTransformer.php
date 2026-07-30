@@ -65,6 +65,7 @@ class PharmacyOrderResponseTransformer
             'enteredInErrorAt' => $order['entered_in_error_at'] ?? null,
             'enteredInErrorByUserId' => $order['entered_in_error_by_user_id'] ?? null,
             'lifecycleLockedAt' => $order['lifecycle_locked_at'] ?? null,
+            'serviceRequestItemId' => $order['service_request_item_id'] ?? null,
             'currentCare' => ClinicalCurrentCare::pharmacy($order),
             'createdAt' => $order['created_at'] ?? null,
             'updatedAt' => $order['updated_at'] ?? null,

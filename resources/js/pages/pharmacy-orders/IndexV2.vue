@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -555,6 +555,12 @@ function openAuditSheet(order: PharmacyOrder): void {
                             <Badge variant="secondary">{{ statusCount('all') ?? '—' }} orders</Badge>
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters">
                                 Clear filters
+                            </Button>
+                            <Button variant="outline" size="sm" class="h-8 gap-1.5" as-child>
+                                <Link href="/pharmacy-reports">
+                                    <AppIcon name="chart-bar-big" class="size-3.5" />
+                                    Reports
+                                </Link>
                             </Button>
                             <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                                 <AppIcon name="plus" class="size-3.5" />

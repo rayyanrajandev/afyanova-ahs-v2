@@ -26,6 +26,7 @@ class InventoryStockMovementModel extends Model
         'facility_id',
         'item_id',
         'batch_id',
+        'internal_batch_number',
         'procurement_request_id',
         'source_supplier_id',
         'source_warehouse_id',

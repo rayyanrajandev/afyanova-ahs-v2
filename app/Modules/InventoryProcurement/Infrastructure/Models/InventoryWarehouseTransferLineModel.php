@@ -19,6 +19,7 @@ class InventoryWarehouseTransferLineModel extends Model
         'transfer_id',
         'item_id',
         'batch_id',
+        'internal_batch_number',
         'requested_quantity',
         'packed_quantity',
         'dispatched_quantity',

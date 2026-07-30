@@ -1287,7 +1287,7 @@ bindSupplyChainPageApi({
     batchCreateErrors: ref({} as Record<string, string>),
     batchCreateSubmitting: ref(false),
     batchForm: reactive({ batchNumber: '', expiryDate: '', quantity: 0, unitCost: 0 }),
-    batchOptionLabel: (batch: any) => batch ? `${batch.batchNumber ?? batch.id ?? 'Batch'} — ${batch.quantity ?? 0} units` : 'Select batch',
+    batchOptionLabel: (batch: any) => batch ? `${batch.internalBatchNumber ?? batch.batchNumber ?? batch.id ?? 'Batch'} ${batch.batchNumber ? `(${batch.batchNumber})` : ''} — ${batch.quantity ?? 0} units` : 'Select batch',
     submitCreateBatch: () => Promise.resolve(),
     claimLinkContextStatusLabel: computed(() => ''),
     claimLinkContextStatusVariant: computed(() => 'secondary'),

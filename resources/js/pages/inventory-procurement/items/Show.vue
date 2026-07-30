@@ -419,8 +419,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     <div v-for="batch in batches" :key="batch.id" class="border-b bg-background/70 p-3 transition-colors last:border-b-0 hover:bg-muted/30">
                                         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                                             <div class="min-w-0 space-y-1">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Batch #</p>
-                                                <p class="break-words font-mono text-sm">{{ batch.batchNumber }}</p>
+                                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Internal Batch</p>
+                                                <p class="break-words font-mono text-sm">{{ batch.internalBatchNumber }}</p>
+                                            </div>
+                                            <div class="min-w-0 space-y-1">
+                                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Mfr Batch #</p>
+                                                <p class="break-words font-mono text-sm">{{ batch.batchNumber ?? '—' }}</p>
                                             </div>
                                             <div class="min-w-0 space-y-1">
                                                 <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Lot #</p>

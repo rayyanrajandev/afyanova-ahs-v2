@@ -26,6 +26,7 @@ class DepartmentStockMovementModel extends Model
         'department_id',
         'item_id',
         'batch_id',
+        'internal_batch_number',
         'movement_type',
         'quantity',
         'quantity_before',

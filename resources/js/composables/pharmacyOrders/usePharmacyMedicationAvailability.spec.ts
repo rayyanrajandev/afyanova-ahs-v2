@@ -28,7 +28,7 @@ describe('usePharmacyMedicationAvailability', () => {
     });
 
     it('fetches from /pharmacy-orders/availability when enabled with a code', async () => {
-        const getSpy = vi.spyOn(apiClient, 'apiGet').mockResolvedValue({
+        const getSpy =         vi.spyOn(apiClient, 'apiGet').mockResolvedValue({
             data: {
                 id: 'item-1',
                 itemCode: 'ATC:N02BE01',
@@ -44,6 +44,7 @@ describe('usePharmacyMedicationAvailability', () => {
                 stockState: 'healthy',
                 batchTrackingMode: 'untracked',
                 blockedBatchQuantity: 0,
+                availableBatches: [],
             },
         });
 

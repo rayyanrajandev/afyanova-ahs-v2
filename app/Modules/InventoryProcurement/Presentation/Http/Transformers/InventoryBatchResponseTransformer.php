@@ -9,6 +9,7 @@ class InventoryBatchResponseTransformer
         return [
             'id' => $batch['id'] ?? null,
             'itemId' => $batch['item_id'] ?? null,
+            'internalBatchNumber' => $batch['internal_batch_number'] ?? null,
             'batchNumber' => $batch['batch_number'] ?? null,
             'lotNumber' => $batch['lot_number'] ?? null,
             'manufactureDate' => $batch['manufacture_date'] ?? null,

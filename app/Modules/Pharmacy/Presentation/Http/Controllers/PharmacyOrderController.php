@@ -27,13 +27,11 @@ use App\Modules\Pharmacy\Application\UseCases\ListPharmacyOrderAuditLogsUseCase;
 use App\Modules\Pharmacy\Application\UseCases\ListPharmacyOrdersUseCase;
 use App\Modules\Pharmacy\Application\UseCases\ListPharmacyOrderStatusCountsUseCase;
 use App\Modules\Pharmacy\Application\UseCases\ReconcilePharmacyOrderUseCase;
-use App\Modules\Pharmacy\Application\UseCases\SignPharmacyOrderUseCase;
 use App\Modules\Pharmacy\Application\UseCases\UpdatePharmacyOrderPolicyUseCase;
 use App\Modules\Pharmacy\Application\UseCases\VerifyPharmacyOrderDispenseUseCase;
 use App\Modules\Pharmacy\Application\UseCases\UpdatePharmacyOrderStatusUseCase;
 use App\Modules\Pharmacy\Application\UseCases\UpdatePharmacyOrderUseCase;
 use App\Modules\Pharmacy\Presentation\Http\Requests\ReconcilePharmacyOrderRequest;
-use App\Modules\Pharmacy\Presentation\Http\Requests\SignPharmacyOrderRequest;
 use App\Modules\Pharmacy\Presentation\Http\Requests\UpdatePharmacyOrderPolicyRequest;
 use App\Modules\Pharmacy\Presentation\Http\Requests\VerifyPharmacyOrderDispenseRequest;
 use App\Modules\Pharmacy\Presentation\Http\Requests\StorePharmacyOrderRequest;
@@ -315,29 +313,6 @@ class PharmacyOrderController extends Controller
         ]);
     }
 
-    public function sign(string $id, SignPharmacyOrderRequest $request, SignPharmacyOrderUseCase $useCase): JsonResponse
-    {
-        try {
-            $order = $useCase->execute(
-                id: $id,
-                actorId: $request->user()?->id,
-                safetyAcknowledged: (bool) $request->boolean('safetyAcknowledged'),
-                safetyOverrideCode: $request->input('safetyOverrideCode'),
-                safetyOverrideReason: $request->input('safetyOverrideReason'),
-            );
-        } catch (TenantScopeRequiredForIsolationException $exception) {
-            return $this->tenantScopeRequiredError($exception->getMessage());
-        } catch (ValidationException $exception) {
-            return $this->validationExceptionResponse($exception);
-        }
-
-        abort_if($order === null, 404, 'Pharmacy order not found.');
-
-        return response()->json([
-            'data' => PharmacyOrderResponseTransformer::transform($order),
-        ]);
-    }
-
     public function discardDraft(
         string $id,
         Request $request,
@@ -380,6 +355,7 @@ class PharmacyOrderController extends Controller
                 quantityDispensed: $request->filled('quantityDispensed') ? (float) $request->input('quantityDispensed') : null,
                 dispensedUnit: $request->input('dispensedUnit'),
                 dispensingNotes: $request->input('dispensingNotes'),
+                batchId: $request->input('batchId'),
                 actorId: $request->user()?->id,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {

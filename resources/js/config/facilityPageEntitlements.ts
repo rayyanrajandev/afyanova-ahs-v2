@@ -63,7 +63,6 @@ export const FACILITY_WEB_PATH_RULES: readonly FacilityWebPathRule[] = [
     { pathPrefix: '/emergency-triage', requiredAll: ['emergency.triage'] },
     { pathPrefix: '/emergency', requiredAll: ['emergency.triage'] },
     { pathPrefix: '/walk-in-service-requests', requiredAll: ['clinical.walk_in_queue'] },
-    { pathPrefix: '/direct-service', requiredAll: ['clinical.walk_in_queue'] },
     { pathPrefix: '/appointments', requiredAll: ['appointments.scheduling'] },
     {
         pathPrefix: '/admissions',

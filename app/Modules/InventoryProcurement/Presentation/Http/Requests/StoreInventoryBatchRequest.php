@@ -18,7 +18,7 @@ class StoreInventoryBatchRequest extends FormRequest
     {
         return [
             'itemId' => ['required', 'uuid'],
-            'batchNumber' => ['required', 'string', 'max:100'],
+            'batchNumber' => ['nullable', 'string', 'max:100'],
             'lotNumber' => ['nullable', 'string', 'max:100'],
             'manufactureDate' => ['nullable', 'date'],
             'expiryDate' => ['nullable', 'date', 'after_or_equal:manufactureDate'],

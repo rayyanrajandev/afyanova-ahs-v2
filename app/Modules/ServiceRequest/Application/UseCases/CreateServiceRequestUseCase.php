@@ -6,7 +6,6 @@ use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\ServiceRequest\Application\Exceptions\ActiveServiceRequestAlreadyExistsException;
 use App\Modules\ServiceRequest\Application\Exceptions\PatientNotEligibleForServiceRequestException;
-use App\Modules\ServiceRequest\Domain\Repositories\ServiceRequestItemRepositoryInterface;
 use App\Modules\ServiceRequest\Domain\Repositories\ServiceRequestRepositoryInterface;
 use App\Modules\ServiceRequest\Domain\Services\PatientLookupServiceInterface;
 use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestStatus;
@@ -18,12 +17,10 @@ class CreateServiceRequestUseCase
 {
     public function __construct(
         private readonly ServiceRequestRepositoryInterface $serviceRequestRepository,
-        private readonly ServiceRequestItemRepositoryInterface $itemRepository,
         private readonly PatientLookupServiceInterface $patientLookupService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly AppendServiceRequestAuditEventUseCase $appendServiceRequestAuditEvent,
-        private readonly FulfillServiceRequestItemsUseCase $fulfillItemsUseCase,
     ) {}
 
     public function execute(array $payload, ?int $actorId = null): array
@@ -48,21 +45,6 @@ class CreateServiceRequestUseCase
             throw new ActiveServiceRequestAlreadyExistsException($activeRequest);
         }
 
-        if (isset($payload['items']) && is_array($payload['items'])) {
-            $payload['items'] = array_map(
-                static fn (array $item): array => [
-                    'service_type' => $serviceType,
-                    'catalog_item_id' => $item['catalog_item_id'] ?? $item['catalogItemId'] ?? null,
-                    'item_name' => $item['item_name'] ?? $item['itemName'] ?? '',
-                    'item_code' => $item['item_code'] ?? $item['itemCode'] ?? null,
-                    'quantity' => $item['quantity'] ?? 1,
-                    'clinical_indication' => $item['clinical_indication'] ?? $item['clinicalIndication'] ?? null,
-                    'instructions' => $item['instructions'] ?? null,
-                ],
-                $payload['items'],
-            );
-        }
-
         $created = DB::transaction(function () use ($payload, $actorId, $serviceType): array {
             $payload['status'] = ServiceRequestStatus::IN_PROGRESS->value;
             $payload['request_number'] = $this->generateRequestNumber();
@@ -80,10 +62,6 @@ class CreateServiceRequestUseCase
             $created = $this->serviceRequestRepository->create($payload);
             $id = (string) $created['id'];
 
-            if (isset($payload['items']) && is_array($payload['items'])) {
-                $this->itemRepository->createMany($id, $payload['items']);
-            }
-
             $this->appendServiceRequestAuditEvent->execute(
                 $id,
                 'service_request.created',
@@ -95,19 +73,11 @@ class CreateServiceRequestUseCase
                     'serviceType' => $created['service_type'] ?? null,
                     'departmentId' => $created['department_id'] ?? null,
                     'requestNumber' => $created['request_number'] ?? null,
-                    'itemCount' => isset($payload['items']) ? count($payload['items']) : 0,
                 ],
             );
 
             return $created;
         });
-
-        $actorIdInt = is_int($actorId) ? $actorId : 0;
-        $this->fulfillItemsUseCase->execute(
-            serviceRequestId: (string) $created['id'],
-            items: $this->itemRepository->findByServiceRequestId((string) $created['id']),
-            actorId: $actorIdInt,
-        );
 
         return $created;
     }

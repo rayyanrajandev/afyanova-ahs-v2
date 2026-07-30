@@ -6,6 +6,7 @@ import type { RadiologyOrderStatusCounts } from '@/composables/radiologyOrders/u
 import type { PharmacyOrderStatusCounts } from '@/composables/pharmacyOrders/usePharmacyOrderStatusCounts';
 import type { EmergencyCaseStatusCounts } from '@/composables/emergencyTriage/useEmergencyCaseStatusCounts';
 import type { BillingInvoiceStatusCounts } from '@/composables/billingInvoices/useBillingInvoiceStatusCounts';
+import type { NurseQueueEncounter } from '@/composables/nurse-queue/useNurseQueue';
 
 type StatusCountsResponse<T> = { data: T };
 
@@ -30,6 +31,10 @@ type ClinicianQueueStatusCounts = {
     completed: number;
 };
 
+type NurseQueueStatusCounts = {
+    total: number;
+};
+
 export type SidebarBadges = Record<string, number>;
 
 function sumFields<T extends Record<string, number>>(data: T | undefined, ...fields: (keyof T)[]): number {
@@ -47,6 +52,12 @@ export function useSidebarBadges() {
     const triage = useQuery({
         queryKey: ['sidebar-triage-queue-status-counts'],
         queryFn: async () => (await apiGet<StatusCountsResponse<TriageQueueStatusCounts>>('/reception/triage-queue/status-counts')).data,
+        refetchInterval: 30_000,
+    });
+
+    const nurseQueue = useQuery({
+        queryKey: ['sidebar-nurse-queue-status-counts'],
+        queryFn: async () => (await apiGet<{ data: NurseQueueEncounter[]; meta: NurseQueueStatusCounts }>('/nurse-queue?perPage=1')).meta,
         refetchInterval: 30_000,
     });
 
@@ -93,6 +104,7 @@ export function useSidebarBadges() {
         'emergency-queue': sumFields(emergency.data.value, 'waiting', 'triaged'),
         'laboratory': sumFields(lab.data.value, 'ordered', 'collected', 'in_progress'),
         'radiology': sumFields(radiology.data.value, 'ordered', 'in_progress'),
+        'nurse-queue': nurseQueue.data.value?.total ?? 0,
         'pharmacy': sumFields(pharmacy.data.value, 'pending', 'in_preparation', 'partially_dispensed'),
         'billing': sumFields(billing.data.value, 'issued', 'partially_paid'),
         'pending-approvals': 0,

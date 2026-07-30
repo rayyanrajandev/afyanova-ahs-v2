@@ -121,7 +121,7 @@ function handleTransferReceiptVarianceTypeChange(line: { id: string }, value: st
                                         v-for="batch in ws.transferLineBatches(line)"
                                         :key="batch.id"
                                         :value="batch.id"
-                                        :text-value="batch.batchNumber ?? batch.id"
+                                        :text-value="batch.internalBatchNumber ?? batch.batchNumber ?? batch.id"
                                     >
                                         {{ ws.batchOptionLabel(batch) }}
                                     </SelectItem>

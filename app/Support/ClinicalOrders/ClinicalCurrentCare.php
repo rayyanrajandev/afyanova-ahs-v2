@@ -98,10 +98,6 @@ class ClinicalCurrentCare
      */
     public static function pharmacy(array $order): array
     {
-        if (self::isDraft($order)) {
-            return self::baseFlags();
-        }
-
         $status = self::normalize($order['status'] ?? null);
         $reconciliationStatus = self::normalize($order['reconciliation_status'] ?? null);
         $formularyDecision = self::normalize($order['formulary_decision_status'] ?? null);

@@ -17,6 +17,7 @@ use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class InventoryBatchStockService
 {
@@ -64,8 +65,21 @@ class InventoryBatchStockService
                 'batchCount' => 0,
                 'validBatchCount' => 0,
                 'stockState' => $this->stockState($availableQuantity, (float) ($item->reorder_level ?? 0)),
+                'availableBatches' => [],
             ];
         }
+
+        $availableBatches = $batchState['validBatches']->map(
+            static fn (InventoryBatchModel $b): array => [
+                'id' => $b->id,
+                'internal_batch_number' => $b->internal_batch_number,
+                'batch_number' => $b->batch_number,
+                'expiry_date' => $b->expiry_date?->toDateString(),
+                'quantity' => (float) ($b->quantity ?? 0),
+                'reserved' => (float) ($batchState['reservedByBatch'][(string) $b->id] ?? 0),
+                'available' => max((float) ($b->quantity ?? 0) - (float) ($batchState['reservedByBatch'][(string) $b->id] ?? 0), 0),
+            ],
+        )->values()->all();
 
         return [
             'trackingMode' => 'tracked',
@@ -77,6 +91,7 @@ class InventoryBatchStockService
             'batchCount' => $batchState['batchCount'],
             'validBatchCount' => $batchState['validBatchCount'],
             'stockState' => $this->stockState($batchState['availableQuantity'], (float) ($item->reorder_level ?? 0)),
+            'availableBatches' => $availableBatches,
         ];
     }
 
@@ -185,6 +200,7 @@ class InventoryBatchStockService
                 'facility_id' => $this->stringOrNull($payload['facility_id'] ?? null) ?? $this->platformScopeContext->facilityId(),
                 'item_id' => $item->id,
                 'batch_id' => count($allocations) === 1 ? ($allocations[0]['batchId'] ?? null) : null,
+                'internal_batch_number' => count($allocations) === 1 ? ($allocations[0]['internalBatchNumber'] ?? null) : null,
                 'procurement_request_id' => $payload['procurement_request_id'] ?? null,
                 'source_supplier_id' => $payload['source_supplier_id'] ?? null,
                 'source_warehouse_id' => $warehouseId,
@@ -353,6 +369,7 @@ class InventoryBatchStockService
             $adjustmentDirection = $this->stringOrNull($payload['adjustment_direction'] ?? null);
             $allocation = [
                 'batchId' => (string) $batch->id,
+                'internalBatchNumber' => $batch->internal_batch_number,
                 'batchNumber' => $batch->batch_number,
                 'lotNumber' => $batch->lot_number,
                 'expiryDate' => $batch->expiry_date?->toDateString(),
@@ -365,6 +382,7 @@ class InventoryBatchStockService
                 'facility_id' => $this->stringOrNull($payload['facility_id'] ?? null) ?? $this->platformScopeContext->facilityId(),
                 'item_id' => $item->id,
                 'batch_id' => $batch->id,
+                'internal_batch_number' => $batch->internal_batch_number,
                 'procurement_request_id' => $payload['procurement_request_id'] ?? null,
                 'source_supplier_id' => $payload['source_supplier_id'] ?? null,
                 'source_warehouse_id' => $warehouseId,
@@ -649,6 +667,7 @@ class InventoryBatchStockService
                 'facility_id' => $this->stringOrNull($payload['facility_id'] ?? null) ?? $this->platformScopeContext->facilityId(),
                 'item_id' => $item->id,
                 'batch_id' => $batch->id,
+                'internal_batch_number' => $batch->internal_batch_number,
                 'source_supplier_id' => null,
                 'source_warehouse_id' => $batch->warehouse_id,
                 'destination_warehouse_id' => $batch->warehouse_id,
@@ -850,6 +869,7 @@ class InventoryBatchStockService
 
             $allocations[] = [
                 'batchId' => (string) $batch->id,
+                'internalBatchNumber' => $batch->internal_batch_number,
                 'batchNumber' => $batch->batch_number,
                 'lotNumber' => $batch->lot_number,
                 'expiryDate' => $batch->expiry_date?->toDateString(),
@@ -883,6 +903,7 @@ class InventoryBatchStockService
 
             $normalized[] = [
                 'batchId' => $this->stringOrNull($allocation['batchId'] ?? null),
+                'internalBatchNumber' => $allocation['internalBatchNumber'] ?? null,
                 'batchNumber' => $allocation['batchNumber'] ?? null,
                 'lotNumber' => $allocation['lotNumber'] ?? null,
                 'expiryDate' => $allocation['expiryDate'] ?? null,
@@ -950,6 +971,25 @@ class InventoryBatchStockService
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    private function generateInternalBatchNumber(): string
+    {
+        $date = now()->format('Ymd');
+        $prefix = 'BAT-' . $date . '-';
+        $lastBatch = InventoryBatchModel::query()
+            ->where('internal_batch_number', 'like', $prefix . '%')
+            ->orderBy('internal_batch_number', 'desc')
+            ->first();
+
+        if ($lastBatch) {
+            $lastSeq = (int) Str::after($lastBatch->internal_batch_number, $prefix);
+            $nextSeq = $lastSeq + 1;
+        } else {
+            $nextSeq = 1;
+        }
+
+        return $prefix . str_pad((string) $nextSeq, 5, '0', STR_PAD_LEFT);
     }
 
     private function normalizeBatchNumber(mixed $value): ?string
@@ -1198,6 +1238,7 @@ class InventoryBatchStockService
                         'tenant_id' => $this->stringOrNull($payload['tenant_id'] ?? null) ?? $this->platformScopeContext->tenantId(),
                         'facility_id' => $this->stringOrNull($payload['facility_id'] ?? null) ?? $this->platformScopeContext->facilityId(),
                         'item_id' => $item->id,
+                        'internal_batch_number' => $this->generateInternalBatchNumber(),
                         'batch_number' => $batchNumber,
                         'lot_number' => $lotNumber,
                         'manufacture_date' => $manufactureDate?->toDateString(),
@@ -1229,6 +1270,7 @@ class InventoryBatchStockService
                 'facility_id' => $this->stringOrNull($payload['facility_id'] ?? null) ?? $this->platformScopeContext->facilityId(),
                 'item_id' => $item->id,
                 'batch_id' => $batch?->id,
+                'internal_batch_number' => $batch instanceof InventoryBatchModel ? $batch->internal_batch_number : null,
                 'procurement_request_id' => $payload['procurement_request_id'] ?? null,
                 'source_supplier_id' => $payload['source_supplier_id'] ?? null,
                 'source_warehouse_id' => $payload['source_warehouse_id'] ?? null,

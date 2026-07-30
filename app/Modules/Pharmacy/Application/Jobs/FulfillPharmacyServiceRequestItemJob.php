@@ -53,7 +53,7 @@ class FulfillPharmacyServiceRequestItemJob implements ShouldQueue
                     'medication_name' => $itemName,
                     'medication_code' => $itemCode,
                     'quantity_prescribed' => $this->quantity,
-                    'clinical_indication' => $item['clinical_indication'] ?? null,
+                    'clinical_indication' => $item['clinical_indication'] ?? 'Nurse assessment',
                 ],
                 actorId: $this->actorId,
             );

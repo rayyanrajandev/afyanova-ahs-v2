@@ -13,9 +13,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import type { PharmacyOrder, PharmacyOrderStatus } from '@/composables/pharmacyOrders/usePharmacyOrders';
+import type { PharmacyMedicationAvailabilityBatch } from '@/composables/pharmacyOrders/usePharmacyMedicationAvailability';
 import { usePharmacyMedicationAvailability } from '@/composables/pharmacyOrders/usePharmacyMedicationAvailability';
 
 type Intent = 'preparation' | 'dispense' | null;
@@ -42,6 +44,7 @@ const emit = defineEmits<{
             quantityDispensed?: number | null;
             dispensedUnit?: string | null;
             dispensingNotes?: string | null;
+            batchId?: string | null;
         },
     ];
 }>();
@@ -52,6 +55,7 @@ const emit = defineEmits<{
 const quantityDispensed = ref<string | number>('');
 const dispensedUnit = ref('');
 const dispensingNotes = ref('');
+const selectedBatchId = ref<string | null>(null);
 
 watch(
     () => props.open,
@@ -59,6 +63,7 @@ watch(
         if (!isOpen) return;
         dispensingNotes.value = '';
         dispensedUnit.value = props.order?.dispensedUnit || props.order?.prescribedUnit || '';
+        selectedBatchId.value = null;
         // Cumulative total dispensed so far, including this dispense — defaults to the
         // full prescribed quantity, matching UpdatePharmacyOrderStatusUseCase's own
         // behavior when quantityDispensed is omitted on a dispense transition.
@@ -162,6 +167,19 @@ const exceedsAvailableStock = computed(() => {
     return Number.isFinite(requested) && requested > availableStock.value;
 });
 
+const isBatchTracked = computed(() => availability.data.value?.batchTrackingMode === 'tracked');
+
+const dispensableBatches = computed<(PharmacyMedicationAvailabilityBatch & { label: string })[]>(() => {
+    const batches = availability.data.value?.availableBatches;
+    if (!batches || batches.length === 0) return [];
+    return batches
+        .filter((b) => b.available > 0)
+        .map((b) => ({
+            ...b,
+            label: [b.internalBatchNumber, b.batchNumber].filter(Boolean).join(' / ') || b.id.slice(0, 8),
+        }));
+});
+
 const config = computed(() => {
     if (props.intent === 'preparation') {
         return {
@@ -194,6 +212,7 @@ function submit(): void {
         quantityDispensed: quantity,
         dispensedUnit: dispensedUnit.value.trim() || null,
         dispensingNotes: dispensingNotes.value.trim() || null,
+        batchId: selectedBatchId.value || null,
     });
 }
 </script>
@@ -221,7 +240,7 @@ function submit(): void {
                         <span v-if="order.frequency">Freq: {{ order.frequency }}</span>
                         <span v-if="order.durationValue">Duration: {{ order.durationValue }} {{ order.durationUnit || '' }}</span>
                     </div>
-                    <p v-if="order?.quantityPrescribed !== null" class="mt-1.5 text-xs text-muted-foreground">
+                    <p v-if="order?.quantityPrescribed != null" class="mt-1.5 text-xs text-muted-foreground">
                         <strong>{{ formatQuantity(order.quantityPrescribed) }}</strong> {{ order?.prescribedUnit || 'unit(s)' }} prescribed
                     </p>
                 </div>
@@ -265,6 +284,27 @@ function submit(): void {
                 </div>
 
                 <template v-if="intent === 'dispense'">
+                    <div v-if="isBatchTracked && dispensableBatches.length > 0" class="grid gap-2">
+                        <Label for="pharmacy-dispense-batch">Batch</Label>
+                        <Select v-model="selectedBatchId">
+                            <SelectTrigger id="pharmacy-dispense-batch">
+                                <SelectValue placeholder="Auto (FEFO)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="">Auto (FEFO)</SelectItem>
+                                <SelectItem
+                                    v-for="batch in dispensableBatches"
+                                    :key="batch.id"
+                                    :value="batch.id"
+                                >
+                                    {{ batch.label }} &mdash; {{ batch.available }} available
+                                    <template v-if="batch.expiryDate">
+                                        (exp {{ batch.expiryDate }})
+                                    </template>
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div class="grid gap-2">
                             <Label for="pharmacy-dispense-quantity">Quantity dispensed</Label>

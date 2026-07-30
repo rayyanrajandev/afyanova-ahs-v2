@@ -2221,7 +2221,7 @@ bindSupplyChainPageApi({
     stockStateOptions, itemCategoryOptions, restoredCreateItemDraft,
     stockMovementOpeningBalanceMode, stockMovementSheetTitle: computed(() => stockMovementOpeningBalanceMode.value ? 'Opening Stock' : 'Stock Movement'),
     stockMovementSheetDescription: computed(() => stockMovementOpeningBalanceMode.value ? 'Record the opening stock balance for this item' : 'Record a stock movement against this item'),
-    openCreateItemDialog, batchOptionLabel: (batch: any) => batch ? `${batch.batchNumber ?? batch.id ?? 'Batch'} — ${batch.quantity ?? 0} units` : 'Select batch',
+    openCreateItemDialog, batchOptionLabel: (batch: any) => batch ? `${batch.internalBatchNumber ?? batch.batchNumber ?? batch.id ?? 'Batch'} ${batch.batchNumber ? `(${batch.batchNumber})` : ''} — ${batch.quantity ?? 0} units` : 'Select batch',
     canSelectAnyRequisitionDepartment: computed(() => false),
     departmentFilterOptions: computed(() => []),
     setDepartmentStockDepartmentFilter: () => {},

@@ -10,6 +10,8 @@ class PharmacyMedicationAvailabilityResponseTransformer
             return null;
         }
 
+        $rawBatches = $item['available_batches'] ?? [];
+
         return [
             'id' => $item['id'] ?? null,
             'itemCode' => $item['item_code'] ?? null,
@@ -25,6 +27,15 @@ class PharmacyMedicationAvailabilityResponseTransformer
             'stockState' => $item['stock_state'] ?? self::stockState($item),
             'batchTrackingMode' => $item['batch_tracking_mode'] ?? 'untracked',
             'blockedBatchQuantity' => $item['blocked_batch_quantity'] ?? 0,
+            'availableBatches' => array_map(static fn (array $b): array => [
+                'id' => $b['id'] ?? null,
+                'internalBatchNumber' => $b['internal_batch_number'] ?? null,
+                'batchNumber' => $b['batch_number'] ?? null,
+                'expiryDate' => $b['expiry_date'] ?? null,
+                'quantity' => $b['quantity'] ?? 0,
+                'reserved' => $b['reserved'] ?? 0,
+                'available' => $b['available'] ?? 0,
+            ], $rawBatches),
         ];
     }
 

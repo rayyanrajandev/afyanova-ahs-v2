@@ -1196,6 +1196,7 @@ async function loadDashboard(depth = 0): Promise<void> {
         claimResolved: null,
         operationalFlags: null,
         vitalsOverdue: null,
+        pharmacyKpis: null,
     };
     lists.value = {
         scheduledAppointments: [],

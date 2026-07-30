@@ -636,7 +636,7 @@ const ws = useSupplyChainPageApi();
                                         v-for="batch in ws.stockMovementFilteredBatches"
                                         :key="batch.id"
                                         :value="batch.id"
-                                        :text-value="batch.batchNumber ?? batch.id"
+                                        :text-value="batch.internalBatchNumber ?? batch.batchNumber ?? batch.id"
                                     >
                                         {{ ws.batchOptionLabel(batch) }}
                                     </SelectItem>
@@ -890,7 +890,7 @@ const ws = useSupplyChainPageApi();
                                 v-for="batch in ws.stockReconciliationBatchOptions"
                                 :key="batch.id"
                                 :value="batch.id"
-                                :text-value="batch.batchNumber ?? batch.id"
+                                :text-value="batch.internalBatchNumber ?? batch.batchNumber ?? batch.id"
                             >
                                 {{ ws.batchOptionLabel(batch) }}
                             </SelectItem>

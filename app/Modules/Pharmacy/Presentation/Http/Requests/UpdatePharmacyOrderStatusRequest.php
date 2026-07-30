@@ -24,6 +24,7 @@ class UpdatePharmacyOrderStatusRequest extends FormRequest
             'quantityDispensed' => ['nullable', 'numeric', 'min:0'],
             'dispensedUnit' => ['nullable', 'string', 'max:40'],
             'dispensingNotes' => ['nullable', 'string', 'max:2000'],
+            'batchId' => ['nullable', 'string', 'max:36'],
         ];
     }
 }

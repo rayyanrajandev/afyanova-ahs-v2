@@ -192,7 +192,7 @@ const turnoverOpen = ref(false);
                                 <thead><tr class="border-b text-left text-muted-foreground"><th class="pb-1 pr-3 font-medium">Batch</th><th class="pb-1 pr-3 font-medium">Expiry</th><th class="pb-1 pr-3 font-medium text-right">Qty</th><th class="pb-1 pr-3 font-medium text-right">Waste Value</th></tr></thead>
                                 <tbody>
                                     <tr v-for="b in ws.expiryWastage.expired.slice(0, 20)" :key="b.id" class="border-b last:border-0">
-                                        <td class="py-1 pr-3">{{ b.batchNumber }}</td>
+                                        <td class="py-1 pr-3">{{ b.internalBatchNumber ?? b.batchNumber ?? '—' }}</td>
                                         <td class="py-1 pr-3 text-destructive">{{ b.expiryDate }}</td>
                                         <td class="py-1 pr-3 text-right">{{ b.quantity }}</td>
                                         <td class="py-1 pr-3 text-right">{{ b.estimatedWasteValue != null ? Number(b.estimatedWasteValue).toLocaleString() : '—' }}</td>

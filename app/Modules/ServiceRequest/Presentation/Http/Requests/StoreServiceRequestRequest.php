@@ -39,13 +39,6 @@ class StoreServiceRequestRequest extends FormRequest
             'serviceType' => ['required', Rule::in(ServiceRequestServiceType::values())],
             'priority' => ['nullable', Rule::in(['routine', 'urgent'])],
             'notes' => ['nullable', 'string', 'max:1000'],
-            'items' => ['nullable', 'array', 'max:50'],
-            'items.*.catalogItemId' => ['nullable', 'uuid'],
-            'items.*.itemName' => ['required', 'string', 'max:255'],
-            'items.*.itemCode' => ['nullable', 'string', 'max:50'],
-            'items.*.quantity' => ['nullable', 'integer', 'min:1', 'max:999'],
-            'items.*.clinicalIndication' => ['nullable', 'string', 'max:1000'],
-            'items.*.instructions' => ['nullable', 'string', 'max:1000'],
         ];
     }
 }

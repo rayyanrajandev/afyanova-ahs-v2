@@ -5,8 +5,10 @@ namespace App\Modules\InventoryProcurement\Application\UseCases;
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryItemNotFoundException;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryBatchRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryBatchModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use Illuminate\Support\Str;
 
 class CreateInventoryBatchUseCase
 {
@@ -36,11 +38,14 @@ class CreateInventoryBatchUseCase
             $manufacturer = trim((string) ($item['manufacturer'] ?? ''));
         }
 
+        $internalBatchNumber = $this->generateInternalBatchNumber();
+
         return $this->batchRepository->create([
             'tenant_id' => $this->platformScopeContext->tenantId(),
             'facility_id' => $this->platformScopeContext->facilityId(),
             'item_id' => $payload['item_id'],
-            'batch_number' => strtoupper(trim((string) $payload['batch_number'])),
+            'internal_batch_number' => $internalBatchNumber,
+            'batch_number' => isset($payload['batch_number']) ? strtoupper(trim((string) $payload['batch_number'])) : null,
             'lot_number' => isset($payload['lot_number']) ? trim((string) $payload['lot_number']) : null,
             'manufacture_date' => $payload['manufacture_date'] ?? null,
             'expiry_date' => $payload['expiry_date'] ?? null,
@@ -53,5 +58,24 @@ class CreateInventoryBatchUseCase
             'status' => 'available',
             'notes' => $payload['notes'] ?? null,
         ]);
+    }
+
+    private function generateInternalBatchNumber(): string
+    {
+        $date = now()->format('Ymd');
+        $prefix = 'BAT-' . $date . '-';
+        $lastBatch = InventoryBatchModel::query()
+            ->where('internal_batch_number', 'like', $prefix . '%')
+            ->orderBy('internal_batch_number', 'desc')
+            ->first();
+
+        if ($lastBatch) {
+            $lastSeq = (int) Str::after($lastBatch->internal_batch_number, $prefix);
+            $nextSeq = $lastSeq + 1;
+        } else {
+            $nextSeq = 1;
+        }
+
+        return $prefix . str_pad((string) $nextSeq, 5, '0', STR_PAD_LEFT);
     }
 }

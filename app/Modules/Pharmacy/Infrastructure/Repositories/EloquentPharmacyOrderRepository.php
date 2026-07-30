@@ -83,7 +83,7 @@ class EloquentPharmacyOrderRepository implements PharmacyOrderRepositoryInterfac
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
     ): array {
         $sortBy = in_array($sortBy, ['order_number', 'ordered_at', 'status', 'created_at', 'updated_at'], true)
             ? $sortBy
@@ -124,7 +124,7 @@ class EloquentPharmacyOrderRepository implements PharmacyOrderRepositoryInterfac
         ?string $appointmentId,
         ?string $admissionId,
         ?string $fromDateTime,
-        ?string $toDateTime
+        ?string $toDateTime,
     ): array {
         $queryBuilder = PharmacyOrderModel::query();
         $this->applyPlatformScopeIfEnabled($queryBuilder);

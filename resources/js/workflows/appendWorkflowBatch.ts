@@ -325,6 +325,13 @@ export function appendWorkflowBatchEntries(
                             apiGet('/inventory-procurement/procurement-requests', { perPage: 8, page: 1, sortBy: 'updatedAt', sortDir: 'desc' }),
                         ),
                 ],
+                [
+                    'pharmacyKpis',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Pharmacy KPIs', 'pharmacy.orders.read', () =>
+                            apiGet('/pharmacy-reports/dashboard-kpis'),
+                        ),
+                ],
             );
             break;
         case 'theatre':
@@ -347,6 +354,13 @@ export function appendWorkflowBatchEntries(
             batch.push(
                 ['wardTaskCounts', () =>
                     guardedRequest<ApiEnvelope<any>>('Ward task counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/task-status-counts')),
+                ],
+                [
+                    'pharmacyKpis',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Pharmacy KPIs', 'pharmacy.orders.read', () =>
+                            apiGet('/pharmacy-reports/dashboard-kpis'),
+                        ),
                 ],
             );
             break;

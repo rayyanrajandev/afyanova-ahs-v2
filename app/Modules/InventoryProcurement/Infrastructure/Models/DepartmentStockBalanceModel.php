@@ -25,6 +25,7 @@ class DepartmentStockBalanceModel extends Model
         'department_id',
         'item_id',
         'batch_id',
+        'internal_batch_number',
         'quantity_on_hand',
         'quantity_consumed',
         'quantity_returned',

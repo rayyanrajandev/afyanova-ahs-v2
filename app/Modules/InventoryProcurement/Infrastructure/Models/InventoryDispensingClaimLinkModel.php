@@ -22,6 +22,7 @@ class InventoryDispensingClaimLinkModel extends Model
         'pharmacy_order_id',
         'item_id',
         'batch_id',
+        'internal_batch_number',
         'quantity_dispensed',
         'unit',
         'unit_cost',

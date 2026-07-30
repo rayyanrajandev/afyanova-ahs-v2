@@ -7,36 +7,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 /**
- * B5 of the patient flow redesign: /direct-service/queue is a new,
- * standalone route (not a swap) — /walk-in-service-requests keeps
- * rendering the legacy page, now marked "(Legacy)". Same route-pair shape
- * as AppointmentsIndexV2PageRouteTest.php's /appointments cutover coverage.
+ * The direct service queue was replaced by /nurse-queue. The old route
+ * now permanently redirects.
  */
-it('renders the direct service queue v2 page at /direct-service/queue', function (): void {
-    $user = makeUserWithRole(['service.requests.read']);
-
-    $this->withoutMiddleware([
-        EnsureMappedFacilitySubscriptionEntitlement::class,
-        EnsureFacilitySubscriptionEntitlement::class,
-    ]);
-
-    $this->actingAs($user)
-        ->get('/direct-service/queue')
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('directService/Queue'));
-});
-
-it('forbids the direct service queue route without service.requests.read', function (): void {
-    $user = makeUserWithRole([]);
-
-    $this->withoutMiddleware([
-        EnsureMappedFacilitySubscriptionEntitlement::class,
-        EnsureFacilitySubscriptionEntitlement::class,
-    ]);
-
-    $this->actingAs($user)
-        ->get('/direct-service/queue')
-        ->assertForbidden();
+it('redirects /direct-service/queue to /nurse-queue', function (): void {
+    $this->get('/direct-service/queue')
+        ->assertRedirect('/nurse-queue');
 });
 
 it('keeps the legacy page reachable at /walk-in-service-requests, now marked legacy', function (): void {

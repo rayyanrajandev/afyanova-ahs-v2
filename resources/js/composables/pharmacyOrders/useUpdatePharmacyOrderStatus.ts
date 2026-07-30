@@ -9,6 +9,7 @@ export type UpdatePharmacyOrderStatusPayload = {
     quantityDispensed?: number | null;
     dispensedUnit?: string | null;
     dispensingNotes?: string | null;
+    batchId?: string | null;
 };
 
 type UpdatePharmacyOrderStatusResponse = { data: PharmacyOrder };

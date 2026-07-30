@@ -4,6 +4,7 @@ namespace App\Modules\InventoryProcurement\Application\Services;
 
 use App\Modules\InventoryProcurement\Domain\Repositories\DepartmentStockBalanceRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\DepartmentStockMovementRepositoryInterface;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryBatchModel;
 
 class DepartmentStockService
 {
@@ -102,6 +103,7 @@ class DepartmentStockService
         );
 
         $quantityAfter = (float) $updatedBalance['quantity_on_hand'];
+        $internalBatchNumber = $this->resolveInternalBatchNumber($batchId);
 
         $this->movementRepository->create([
             'tenant_id' => $tenantId,
@@ -110,6 +112,7 @@ class DepartmentStockService
             'department_id' => $departmentId,
             'item_id' => $itemId,
             'batch_id' => $batchId,
+            'internal_batch_number' => $internalBatchNumber,
             'movement_type' => 'consume',
             'quantity' => $effectiveQuantity,
             'quantity_before' => $quantityBefore,
@@ -245,5 +248,16 @@ class DepartmentStockService
     public function departmentSummary(string $departmentId): array
     {
         return $this->balanceRepository->summaryByDepartment($departmentId);
+    }
+
+    private function resolveInternalBatchNumber(?string $batchId): ?string
+    {
+        if ($batchId === null) {
+            return null;
+        }
+
+        $batch = InventoryBatchModel::query()->find($batchId);
+
+        return $batch?->internal_batch_number;
     }
 }

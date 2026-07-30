@@ -19,6 +19,7 @@ class InventoryBatchModel extends Model
         'tenant_id',
         'facility_id',
         'item_id',
+        'internal_batch_number',
         'batch_number',
         'lot_number',
         'manufacture_date',

@@ -9,6 +9,7 @@ use App\Modules\ServiceRequest\Application\Exceptions\PatientNotEligibleForServi
 use App\Modules\ServiceRequest\Application\Exceptions\ServiceRequestDepartmentScopeException;
 use App\Modules\ServiceRequest\Application\Exceptions\ServiceRequestStatusTransitionException;
 use App\Modules\ServiceRequest\Application\Services\ServiceRequestDepartmentScopeResolver;
+use App\Modules\ServiceRequest\Application\UseCases\AddServiceRequestItemsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\CreateServiceRequestUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\ExportServiceRequestsCsvUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\GetServiceRequestUseCase;
@@ -17,6 +18,7 @@ use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestStatusCoun
 use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\ListWalkInDepartmentOptionsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\UpdateServiceRequestStatusUseCase;
+use App\Modules\ServiceRequest\Presentation\Http\Requests\AddServiceRequestItemsRequest;
 use App\Modules\ServiceRequest\Presentation\Http\Requests\StoreServiceRequestRequest;
 use App\Modules\ServiceRequest\Presentation\Http\Requests\UpdateServiceRequestStatusRequest;
 use App\Modules\ServiceRequest\Presentation\Http\Transformers\ServiceRequestResponseTransformer;
@@ -134,6 +136,24 @@ class ServiceRequestController extends Controller
         ], 201);
     }
 
+    public function storeItems(
+        string $id,
+        AddServiceRequestItemsRequest $request,
+        AddServiceRequestItemsUseCase $useCase,
+    ): JsonResponse {
+        $validated = $request->validated();
+
+        $items = $useCase->execute(
+            serviceRequestId: $id,
+            items: $validated['items'],
+            actorId: $request->user()?->id,
+        );
+
+        return response()->json([
+            'data' => $items,
+        ], 201);
+    }
+
     public function show(string $id, GetServiceRequestUseCase $useCase): JsonResponse
     {
         $serviceRequest = $useCase->execute($id);
@@ -192,7 +212,6 @@ class ServiceRequestController extends Controller
             'serviceType' => 'service_type',
             'priority' => 'priority',
             'notes' => 'notes',
-            'items' => 'items',
         ];
 
         $payload = [];

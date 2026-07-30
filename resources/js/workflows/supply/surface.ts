@@ -7,6 +7,7 @@ export const buildSupplySurface: WorkflowSurfaceBuilder = ({ counts, lists, help
     const outOfStock = numberValue(counts.inventoryStockAlerts, 'out_of_stock');
     const procurementCount = Array.isArray(lists.procurementRequests) ? lists.procurementRequests.length : 0;
 
+    const pk = counts.pharmacyKpis?.data;
     const kpis = [
         hasWidget('stock_alerts')
             ? metric(
@@ -40,6 +41,22 @@ export const buildSupplySurface: WorkflowSurfaceBuilder = ({ counts, lists, help
                   numberValue(counts.inventoryStockAlerts, 'expiring_soon'),
               )
             : null,
+        pk
+            ? metric(
+                  'Inventory value',
+                  'Total value of current pharmacy stock.',
+                  'dollar-sign',
+                  Number(pk.inventoryValue),
+              )
+            : null,
+        pk
+            ? metric(
+                  'Dispensed today',
+                  'Medication orders dispensed today.',
+                  'pill',
+                  Number(pk.dispensedToday),
+              )
+            : null,
     ].filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
     const queueRows = hasWidget('procurement')
@@ -50,7 +67,10 @@ export const buildSupplySurface: WorkflowSurfaceBuilder = ({ counts, lists, help
 
     return {
         kpis,
-        actions: [{ label: 'Supply chain', icon: 'package', variant: 'default', href: '/inventory-procurement' }],
+        actions: [
+            { label: 'Supply chain', icon: 'package', variant: 'default', href: '/inventory-procurement' },
+            ...(pk ? [{ label: 'Pharmacy reports', icon: 'pill', variant: 'outline', href: '/pharmacy-reports' }] : []),
+        ],
         queueRows,
         handoff: {
             title: 'Supply chain handoff',
