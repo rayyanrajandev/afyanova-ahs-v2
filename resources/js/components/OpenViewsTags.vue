@@ -13,7 +13,7 @@ import { useSidebarFavorites } from '@/composables/useSidebarFavorites';
 import { useSidebarHistory } from '@/composables/useSidebarHistory';
 
 const { badges } = useSidebarBadges();
-const { recentItems, removeFromHistory } = useSidebarHistory();
+const { recentItems, removeFromHistory, clearHistory } = useSidebarHistory();
 const { isFavorite } = useSidebarFavorites();
 
 const BADGE_HREF_MAP: Record<string, string> = {
@@ -58,9 +58,9 @@ function badgeClass(href: string): string | undefined {
 <template>
     <div
         v-if="recentItems.length > 0"
-        class="mx-4 mt-3 flex items-center gap-2 lg:mx-6"
+        class="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 max-w-[calc(100vw-2rem)]"
     >
-        <div class="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+        <div class="flex items-center gap-2 overflow-x-auto">
             <span class="shrink-0 text-xs font-medium text-muted-foreground/60">
                 Open Views
             </span>
@@ -109,6 +109,21 @@ function badgeClass(href: string): string | undefined {
                     </TooltipProvider>
                 </div>
             </div>
+            <TooltipProvider :delay-duration="300">
+                <Tooltip>
+                    <TooltipTrigger as-child>
+                        <button
+                            class="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive"
+                            @click="clearHistory"
+                        >
+                            <AppIcon name="x" class="size-3" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="center">
+                        Clear all open views
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
         </div>
     </div>
 </template>

@@ -6,7 +6,6 @@ import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import FacilitySubscriptionBanner from '@/components/facility/FacilitySubscriptionBanner.vue';
 import ThemeSettingsFloatingButton from '@/components/ThemeSettingsFloatingButton.vue';
-import CareQuickLauncher from '@/components/workspace/CareQuickLauncher.vue';
 import OpenViewsTags from '@/components/OpenViewsTags.vue';
 import type { BreadcrumbItem } from '@/types';
 
@@ -30,14 +29,13 @@ withDefaults(defineProps<Props>(), {
         <AppSidebar />
         <AppContent variant="sidebar" class="overflow-x-hidden">
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />
-            <OpenViewsTags />
             <div class="mx-4 mt-3 lg:mx-6">
                 <FacilitySubscriptionBanner />
             </div>
             <AppFacilityScopeNotice />
             <slot />
         </AppContent>
+        <OpenViewsTags />
         <ThemeSettingsFloatingButton />
-        <CareQuickLauncher />
     </AppShell>
 </template>
