@@ -58,9 +58,9 @@ function badgeClass(href: string): string | undefined {
 <template>
     <div
         v-if="recentItems.length > 0"
-        class="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 max-w-[90vw]"
+        class="fixed bottom-6 left-1/2 z-40 -translate-x-1/2"
     >
-        <div class="flex items-center gap-2 overflow-x-auto">
+        <div class="flex items-center gap-2">
             <span class="shrink-0 text-xs font-medium text-muted-foreground/60">
                 Open Views
             </span>
