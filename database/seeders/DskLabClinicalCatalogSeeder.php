@@ -233,6 +233,9 @@ class DskLabClinicalCatalogSeeder extends Seeder
                 ]],
             ]],
             'LAB-MRDT-001' => ['sections' => [
+                ['label' => 'Test Result', 'fields' => [
+                    ['code' => 'result', 'label' => 'Result', 'type' => 'positive-negative'],
+                ]],
                 ['label' => 'Parasite Identification', 'fields' => [
                     ['code' => 'species', 'label' => 'Species', 'type' => 'multiselect', 'options' => ['None Seen', 'Plasmodium falciparum', 'Plasmodium vivax', 'Plasmodium ovale', 'Plasmodium malariae', 'Mixed infection']],
                     ['code' => 'stage', 'label' => 'Stage Seen', 'type' => 'multiselect', 'options' => ['Rings (Trophozoites)', 'Schizonts', 'Gametocytes']],
@@ -254,6 +257,9 @@ class DskLabClinicalCatalogSeeder extends Seeder
                 ]],
             ]],
             'LAB-WIDAL-001' => ['sections' => [
+                ['label' => 'Test Result', 'fields' => [
+                    ['code' => 'result', 'label' => 'Result', 'type' => 'reactive-nonreactive'],
+                ]],
                 ['label' => 'Agglutination Titres', 'fields' => [
                     ['code' => 'to_h', 'label' => 'Salmonella Typhi O', 'type' => 'select', 'options' => ['<1:20', '1:20', '1:40', '1:80', '1:160', '1:320', '1:640']],
                     ['code' => 'th_h', 'label' => 'Salmonella Typhi H', 'type' => 'select', 'options' => ['<1:20', '1:20', '1:40', '1:80', '1:160', '1:320', '1:640']],

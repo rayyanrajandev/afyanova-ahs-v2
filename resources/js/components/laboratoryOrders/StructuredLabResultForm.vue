@@ -161,6 +161,43 @@ const hasAnyValue = computed(() =>
                         </div>
                     </div>
 
+                    <!-- Reactive/Non-Reactive/Not Done toggle -->
+                    <div v-else-if="field.type === 'reactive-nonreactive'" class="grid gap-1.5">
+                        <Label>{{ field.label }}</Label>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors"
+                                :class="values[field.code] === 'Reactive'
+                                    ? 'border-destructive bg-destructive/10 text-destructive'
+                                    : 'border-input hover:bg-muted'"
+                                @click="(values[field.code] as string) = 'Reactive'"
+                            >
+                                Reactive
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors"
+                                :class="values[field.code] === 'Non-Reactive'
+                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                                    : 'border-input hover:bg-muted'"
+                                @click="(values[field.code] as string) = 'Non-Reactive'"
+                            >
+                                Non-Reactive
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors"
+                                :class="values[field.code] === 'Not Done'
+                                    ? 'border-amber-600 bg-amber-50 text-amber-700'
+                                    : 'border-input hover:bg-muted'"
+                                @click="(values[field.code] as string) = 'Not Done'"
+                            >
+                                Not Done
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Absent/Present toggle -->
                     <div v-else-if="field.type === 'not-done'" class="grid gap-1.5">
                         <Label>{{ field.label }}</Label>

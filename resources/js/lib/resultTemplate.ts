@@ -7,6 +7,7 @@ export interface ResultTemplateField {
         | 'text'
         | 'number'
         | 'positive-negative'
+        | 'reactive-nonreactive'
         | 'not-done'
         | 'textarea';
     options?: string[];
